@@ -1,57 +1,28 @@
 """ReAct Agent Engine - Phase 1: With memory system"""
 
 import asyncio
-import hashlib
 import json
 import os
 import re
 import sys
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Callable, Awaitable
-from dataclasses import dataclass
+from typing import Awaitable, Callable, Optional
 
-from ..llm.client import LLMClient, Message
-from ..tools.base import ToolResult, registry
-from ..tools import file_ops, shell, skill_manager, sub_agent, sandbox, code_search, git_tool, git_smart, grep, web_fetch, web_search, spec_verifier, refactor, install, plan_mode, lsp_tool, glob_tool, todo_tool, notebook_tool, structured_output, audit, diagnostics  # noqa: F401 - triggers tool registration
-from .memory import MemoryManager
-from .permissions import PermissionManager, PermissionMode
-from ..tools.skill_manager import SkillManager
-from ..prompts.assembler import PromptAssembler
-from .plan import ExecutionPlan
-from .context_builder import ContextBuilder
-from .plan_workflow import PlanWorkflow
-from .tool_dispatcher import ToolDispatcher
-from .evolution import EvolutionEngine
-from ..mcp.adapter import register_mcp_tools_from_config
-from .event_bus import EventBus
-from .hooks import (
-    HookRegistry,
-    BEFORE_LLM_CALL, AFTER_LLM_CALL, ON_TOKEN,
-    BEFORE_TOOL_EXECUTION, AFTER_TOOL_EXECUTION,
-    ON_ERROR, ON_SESSION_END, ON_SESSION_START, BEFORE_PERCEIVE,
-)
-from .tdd_state_machine import TDDStateMachine
-from .tdd_ralph import RalphSupervisor
-from .task_state_machine import TaskStateMachine, TaskState, TaskStateRecord
-from .audit_log import AuditLogger, get_audit_logger
-from .dual_review import (
-    DualReviewManager,
-    PermissionDenied,
-    ReviewRequiresUser,
-    ReviewVerdict,
-    get_dual_review_manager,
-    reset_dual_review_manager,
-)
 from ..governance.ab_test import (
-    ABTestManager,
-    ExperimentObservation,
     get_ab_test_manager,
-    reset_ab_test_manager,
 )
-from .progress_anchor import ProgressAnchor, ProgressRecord
-from ..observability import get_tracer, get_metrics
+from ..hooks.ab_test import (
+    ABTestApplyHook,
+    ABTestRecordObservationHook,
+    resolve_ab_user_id,
+)
+from ..hooks.audit import AuditHook
+from ..hooks.dual_review import DualReviewHook
+from ..hooks.otel import OtelHook
+from ..hooks.progress import ProgressInjectHook, ProgressUpdateHook
 
 # PR-19: Hook implementations live in agent.hooks.* (one class per concern).
 # The engine instantiates them in __init__ and registers them with the
@@ -60,29 +31,112 @@ from ..observability import get_tracer, get_metrics
 # of AgentEngine preserve the test API (e.g. e._audit_before_tool).
 from ..hooks.ralph import RalphCheckHook
 from ..hooks.task_state import TaskStateRecordStepHook
-from ..hooks.audit import AuditHook
-from ..hooks.otel import OtelHook
-from ..hooks.dual_review import DualReviewHook
-from ..hooks.ab_test import (
-    ABTestApplyHook,
-    ABTestRecordObservationHook,
-    resolve_ab_user_id,
+from ..llm.client import LLMClient, Message
+from ..mcp.adapter import register_mcp_tools_from_config
+from ..observability import get_metrics, get_tracer
+from ..prompts.assembler import PromptAssembler
+from ..tools import (  # noqa: F401 - triggers tool registration
+    audit,
+    code_search,
+    diagnostics,
+    file_ops,
+    git_smart,
+    git_tool,
+    glob_tool,
+    grep,
+    install,
+    lsp_tool,
+    notebook_tool,
+    plan_mode,
+    refactor,
+    sandbox,
+    shell,
+    skill_manager,
+    spec_verifier,
+    structured_output,
+    sub_agent,
+    todo_tool,
+    web_fetch,
+    web_search,
 )
-from ..hooks.progress import ProgressInjectHook, ProgressUpdateHook
-
+from ..tools.base import ToolResult, registry
+from ..tools.skill_manager import SkillManager
+from .audit_log import get_audit_logger
+from .context_builder import ContextBuilder
+from .dual_review import (
+    DualReviewManager,
+)
+from .event_bus import EventBus
+from .evolution import EvolutionEngine
+from .hooks import (
+    AFTER_LLM_CALL,
+    AFTER_TOOL_EXECUTION,
+    BEFORE_LLM_CALL,
+    BEFORE_PERCEIVE,
+    BEFORE_TOOL_EXECUTION,
+    ON_ERROR,
+    ON_SESSION_END,
+    ON_SESSION_START,
+    ON_TOKEN,
+    HookRegistry,
+)
+from .memory import MemoryManager
+from .permissions import PermissionManager
+from .plan import ExecutionPlan
+from .plan_workflow import PlanWorkflow
+from .progress_anchor import ProgressAnchor
+from .task_state_machine import TaskStateMachine
+from .tdd_ralph import RalphSupervisor
+from .tdd_state_machine import TDDStateMachine
+from .tool_dispatcher import ToolDispatcher
 
 _CODING_AGENT_ROOT = Path(__file__).parent.parent.resolve()
-from .config import config as _cfg
+from .config import config as _cfg  # noqa: E402 — depends on _CODING_AGENT_ROOT being set first
+
 WORKSPACE = Path(_cfg.get("workspace") or str(Path.cwd()))
 
 # Keywords for auto-detecting complex multi-file project tasks
 _COMPLEX_KEYWORDS = {
-    'app', 'application', 'website', 'web', 'api', 'rest', 'graphql',
-    'service', 'server', 'client', 'dashboard', 'admin', 'blog',
-    'todo', 'shop', 'store', 'cms', 'system', 'platform', 'robot',
-    'cli', 'tool', 'package', 'library', 'framework', 'react', 'vue',
-    'angular', 'node', 'django', 'flask', 'fastapi', 'spring',
-    '应用', '网站', '系统', '平台', '博客', '商城', '管理后台'
+    "app",
+    "application",
+    "website",
+    "web",
+    "api",
+    "rest",
+    "graphql",
+    "service",
+    "server",
+    "client",
+    "dashboard",
+    "admin",
+    "blog",
+    "todo",
+    "shop",
+    "store",
+    "cms",
+    "system",
+    "platform",
+    "robot",
+    "cli",
+    "tool",
+    "package",
+    "library",
+    "framework",
+    "react",
+    "vue",
+    "angular",
+    "node",
+    "django",
+    "flask",
+    "fastapi",
+    "spring",
+    "应用",
+    "网站",
+    "系统",
+    "平台",
+    "博客",
+    "商城",
+    "管理后台",
 }
 
 
@@ -113,32 +167,31 @@ def generate_project_name(task: str) -> str:
     and joins them with hyphens to create a descriptive project directory name.
     Supports both English and Chinese input.
     """
-    import re
 
     from .text_utils import is_stopword as _is_sw
 
     # Extract English words
-    english_words = re.findall(r'[a-zA-Z]+', task.lower())
+    english_words = re.findall(r"[a-zA-Z]+", task.lower())
     english_words = [w for w in english_words if not _is_sw(w) and len(w) > 2]
 
     if english_words:
-        return '-'.join(english_words[:4])
+        return "-".join(english_words[:4])
 
     # Fallback: extract Chinese 2-4 char meaningful chunks
-    chinese_chunks = re.findall(r'[\u4e00-\u9fff]+', task)
+    chinese_chunks = re.findall(r"[\u4e00-\u9fff]+", task)
     chinese_words = []
     for chunk in chinese_chunks:
         if len(chunk) >= 2:
             # Remove stopword characters from chunk
-            filtered = ''.join(c for c in chunk if not _is_sw(c))
+            filtered = "".join(c for c in chunk if not _is_sw(c))
             if filtered and len(filtered) >= 2:
                 # Take first 4 chars of filtered chunk
                 chinese_words.append(filtered[:4])
 
     if chinese_words:
-        return '-'.join(chinese_words[:3])
+        return "-".join(chinese_words[:3])
 
-    return 'project'
+    return "project"
 
 
 # ANSI colors - Claude Code inspired palette
@@ -146,18 +199,18 @@ class Colors:
     RESET = "\033[0m"
     BOLD = "\033[1m"
     DIM = "\033[2m"
-    RED = "\033[38;5;196m"       # Red
-    GREEN = "\033[38;5;34m"      # Green
-    YELLOW = "\033[38;5;226m"    # Yellow
-    BLUE = "\033[38;5;75m"       # Blue
-    MAGENTA = "\033[38;5;141m"   # Purple
-    CYAN = "\033[38;5;39m"       # Cyan
-    GRAY = "\033[38;5;240m"      # Gray
+    RED = "\033[38;5;196m"  # Red
+    GREEN = "\033[38;5;34m"  # Green
+    YELLOW = "\033[38;5;226m"  # Yellow
+    BLUE = "\033[38;5;75m"  # Blue
+    MAGENTA = "\033[38;5;141m"  # Purple
+    CYAN = "\033[38;5;39m"  # Cyan
+    GRAY = "\033[38;5;240m"  # Gray
 
     # File status colors
-    ADDED = "\033[38;5;82m"      # Bright green for A
+    ADDED = "\033[38;5;82m"  # Bright green for A
     MODIFIED = "\033[38;5;214m"  # Orange for M
-    DELETED = "\033[38;5;196m"   # Red for D
+    DELETED = "\033[38;5;196m"  # Red for D
 
 
 def print_step(step: int, total: int, label: str, verbose: bool = True):
@@ -188,7 +241,10 @@ def print_tool_call(tool_name: str, args: dict, verbose: bool = True):
     else:
         # Generic tool call
         args_str = ", ".join(f"{k}={repr(v)[:30]}" for k, v in list(args.items())[:2])
-        print(f"{Colors.DIM}→{Colors.RESET} {Colors.CYAN}{tool_name}{Colors.RESET}({args_str})", flush=True)
+        print(
+            f"{Colors.DIM}→{Colors.RESET} {Colors.CYAN}{tool_name}{Colors.RESET}({args_str})",
+            flush=True,
+        )
 
 
 def print_tool_result(success: bool, content: str, error: str = None, verbose: bool = True):
@@ -212,14 +268,13 @@ def print_thinking(verbose: bool = True):
 
 def _apply_ansi_styles(text: str) -> str:
     """Apply ANSI colors to Markdown-style bold and italic."""
-    import re
 
     # Bold: **text** -> yellow bold
-    text = re.sub(r'\*\*(.+?)\*\*', f"{Colors.YELLOW}{Colors.BOLD}\\1{Colors.RESET}", text)
+    text = re.sub(r"\*\*(.+?)\*\*", f"{Colors.YELLOW}{Colors.BOLD}\\1{Colors.RESET}", text)
     # Italic: *text* -> cyan
-    text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', f"{Colors.CYAN}\\1{Colors.RESET}", text)
+    text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", f"{Colors.CYAN}\\1{Colors.RESET}", text)
     # Inline code: `code` -> green
-    text = re.sub(r'`([^`]+)`', f"{Colors.GREEN}\\1{Colors.RESET}", text)
+    text = re.sub(r"`([^`]+)`", f"{Colors.GREEN}\\1{Colors.RESET}", text)
 
     return text
 
@@ -261,7 +316,7 @@ def _format_markdown(text: str) -> str:
             continue
 
         # Numbered lists
-        if line.strip()[0:2].rstrip('.').isdigit() and '. ' in line[:4]:
+        if line.strip()[0:2].rstrip(".").isdigit() and ". " in line[:4]:
             formatted.append(f"  {line}")
             continue
 
@@ -286,6 +341,7 @@ def _load_config_file():
     if config_path.exists():
         try:
             import json
+
             with open(config_path) as f:
                 return json.load(f)
         except Exception:
@@ -392,7 +448,9 @@ class AgentEngine:
         self.skills = SkillManager()
         self.permissions = PermissionManager(self.config.mode)
         self._consecutive_failures = {}  # tool_name -> failure_count for circuit breaker
-        self.current_project_dir: Optional[str] = None  # Detected project directory for multi-file tasks
+        self.current_project_dir: Optional[str] = (
+            None  # Detected project directory for multi-file tasks
+        )
         self.evolution = EvolutionEngine(enabled=self.config.auto_evolve)
         self._mcp_manager = None  # Initialized lazily on first run
         self._mcp_initialized = False
@@ -411,9 +469,10 @@ class AgentEngine:
         # PR-14: User profile — root-cause fix for session amnesia.
         # Loaded once at engine construction; user_profile_enabled flag
         # controls whether the default ON_SESSION_START handler is registered.
-        from .user_profile import UserProfile
-        from .hooks_session import load_user_profile_on_start
         from .hooks import ON_SESSION_START
+        from .hooks_session import load_user_profile_on_start
+        from .user_profile import UserProfile
+
         self.user_profile: Optional[UserProfile] = None
         if self.config.user_profile_enabled:
             try:
@@ -507,15 +566,19 @@ class AgentEngine:
         # when tracer is available.
         self.tracer = None
         self.metrics = None
-        self.otel_hook = OtelHook(None, None, self.trace_id,
-                                  self.config.model, self.config.provider)
+        self.otel_hook = OtelHook(
+            None, None, self.trace_id, self.config.model, self.config.provider
+        )
         if getattr(self.config, "otel_enabled", True):
             try:
                 self.tracer = get_tracer()
                 self.metrics = get_metrics()
                 self.otel_hook = OtelHook(
-                    self.tracer, self.metrics, self.trace_id,
-                    self.config.model, self.config.provider,
+                    self.tracer,
+                    self.metrics,
+                    self.trace_id,
+                    self.config.model,
+                    self.config.provider,
                 )
                 self.hooks.register(BEFORE_TOOL_EXECUTION, self.otel_hook.before_tool)
                 self.hooks.register(AFTER_TOOL_EXECUTION, self.otel_hook.after_tool)
@@ -568,7 +631,8 @@ class AgentEngine:
                 self._ab_experiments_in_flight: list = []
                 self.ab_apply_hook = ABTestApplyHook(self.ab_test, self._ab_user_id)
                 self.ab_record_hook = ABTestRecordObservationHook(
-                    self.ab_test, self._ab_user_id,
+                    self.ab_test,
+                    self._ab_user_id,
                     get_task_start_ts=lambda: self._ab_task_start_ts,
                     get_last_task=lambda: self._ab_last_task,
                     get_total_input_tokens=lambda: self._total_input_tokens,
@@ -600,7 +664,8 @@ class AgentEngine:
                 self.anchor = ProgressAnchor(workspace=ws)
                 self.progress_inject_hook = ProgressInjectHook(self.anchor)
                 self.progress_update_hook = ProgressUpdateHook(
-                    self.anchor, self.config.max_steps,
+                    self.anchor,
+                    self.config.max_steps,
                     get_current_plan=lambda: self._current_plan,
                     get_last_task=lambda: self._ab_last_task,
                 )
@@ -616,7 +681,9 @@ class AgentEngine:
         # PR-20: keep back-compat attr aliases for tests / external callers
         self._codmap = self.context_builder._codmap
         self.spec_document = self.context_builder.spec_document
-        _log_event(self.trace_id, "engine_init", model=self.config.model, provider=self.config.provider)
+        _log_event(
+            self.trace_id, "engine_init", model=self.config.model, provider=self.config.provider
+        )
 
     # ── PR-20: ContextBuilder delegation shims (back-compat) ────────
     # ── Public read-only API ──────────────────────────────────────
@@ -648,7 +715,7 @@ class AgentEngine:
         """
         if not text:
             return 0
-        cjk = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+        cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
         non_cjk = len(text) - cjk
         return cjk + non_cjk // 4
 
@@ -665,11 +732,12 @@ class AgentEngine:
     def _load_project_context(self) -> str:
         return self.context_builder.project_context
 
-    def _get_system_prompt(self, task="", skill_prompt="", plan_context="",
-                           failure_context=""):
+    def _get_system_prompt(self, task="", skill_prompt="", plan_context="", failure_context=""):
         return self.context_builder.get_system_prompt(
-            task=task, skill_prompt=skill_prompt,
-            plan_context=plan_context, failure_context=failure_context,
+            task=task,
+            skill_prompt=skill_prompt,
+            plan_context=plan_context,
+            failure_context=failure_context,
         )
 
     async def _ensure_mcp_initialized(self):
@@ -691,12 +759,16 @@ class AgentEngine:
         try:
             branch = subprocess.check_output(
                 ["git", "branch", "--show-current"],
-                cwd=WORKSPACE, stderr=subprocess.DEVNULL, text=True
+                cwd=WORKSPACE,
+                stderr=subprocess.DEVNULL,
+                text=True,
             ).strip()
             if branch:
                 status = subprocess.check_output(
                     ["git", "status", "--short"],
-                    cwd=WORKSPACE, stderr=subprocess.DEVNULL, text=True
+                    cwd=WORKSPACE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
                 ).strip()
                 git_status = f"On branch {branch}"
                 if status:
@@ -759,6 +831,7 @@ class AgentEngine:
         one-line command hint (or empty string if undetermined).
         """
         import json
+
         try:
             # ── Node.js: package.json has a "scripts.start" field ──
             pkg_json = workspace / "package.json"
@@ -853,7 +926,10 @@ class AgentEngine:
     ) -> ToolResult:
         """PR-23: thin shim — delegates to ToolDispatcher.execute()."""
         return await self.tool_dispatcher.execute(
-            func_name, args, tc_id, func_args_raw,
+            func_name,
+            args,
+            tc_id,
+            func_args_raw,
         )
 
     async def _ralph_check_hook(self, payload):  # back-compat shim (see below)
@@ -879,17 +955,20 @@ class AgentEngine:
             return payload
         # Mark start time for the after-hook to compute duration
         import time as _time
+
         payload["_audit_start_ts"] = _time.time()
         tool_name = payload.get("tool", "")
         args = payload.get("args", {})
         try:
-            self.audit.log({
-                "session_id": self.trace_id,
-                "agent_id": "main",
-                "action": "tool_call",
-                "tool": tool_name,
-                "args": args,
-            })
+            self.audit.log(
+                {
+                    "session_id": self.trace_id,
+                    "agent_id": "main",
+                    "action": "tool_call",
+                    "tool": tool_name,
+                    "args": args,
+                }
+            )
         except Exception:
             pass  # Audit must never break tool execution
         return payload
@@ -902,6 +981,7 @@ class AgentEngine:
         if self.audit is None or not isinstance(payload, dict):
             return payload
         import time as _time
+
         start_ts = payload.get("_audit_start_ts")
         duration_ms = None
         if isinstance(start_ts, (int, float)):
@@ -910,15 +990,17 @@ class AgentEngine:
         result = payload.get("result")
         error = payload.get("error")
         try:
-            self.audit.log({
-                "session_id": self.trace_id,
-                "agent_id": "main",
-                "action": "tool_result",
-                "tool": tool_name,
-                "result": result if result is not None else None,
-                "duration_ms": duration_ms,
-                "error": str(error) if error else None,
-            })
+            self.audit.log(
+                {
+                    "session_id": self.trace_id,
+                    "agent_id": "main",
+                    "action": "tool_result",
+                    "tool": tool_name,
+                    "result": result if result is not None else None,
+                    "duration_ms": duration_ms,
+                    "error": str(error) if error else None,
+                }
+            )
         except Exception:
             pass
         return payload
@@ -930,6 +1012,7 @@ class AgentEngine:
         if self.tracer is None or not isinstance(payload, dict):
             return payload
         import time as _time
+
         try:
             span = self.tracer.start_span(
                 "tool.execute",
@@ -949,6 +1032,7 @@ class AgentEngine:
         if self.tracer is None or not isinstance(payload, dict):
             return payload
         import time as _time
+
         span = payload.get("_otel_span")
         start = payload.get("_otel_start_ts")
         result = payload.get("result")
@@ -985,6 +1069,7 @@ class AgentEngine:
         if self.tracer is None or not isinstance(payload, dict):
             return payload
         import time as _time
+
         messages = payload.get("messages")
         try:
             span = self.tracer.start_span(
@@ -1007,6 +1092,7 @@ class AgentEngine:
         if self.tracer is None or not isinstance(payload, dict):
             return payload
         import time as _time
+
         span = payload.get("_otel_llm_span")
         start = payload.get("_otel_llm_start")
         if span is not None:
@@ -1108,12 +1194,14 @@ class AgentEngine:
         calls (e.g. `AgentEngine._extract_step_num("3/8")`) still work.
         """
         from ..hooks.progress import extract_step_num
+
         return extract_step_num(step_str)
 
     async def shutdown(self):
         """Shut down engine resources — MCP servers, sub-agents, running tasks."""
         # Cancel all running sub-agents
         from .subagent_registry import get_registry
+
         try:
             sub_reg = get_registry()
             for agent_id in list(sub_reg._records.keys()):
@@ -1136,8 +1224,6 @@ class AgentEngine:
         If plan_context is provided, it is injected into the system prompt
         so the agent executes within the context of an approved plan.
         """
-        import asyncio
-        import re
 
         _log_event(self.trace_id, "run_stream_start", task=task[:50])
 
@@ -1145,10 +1231,13 @@ class AgentEngine:
         # This loads the user profile (if any) into the engine so it can
         # be injected into the system prompt on the first LLM call.
         try:
-            await self.hooks.execute(ON_SESSION_START, {
-                "session_id": self.trace_id,
-                "task": task,
-            })
+            await self.hooks.execute(
+                ON_SESSION_START,
+                {
+                    "session_id": self.trace_id,
+                    "task": task,
+                },
+            )
         except Exception:
             # Never let a session-start hook failure block the run
             pass
@@ -1157,6 +1246,7 @@ class AgentEngine:
         # task so the ON_SESSION_END hook can record observations.
         if self.ab_test is not None:
             import time as _time
+
             self._ab_task_start_ts = _time.time()
             self._ab_last_task = task
             self._ab_experiments_in_flight = []
@@ -1180,13 +1270,13 @@ class AgentEngine:
         # task is wrapped in the CLI's "[Previous conversation]...[Current
         # task]..." format. The "[Previous conversation]" portion is
         # routed to the LLM as context (NOT as extraction target).
-        if (self.config.auto_remember_user_facts
-                and self.user_profile is not None):
+        if self.config.auto_remember_user_facts and self.user_profile is not None:
             try:
                 from .fact_extractor import FactConfirmExtractor
+
                 extractor = FactConfirmExtractor(
                     llm_client=self.llm,
-                    use_llm=getattr(self.config, 'fact_extraction_use_llm', True),
+                    use_llm=getattr(self.config, "fact_extraction_use_llm", True),
                     fallback_to_legacy=True,  # always — safety net
                 )
                 # Split the CLI-prefixed task into (history, current_target).
@@ -1195,20 +1285,21 @@ class AgentEngine:
                 marker = "[Current task]"
                 if marker in task:
                     parts = task.split(marker, 1)
-                    history_text = parts[0].replace(
-                        "[Previous conversation]", ""
-                    ).strip()
+                    history_text = parts[0].replace("[Previous conversation]", "").strip()
                     extract_target = parts[1].strip()
                 # Async LLM-first with history injection. The L3 gate
                 # silently drops low-confidence facts before they reach
                 # the profile; L2 (UserProfile.remember_fact) is the
                 # last-line schema check.
                 facts = await extractor.extract_and_apply_async(
-                    extract_target, self.user_profile, history=history_text,
+                    extract_target,
+                    self.user_profile,
+                    history=history_text,
                 )
                 if facts:
                     _log_event(
-                        self.trace_id, "auto_remember",
+                        self.trace_id,
+                        "auto_remember",
                         facts=[f"{k}={v}" for k, v in facts],
                     )
             except Exception:
@@ -1246,10 +1337,13 @@ class AgentEngine:
         finally:
             # PR-01: ON_SESSION_END hook for cleanup
             try:
-                await self.hooks.execute(ON_SESSION_END, {
-                    "final_state": {"trace_id": self.trace_id},
-                    "result": None,
-                })
+                await self.hooks.execute(
+                    ON_SESSION_END,
+                    {
+                        "final_state": {"trace_id": self.trace_id},
+                        "result": None,
+                    },
+                )
                 await self.event_bus.emit(ON_SESSION_END, {"trace_id": self.trace_id})
             except Exception:
                 pass
@@ -1314,6 +1408,7 @@ class AgentEngine:
             return
 
         import re as _re_filter
+
         _tag_patterns = [
             _re_filter.compile(r"<minimax:tool_call>.*?</minimax:tool_call>", _re_filter.DOTALL),
             _re_filter.compile(r"<tool_call>.*?</tool_call>", _re_filter.DOTALL),
@@ -1354,7 +1449,9 @@ class AgentEngine:
                     idx = getattr(tc, "index", 0)
                     if idx not in accumulated_tool_calls:
                         accumulated_tool_calls[idx] = {
-                            "id": None, "name": "", "arguments": "",
+                            "id": None,
+                            "name": "",
+                            "arguments": "",
                         }
                     if getattr(tc, "id", None):
                         accumulated_tool_calls[idx]["id"] = tc.id
@@ -1390,11 +1487,15 @@ class AgentEngine:
         results_by_id: dict = {}
 
         if concurrent_tcs:
+
             async def _run_concurrent(tc):
                 return (
                     tc["tc_id"],
                     await self._execute_tool(
-                        tc["func_name"], tc["args"], tc["tc_id"], tc["func_args_raw"],
+                        tc["func_name"],
+                        tc["args"],
+                        tc["tc_id"],
+                        tc["func_args_raw"],
                     ),
                 )
 
@@ -1413,7 +1514,10 @@ class AgentEngine:
 
         for tc in serial_tcs:
             result = await self._execute_tool(
-                tc["func_name"], tc["args"], tc["tc_id"], tc["func_args_raw"],
+                tc["func_name"],
+                tc["args"],
+                tc["tc_id"],
+                tc["func_args_raw"],
             )
             results_by_id[tc["tc_id"]] = result
 
@@ -1421,7 +1525,8 @@ class AgentEngine:
             result = results_by_id.get(p["tc_id"])
             if result is None:
                 result = ToolResult(
-                    success=False, content="",
+                    success=False,
+                    content="",
                     error="Tool execution failed (sibling abort)",
                 )
             yield {
@@ -1475,15 +1580,21 @@ class AgentEngine:
             _usage = _stream_state.get("usage")
 
             # PR-01: AFTER_LLM_CALL hook (after streaming completes)
-            await self.hooks.execute(AFTER_LLM_CALL, {
-                "response": response,
-                "usage": _usage,
-                "content": full_content,
-            })
-            await self.event_bus.emit(AFTER_LLM_CALL, {
-                "usage": _usage,
-                "content_length": len(full_content),
-            })
+            await self.hooks.execute(
+                AFTER_LLM_CALL,
+                {
+                    "response": response,
+                    "usage": _usage,
+                    "content": full_content,
+                },
+            )
+            await self.event_bus.emit(
+                AFTER_LLM_CALL,
+                {
+                    "usage": _usage,
+                    "content_length": len(full_content),
+                },
+            )
             yield {"type": "content_end", "content": full_content}
 
             # Track token usage for auto-compact
@@ -1497,9 +1608,7 @@ class AgentEngine:
                     )
 
             # Tool calls?
-            tool_calls = (
-                list(accumulated_tool_calls.values()) if accumulated_tool_calls else None
-            )
+            tool_calls = list(accumulated_tool_calls.values()) if accumulated_tool_calls else None
             if tool_calls:
                 parsed = []
                 for tc in tool_calls:
@@ -1512,12 +1621,14 @@ class AgentEngine:
                         func_args = json.loads(func_args_raw) if func_args_raw else {}
                     except json.JSONDecodeError:
                         func_args = {}
-                    parsed.append({
-                        "tc_id": tc_id,
-                        "func_name": func_name,
-                        "func_args_raw": func_args_raw,
-                        "args": func_args if isinstance(func_args, dict) else {},
-                    })
+                    parsed.append(
+                        {
+                            "tc_id": tc_id,
+                            "func_name": func_name,
+                            "func_args_raw": func_args_raw,
+                            "args": func_args if isinstance(func_args, dict) else {},
+                        }
+                    )
                 async for event in self._dispatch_tool_calls(parsed, step):
                     yield event
             elif full_content:
@@ -1540,8 +1651,11 @@ class AgentEngine:
                     # the display doesn't lie. Mark as estimated so the
                     # UI can show a "(估计)" label.
                     msg_text = " ".join(
-                        (m.get("content", "") if isinstance(m, dict)
-                         else (getattr(m, "content", "") or ""))
+                        (
+                            m.get("content", "")
+                            if isinstance(m, dict)
+                            else (getattr(m, "content", "") or "")
+                        )
                         for m in (messages or [])
                     )
                     final_event["usage"] = {
@@ -1589,8 +1703,11 @@ class AgentEngine:
             # Consume streaming chunks → (content, tool_calls, usage).
             # The content tokens yielded by the consumer stream back to the
             # outer iterator so the CLI sees them as they arrive.
-            full_content, accumulated_tool_calls, _usage = await _consume_stream_to_completion(
-                self, response,
+            full_content, accumulated_tool_calls, _usage = (
+                await _consume_stream_to_completion(  # noqa: F821
+                    self,
+                    response,
+                )
             )
             # Replay any content events the consumer emitted (we returned
             # them through the coroutine via the async generator pattern).
@@ -1598,15 +1715,21 @@ class AgentEngine:
             # wrapper below for how we bridge async generators + return value.
 
             # PR-01: AFTER_LLM_CALL hook (after streaming completes)
-            await self.hooks.execute(AFTER_LLM_CALL, {
-                "response": response,
-                "usage": _usage,
-                "content": full_content,
-            })
-            await self.event_bus.emit(AFTER_LLM_CALL, {
-                "usage": _usage,
-                "content_length": len(full_content),
-            })
+            await self.hooks.execute(
+                AFTER_LLM_CALL,
+                {
+                    "response": response,
+                    "usage": _usage,
+                    "content": full_content,
+                },
+            )
+            await self.event_bus.emit(
+                AFTER_LLM_CALL,
+                {
+                    "usage": _usage,
+                    "content_length": len(full_content),
+                },
+            )
             yield {"type": "content_end", "content": full_content}
 
             # Track token usage for auto-compact
@@ -1620,9 +1743,7 @@ class AgentEngine:
                     )
 
             # Tool calls?
-            tool_calls = (
-                list(accumulated_tool_calls.values()) if accumulated_tool_calls else None
-            )
+            tool_calls = list(accumulated_tool_calls.values()) if accumulated_tool_calls else None
             if tool_calls:
                 parsed = []
                 for tc in tool_calls:
@@ -1635,12 +1756,14 @@ class AgentEngine:
                         func_args = json.loads(func_args_raw) if func_args_raw else {}
                     except json.JSONDecodeError:
                         func_args = {}
-                    parsed.append({
-                        "tc_id": tc_id,
-                        "func_name": func_name,
-                        "func_args_raw": func_args_raw,
-                        "args": func_args if isinstance(func_args, dict) else {},
-                    })
+                    parsed.append(
+                        {
+                            "tc_id": tc_id,
+                            "func_name": func_name,
+                            "func_args_raw": func_args_raw,
+                            "args": func_args if isinstance(func_args, dict) else {},
+                        }
+                    )
                 async for event in self._dispatch_tool_calls(parsed, step):
                     yield event
             elif full_content:
@@ -1663,8 +1786,11 @@ class AgentEngine:
                     # the display doesn't lie. Mark as estimated so the
                     # UI can show a "(估计)" label.
                     msg_text = " ".join(
-                        (m.get("content", "") if isinstance(m, dict)
-                         else (getattr(m, "content", "") or ""))
+                        (
+                            m.get("content", "")
+                            if isinstance(m, dict)
+                            else (getattr(m, "content", "") or "")
+                        )
                         for m in (messages or [])
                     )
                     final_event["usage"] = {
@@ -1692,7 +1818,9 @@ class AgentEngine:
         await self._ensure_mcp_initialized()
         _log_event(self.trace_id, "run_start", task=task[:50])
         if self.config.verbose:
-            print(f"\n{Colors.BOLD}🎯 Task:{Colors.RESET} {task[:100]}{'...' if len(task) > 100 else ''}")
+            print(
+                f"\n{Colors.BOLD}🎯 Task:{Colors.RESET} {task[:100]}{'...' if len(task) > 100 else ''}"
+            )
             print()
 
         # Auto-detect project directory for complex tasks
@@ -1752,10 +1880,7 @@ class AgentEngine:
             if self.config.verbose:
                 print_thinking()
 
-            response = await self.llm.chat(
-                messages=messages,
-                tools=registry.schemas
-            )
+            response = await self.llm.chat(messages=messages, tools=registry.schemas)
 
             # Parse response
             if isinstance(response, str):
@@ -1766,31 +1891,38 @@ class AgentEngine:
                 return response
 
             # Handle tool call response (OpenAI format)
-            if hasattr(response, 'tool_calls') and response.tool_calls:
+            if hasattr(response, "tool_calls") and response.tool_calls:
                 for tool_call in response.tool_calls:
                     tool_name = tool_call.function.name
                     try:
-                        args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
+                        args = (
+                            json.loads(tool_call.function.arguments)
+                            if tool_call.function.arguments
+                            else {}
+                        )
                     except json.JSONDecodeError:
                         args = {}
 
                     if self.config.verbose:
                         print_tool_call(tool_name, args)
 
-                    func_args_raw = tool_call.function.arguments if hasattr(tool_call, 'function') else "{}"
-                    result = await self._execute_tool(tool_name, args, tool_call.id,
-                                                      func_args_raw)
+                    func_args_raw = (
+                        tool_call.function.arguments if hasattr(tool_call, "function") else "{}"
+                    )
+                    result = await self._execute_tool(tool_name, args, tool_call.id, func_args_raw)
 
                     if result.success:
                         self._consecutive_failures.pop(tool_name, None)
                     else:
-                        self._consecutive_failures[tool_name] = self._consecutive_failures.get(tool_name, 0) + 1
+                        self._consecutive_failures[tool_name] = (
+                            self._consecutive_failures.get(tool_name, 0) + 1
+                        )
 
                     if self.config.verbose:
                         print_tool_result(result.success, result.content, result.error)
             else:
                 # Plain text response
-                content = response.content if hasattr(response, 'content') else str(response)
+                content = response.content if hasattr(response, "content") else str(response)
                 self.memory.add("assistant", content)
                 if self.config.verbose:
                     print_done(content)
@@ -1830,6 +1962,7 @@ class AgentEngine:
                 # No LLM available (e.g. test mode) — refuse politely.
                 raise RuntimeError("Orchestrator needs an LLM but engine.llm is None")
             from ..llm.client import Message
+
             resp, _meta = await self.llm.chat(
                 [Message(role="user", content=prompt)],
                 stream=False,
@@ -1843,13 +1976,13 @@ class AgentEngine:
             system prompt addon. A future PR can replace this with a
             dedicated sub-agent executor.
             """
-            from ..llm.client import Message
             from ..agents.roles import BUILTIN_ROLES
+            from ..llm.client import Message
+
             role = BUILTIN_ROLES.get(req.role) or BUILTIN_ROLES["code"]
             sys_prompt = role.system_prompt_addon
             context_str = "\n".join(
-                f"[{tid}] {r.outputs.get('summary', r.error or '')}"
-                for tid, r in completed.items()
+                f"[{tid}] {r.outputs.get('summary', r.error or '')}" for tid, r in completed.items()
             )
             user_prompt = req.description
             if context_str:
@@ -1917,7 +2050,9 @@ class AgentEngine:
             yield {"type": "done", "result": result}
 
 
-async def run_agent(task: str, model: str = None, provider: str = None, mode: str = None, verbose: bool = True) -> str:
+async def run_agent(
+    task: str, model: str = None, provider: str = None, mode: str = None, verbose: bool = True
+) -> str:
     """Run a single task with the agent. Defaults from config.json then env."""
     # Load config file if exists
     config_data = _load_config_file()
@@ -1949,7 +2084,11 @@ if __name__ == "__main__":
         print("Coding Agent - Phase 8", flush=True)
         print("=" * 40, flush=True)
 
-        task = sys.argv[1] if len(sys.argv) > 1 else "用 Python 写一个斐波那契函数，保存到 fibonacci.py，然后运行它"
+        task = (
+            sys.argv[1]
+            if len(sys.argv) > 1
+            else "用 Python 写一个斐波那契函数，保存到 fibonacci.py，然后运行它"
+        )
         print(f"Task: {task}", flush=True)
         print("-" * 40, flush=True)
 

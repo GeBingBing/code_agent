@@ -10,15 +10,14 @@ os.environ["AIODEBUG"] = "0"
 
 import asyncio
 import time
-import traceback
 
 # Silence pattern for noisy asyncio debug warnings
 _NOISE_PATTERNS = ("Executing ", "took ", "Task was destroyed")
-from pathlib import Path
+from pathlib import Path  # noqa: E402 — kept here for clarity near related setup
 
 # Suppress stderr in non-TTY mode to hide asyncio noise
 if not sys.stdin.isatty():
-    sys.stderr = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, "w")
 
 # Detect $NO_COLOR
 _NO_COLOR = os.environ.get("NO_COLOR", "") != ""
@@ -62,6 +61,7 @@ else:
 # Rich console for advanced terminal output (panels, markdown, status)
 try:
     from rich.console import Console as _RichConsole
+
     _RICH = _RichConsole(no_color=_NO_COLOR, highlight=False, soft_wrap=True)
     RICH_AVAILABLE = True
 except ImportError:
@@ -88,14 +88,15 @@ def _render_markdown_token(text: str) -> str:
     - <think>...</think> reasoning blocks
     """
     import re
+
     if not text:
         return text
     # Filter leaked tool-call tags from models that emit them in content
-    text = re.sub(r'<minimax:tool_call>.*?</minimax:tool_call>', '', text, flags=re.DOTALL)
-    text = re.sub(r'<tool_call>.*?</tool_call>', '', text, flags=re.DOTALL)
+    text = re.sub(r"<minimax:tool_call>.*?</minimax:tool_call>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL)
     # Inline markdown
-    text = re.sub(r'\*\*(.+?)\*\*', f"{BOLD}{YELLOW}\\1{RESET}", text)
-    text = re.sub(r'`([^`]+)`', f"{GREEN}\\1{RESET}", text)
+    text = re.sub(r"\*\*(.+?)\*\*", f"{BOLD}{YELLOW}\\1{RESET}", text)
+    text = re.sub(r"`([^`]+)`", f"{GREEN}\\1{RESET}", text)
     return text
 
 
@@ -113,7 +114,11 @@ def _render_todo_panel(todos: list) -> str:
         tid = t.get("id", "?")
         status = t.get("status", "pending")
         content = t.get("content", "")[:50]
-        icons = {"completed": f"{GREEN}✓{RESET}", "in_progress": f"{YELLOW}●{RESET}", "pending": f"{DIM}○{RESET}"}
+        icons = {
+            "completed": f"{GREEN}✓{RESET}",
+            "in_progress": f"{YELLOW}●{RESET}",
+            "pending": f"{DIM}○{RESET}",
+        }
         icon = icons.get(status, "?")
         line = f"  {icon} {DIM}[{tid}]{RESET} {content}"
         if status == "in_progress":
@@ -124,12 +129,13 @@ def _render_todo_panel(todos: list) -> str:
 
 _CODE_LANG = ["text"]  # mutable, set by code fence
 
+
 def _highlight_code_line(line: str) -> str:
     """Apply ANSI color to a code line. Uses Pygments if available."""
     try:
         from pygments import highlight
-        from pygments.lexers import get_lexer_by_name
         from pygments.formatters import Terminal256Formatter
+        from pygments.lexers import get_lexer_by_name
         from pygments.util import ClassNotFound
 
         lang = _CODE_LANG[0]
@@ -148,6 +154,7 @@ def _rich_print_markdown(text: str):
         return
     if RICH_AVAILABLE:
         from rich.markdown import Markdown
+
         _RICH.print(Markdown(text))
     else:
         print(_render_full_markdown(text))
@@ -157,10 +164,10 @@ def _rich_print_todo(todos: list):
     """Render TodoWrite state as a rich Panel."""
     if not todos or not RICH_AVAILABLE:
         return _render_todo_panel(todos)
+    from rich.box import ROUNDED
     from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
-    from rich.box import ROUNDED
 
     total = len(todos)
     done = sum(1 for t in todos if t.get("status") == "completed")
@@ -187,16 +194,17 @@ def _rich_print_todo(todos: list):
     _RICH.print(Panel(table, title=title, border_style="dim", box=ROUNDED))
 
 
-def _rich_print_confirm(tool_name: str, message: str, diff_lines: list,
-                        has_diff: bool, choice_prompt: str):
+def _rich_print_confirm(
+    tool_name: str, message: str, diff_lines: list, has_diff: bool, choice_prompt: str
+):
     """Render the confirm dialog as a rich Panel with Table — Claude Code style."""
     if not RICH_AVAILABLE:
         return False
+    from rich.box import ROUNDED
+    from rich.console import Group
     from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
-    from rich.box import ROUNDED
-    from rich.console import Group
 
     # ── Header: tool name + truncated message ──
     header = Text()
@@ -245,19 +253,23 @@ def _rich_print_confirm(tool_name: str, message: str, diff_lines: list,
     body_parts.append(options)
 
     # ── Footer hint — saves the user when they're stuck ──
-    body_parts.append(Text(
-        "  Tip: type 2 to trust this kind of action for the rest of the session",
-        style="dim italic",
-    ))
+    body_parts.append(
+        Text(
+            "  Tip: type 2 to trust this kind of action for the rest of the session",
+            style="dim italic",
+        )
+    )
 
     body = Group(*body_parts) if len(body_parts) > 1 else body_parts[0]
-    _RICH.print(Panel(
-        body,
-        title=f"[bold cyan]Confirm[/bold cyan]  [dim]{tool_name}[/dim]",
-        subtitle="[dim]Enter = default (No)[/dim]",
-        border_style="cyan",
-        box=ROUNDED,
-    ))
+    _RICH.print(
+        Panel(
+            body,
+            title=f"[bold cyan]Confirm[/bold cyan]  [dim]{tool_name}[/dim]",
+            subtitle="[dim]Enter = default (No)[/dim]",
+            border_style="cyan",
+            box=ROUNDED,
+        )
+    )
     return True
 
 
@@ -279,6 +291,7 @@ def _render_full_markdown(text: str) -> str:
     Handles headings, lists, code blocks, tables, bold, code, dividers.
     """
     import re
+
     lines = text.split("\n")
     result = []
     in_code_block = False
@@ -325,12 +338,12 @@ def _render_full_markdown(text: str) -> str:
         styled = _render_markdown_token(line)
 
         # Bullet list
-        if re.match(r'^\s*[-*]\s', styled):
+        if re.match(r"^\s*[-*]\s", styled):
             result.append(f"  {DIM}•{RESET} {styled[2:]}")
             continue
 
         # Numbered list
-        num_match = re.match(r'^(\s*\d+\.)\s', styled)
+        num_match = re.match(r"^(\s*\d+\.)\s", styled)
         if num_match:
             indent = len(num_match.group(0))
             result.append(f"  {DIM}{num_match.group(1)}{RESET} {styled[indent:]}")
@@ -369,7 +382,11 @@ def _build_diff_lines(tool_name: str, args: dict) -> list:
             path = args.get("path", "")
             new_content = args.get("content", "")
             if _Path(path).exists():
-                old = _Path(path).read_text(encoding="utf-8", errors="replace").splitlines(keepends=False)
+                old = (
+                    _Path(path)
+                    .read_text(encoding="utf-8", errors="replace")
+                    .splitlines(keepends=False)
+                )
             else:
                 old = []
             new = new_content.splitlines(keepends=False)
@@ -396,7 +413,10 @@ def _build_diff_lines(tool_name: str, args: dict) -> list:
                 lines.append((f"+ {first_add[:60]}", "GREEN"))
                 if len(search.splitlines()) > 1 or len(replace.splitlines()) > 1:
                     lines.append(
-                        (f"  ({len(search.splitlines())} → {len(replace.splitlines())} lines)", "DIM")
+                        (
+                            f"  ({len(search.splitlines())} → {len(replace.splitlines())} lines)",
+                            "DIM",
+                        )
                     )
     except Exception:
         return []
@@ -416,10 +436,11 @@ async def _confirm_handler(tool_name: str, message: str, args: dict) -> str:
     Returns "y" / "a" / "n".
     """
     import asyncio as _asyncio
-    from pathlib import Path as _Path
 
     loop = _asyncio.get_event_loop()
-    diff_lines = _build_diff_lines(tool_name, args) if tool_name in ("write_file", "apply_diff") else []
+    diff_lines = (
+        _build_diff_lines(tool_name, args) if tool_name in ("write_file", "apply_diff") else []
+    )
     has_diff = bool(diff_lines)
 
     PREVIEW_LIMIT = 28  # first N diff lines in the compact view
@@ -429,8 +450,8 @@ async def _confirm_handler(tool_name: str, message: str, args: dict) -> str:
         if RICH_AVAILABLE:
             choice_prompt = (
                 f"  {DIM}Choice [1/2/3/4] (default 3 - No):{RESET} "
-                if has_diff else
-                f"  {DIM}Choice [1/2/3] (default 3 - No):{RESET} "
+                if has_diff
+                else f"  {DIM}Choice [1/2/3] (default 3 - No):{RESET} "
             )
             # Print a blank line for spacing before the panel
             _RICH.print()
@@ -444,18 +465,34 @@ async def _confirm_handler(tool_name: str, message: str, args: dict) -> str:
             if has_diff:
                 shown = diff_lines[:PREVIEW_LIMIT]
                 for text, color in shown:
-                    ansi = {"GREEN": GREEN, "RED": RED, "DIM": DIM, "YELLOW": YELLOW, "CYAN": CYAN}.get(color, RESET)
+                    ansi = {
+                        "GREEN": GREEN,
+                        "RED": RED,
+                        "DIM": DIM,
+                        "YELLOW": YELLOW,
+                        "CYAN": CYAN,
+                    }.get(color, RESET)
                     print(f"{CYAN}│{RESET}  {ansi}{text}{RESET}")
                 if len(diff_lines) > PREVIEW_LIMIT:
-                    print(f"{CYAN}│{RESET}  {DIM}... ({len(diff_lines) - PREVIEW_LIMIT} more lines — choose 4 to view all){RESET}")
+                    print(
+                        f"{CYAN}│{RESET}  {DIM}... ({len(diff_lines) - PREVIEW_LIMIT} more lines — choose 4 to view all){RESET}"
+                    )
                 print(f"{CYAN}│{RESET}")
 
             print(f"{CYAN}│{RESET}  {BOLD}1.{RESET} {GREEN}Yes{RESET}  {DIM}(y){RESET}")
-            print(f"{CYAN}│{RESET}  {BOLD}2.{RESET} {GREEN}Yes, don't ask again{RESET}  {DIM}(a — trust this session){RESET}")
-            print(f"{CYAN}│{RESET}  {BOLD}3.{RESET} {RED}No{RESET}  {DIM}(n — default; press Enter){RESET}")
+            print(
+                f"{CYAN}│{RESET}  {BOLD}2.{RESET} {GREEN}Yes, don't ask again{RESET}  {DIM}(a — trust this session){RESET}"
+            )
+            print(
+                f"{CYAN}│{RESET}  {BOLD}3.{RESET} {RED}No{RESET}  {DIM}(n — default; press Enter){RESET}"
+            )
             if has_diff:
-                print(f"{CYAN}│{RESET}  {BOLD}4.{RESET} {CYAN}View full diff ({len(diff_lines)} lines){RESET}  {DIM}(v){RESET}")
-            print(f"{CYAN}│{RESET}  {DIM}Tip: type 2 to trust this kind of action for the rest of the session{RESET}")
+                print(
+                    f"{CYAN}│{RESET}  {BOLD}4.{RESET} {CYAN}View full diff ({len(diff_lines)} lines){RESET}  {DIM}(v){RESET}"
+                )
+            print(
+                f"{CYAN}│{RESET}  {DIM}Tip: type 2 to trust this kind of action for the rest of the session{RESET}"
+            )
             print(f"{CYAN}╰────────────────────────────────────────{RESET}")
 
         try:
@@ -481,7 +518,9 @@ async def _confirm_handler(tool_name: str, message: str, args: dict) -> str:
             # Print full diff (or paginate if huge)
             print(f"\n{CYAN}── Full diff ({len(diff_lines)} lines) ──{RESET}")
             for i, (text, color) in enumerate(diff_lines, 1):
-                ansi = {"GREEN": GREEN, "RED": RED, "DIM": DIM, "YELLOW": YELLOW, "CYAN": CYAN}.get(color, RESET)
+                ansi = {"GREEN": GREEN, "RED": RED, "DIM": DIM, "YELLOW": YELLOW, "CYAN": CYAN}.get(
+                    color, RESET
+                )
                 print(f"  {DIM}{i:4d}{RESET} {ansi}{text}{RESET}")
                 # Page every 50 lines: pause if running interactively
                 if i % 50 == 0 and i < len(diff_lines):
@@ -505,7 +544,7 @@ def _clear_two_lines():
     3. \\r + \\033[K  → clear line 1
     Result: cursor at column 0 of the original line 1.
     """
-    sys.stdout.write(f"\r\033[K\033[1A\r\033[K")
+    sys.stdout.write("\r\033[K\033[1A\r\033[K")
     sys.stdout.flush()
 
 
@@ -649,7 +688,11 @@ def _tool_icon(name: str, args: dict) -> tuple:
     if tool:
         badge = tool.user_facing_name or name
         display = tool.render_call(args)
-        default_display = f"{name}: {next(iter(args))}={str(args.get(next(iter(args)), ''))[:40]}" if args else name
+        default_display = (
+            f"{name}: {next(iter(args))}={str(args.get(next(iter(args)), ''))[:40]}"
+            if args
+            else name
+        )
         if display != default_display and display != name:
             return (f"  {DIM}{badge}{RESET}", f"{display}")
         # Use render_call for the label
@@ -657,25 +700,25 @@ def _tool_icon(name: str, args: dict) -> tuple:
 
     # ── Built-in icons (backward compatible) ──────────────────
     icons = {
-        "read_file":          (f"{CYAN}@", f"{path}"),
-        "write_file":         (f"{GREEN}+", f"{BOLD}{path}{RESET}"),
-        "apply_diff":         (f"{YELLOW}~", f"{path}"),
-        "edit_file":          (f"{YELLOW}~", f"{path}"),
-        "execute_command":    (f"{MAGENTA}>", f"{cmd}"),
-        "run_tests":          (f"{CYAN}◷", f"{DIM}Running tests{RESET}"),
-        "web_search":         (f"{CYAN}🔍", f"{DIM}{query}{RESET}"),
-        "web_fetch":          (f"{CYAN}🌐", f"{DIM}{url}{RESET}"),
-        "install_package":    (f"{GREEN}📦", f"{BOLD}{pkg}{RESET}"),
-        "grep":               (f"{CYAN}⌕", f"{DIM}{pattern}{RESET}"),
-        "code_search":        (f"{CYAN}⌕", f"{DIM}{query}{RESET}"),
-        "git":                (f"{MAGENTA}⑂", f"{DIM}{args.get('command', '')[:50]}{RESET}"),
-        "smart_commit":       (f"{MAGENTA}⑂", "commit"),
-        "create_pr":          (f"{MAGENTA}⑂", "create PR"),
-        "smart_branch":       (f"{MAGENTA}⑂", f"branch: {args.get('task_description', '')[:40]}"),
-        "safe_rename":        (f"{YELLOW}↻", f"{args.get('symbol', '')} → {args.get('new_name', '')}"),
-        "sub_agent":          (f"{CYAN}◆", f"{DIM}{args.get('task', '')[:50]}{RESET}"),
-        "sandbox_execute":    (f"{MAGENTA}▣", f"{cmd}"),
-        "delete_file":        (f"{RED}×", f"{path}"),
+        "read_file": (f"{CYAN}@", f"{path}"),
+        "write_file": (f"{GREEN}+", f"{BOLD}{path}{RESET}"),
+        "apply_diff": (f"{YELLOW}~", f"{path}"),
+        "edit_file": (f"{YELLOW}~", f"{path}"),
+        "execute_command": (f"{MAGENTA}>", f"{cmd}"),
+        "run_tests": (f"{CYAN}◷", f"{DIM}Running tests{RESET}"),
+        "web_search": (f"{CYAN}🔍", f"{DIM}{query}{RESET}"),
+        "web_fetch": (f"{CYAN}🌐", f"{DIM}{url}{RESET}"),
+        "install_package": (f"{GREEN}📦", f"{BOLD}{pkg}{RESET}"),
+        "grep": (f"{CYAN}⌕", f"{DIM}{pattern}{RESET}"),
+        "code_search": (f"{CYAN}⌕", f"{DIM}{query}{RESET}"),
+        "git": (f"{MAGENTA}⑂", f"{DIM}{args.get('command', '')[:50]}{RESET}"),
+        "smart_commit": (f"{MAGENTA}⑂", "commit"),
+        "create_pr": (f"{MAGENTA}⑂", "create PR"),
+        "smart_branch": (f"{MAGENTA}⑂", f"branch: {args.get('task_description', '')[:40]}"),
+        "safe_rename": (f"{YELLOW}↻", f"{args.get('symbol', '')} → {args.get('new_name', '')}"),
+        "sub_agent": (f"{CYAN}◆", f"{DIM}{args.get('task', '')[:50]}{RESET}"),
+        "sandbox_execute": (f"{MAGENTA}▣", f"{cmd}"),
+        "delete_file": (f"{RED}×", f"{path}"),
     }
 
     if name in icons:
@@ -705,15 +748,57 @@ def _is_simple_question(task: str) -> bool:
     # If the user asks to DO something, it's not a simple question.
     # Check BEFORE length — short action requests ("修bug") still need tools.
     action_keywords = (
-        "install", "uninstall", "remove", "delete", "create", "build",
-        "write", "run", "execute", "test", "fix", "refactor", "deploy",
-        "commit", "add", "change", "update", "upgrade", "generate",
-        "implement", "setup", "configure", "migrate", "convert",
+        "install",
+        "uninstall",
+        "remove",
+        "delete",
+        "create",
+        "build",
+        "write",
+        "run",
+        "execute",
+        "test",
+        "fix",
+        "refactor",
+        "deploy",
+        "commit",
+        "add",
+        "change",
+        "update",
+        "upgrade",
+        "generate",
+        "implement",
+        "setup",
+        "configure",
+        "migrate",
+        "convert",
         # Chinese action verbs
-        "安装", "卸载", "删除", "创建", "构建", "写", "运行", "执行",
-        "测试", "修复", "重构", "部署", "提交", "生成", "实现",
-        "改", "加", "建", "配", "配置", "迁移", "转换",
-        "修", "装", "删", "搬",  # single-char action verbs
+        "安装",
+        "卸载",
+        "删除",
+        "创建",
+        "构建",
+        "写",
+        "运行",
+        "执行",
+        "测试",
+        "修复",
+        "重构",
+        "部署",
+        "提交",
+        "生成",
+        "实现",
+        "改",
+        "加",
+        "建",
+        "配",
+        "配置",
+        "迁移",
+        "转换",
+        "修",
+        "装",
+        "删",
+        "搬",  # single-char action verbs
     )
     if any(k in t_lower for k in action_keywords):
         return False
@@ -723,8 +808,19 @@ def _is_simple_question(task: str) -> bool:
         return True
 
     # ── Accept: greetings ────────────────────────────────────
-    greetings = ("hello", "hi ", "hey", "good morning", "good afternoon",
-                 "what's up", "howdy", "你好", "嗨", "早上好", "晚上好")
+    greetings = (
+        "hello",
+        "hi ",
+        "hey",
+        "good morning",
+        "good afternoon",
+        "what's up",
+        "howdy",
+        "你好",
+        "嗨",
+        "早上好",
+        "晚上好",
+    )
     if any(t_lower.startswith(g) for g in greetings):
         return True
 
@@ -736,11 +832,33 @@ def _is_simple_question(task: str) -> bool:
     # "你" / "your" → talking about or to the agent
     has_self_ref = any(w in t for w in ("你", "your ", "you ", "you?", "you."))
     # Question-indicating words
-    has_question_word = any(w in t for w in (
-        "什么", "怎么", "为什么", "如何", "谁", "哪", "多少", "有多",
-        "what", "how", "why", "who", "where", "when", "which",
-        "吗", "呢", "吧", "?", "？", "是不是", "能不能",
-    ))
+    has_question_word = any(
+        w in t
+        for w in (
+            "什么",
+            "怎么",
+            "为什么",
+            "如何",
+            "谁",
+            "哪",
+            "多少",
+            "有多",
+            "what",
+            "how",
+            "why",
+            "who",
+            "where",
+            "when",
+            "which",
+            "吗",
+            "呢",
+            "吧",
+            "?",
+            "？",
+            "是不是",
+            "能不能",
+        )
+    )
     if has_self_ref and has_question_word:
         return True
 
@@ -758,6 +876,7 @@ class SimpleCLI:
 
     def __init__(self):
         from .spinner import SpinnerController
+
         self.history = []
         self._input_history = []
         self.file_context = []
@@ -789,27 +908,27 @@ class SimpleCLI:
             return
         if RICH_AVAILABLE:
             try:
+                from rich.box import ROUNDED
                 from rich.panel import Panel
                 from rich.text import Text as _Text
-                from rich.box import ROUNDED
+
                 # Truncate giant paste previews; full text is in self.history
                 MAX_PREVIEW = 2000
                 if len(text) > MAX_PREVIEW:
-                    preview = (
-                        text[:MAX_PREVIEW]
-                        + f"\n  ... ({len(text) - MAX_PREVIEW} more chars)"
-                    )
+                    preview = text[:MAX_PREVIEW] + f"\n  ... ({len(text) - MAX_PREVIEW} more chars)"
                 else:
                     preview = text
                 body = _Text(preview, style="cyan")
-                _RICH.print(Panel(
-                    body,
-                    title="[bold cyan]> you[/bold cyan]",
-                    title_align="left",
-                    border_style="dim cyan",
-                    box=ROUNDED,
-                    padding=(0, 1),
-                ))
+                _RICH.print(
+                    Panel(
+                        body,
+                        title="[bold cyan]> you[/bold cyan]",
+                        title_align="left",
+                        border_style="dim cyan",
+                        box=ROUNDED,
+                        padding=(0, 1),
+                    )
+                )
                 return
             except Exception:
                 # Rich path failed for some reason — fall through to ANSI
@@ -846,6 +965,7 @@ class SimpleCLI:
         # Pull current model/mode from config (set at startup)
         try:
             from agent.core.config import config as _cfg
+
             model = _cfg.get("model", "?")
             mode = _cfg.get("mode", "default")
         except Exception:
@@ -874,6 +994,7 @@ class SimpleCLI:
         # Pad between left and right; degrade gracefully on narrow terminals
         try:
             import shutil
+
             width = shutil.get_terminal_size((100, 20)).columns
         except Exception:
             width = 100
@@ -898,39 +1019,49 @@ class SimpleCLI:
 
         try:
             from prompt_toolkit import PromptSession
+            from prompt_toolkit.completion import WordCompleter
             from prompt_toolkit.history import InMemoryHistory
             from prompt_toolkit.key_binding import KeyBindings
-            from prompt_toolkit.completion import WordCompleter
             from prompt_toolkit.styles import Style
         except ImportError:
             return input(f"{DIM}> {RESET}").strip()
 
         # Build session lazily (once)
-        if not hasattr(self, '_pt_session'):
+        if not hasattr(self, "_pt_session"):
             bindings = KeyBindings()
 
-            @bindings.add('c-c')
+            @bindings.add("c-c")
             def _(event):
                 """Ctrl+C on empty line: quit. On non-empty: clear line."""
                 buf = event.app.current_buffer
                 if not buf.text:
-                    event.app.exit(result='quit')
+                    event.app.exit(result="quit")
                 else:
                     buf.reset()
 
-            @bindings.add('c-d')
+            @bindings.add("c-d")
             def _(event):
                 """Ctrl+D on empty line: quit."""
                 buf = event.app.current_buffer
                 if not buf.text:
-                    event.app.exit(result='quit')
+                    event.app.exit(result="quit")
                 else:
                     buf.delete()
 
             # Slash command completer
             slash_commands = [
-                '/help', '/clear', '/plan', '/commit', '/model', '/mode',
-                '/memory', '/status', '/context', '/review', '/undo', '/quit',
+                "/help",
+                "/clear",
+                "/plan",
+                "/commit",
+                "/model",
+                "/mode",
+                "/memory",
+                "/status",
+                "/context",
+                "/review",
+                "/undo",
+                "/quit",
             ]
             completer = WordCompleter(slash_commands, ignore_case=True, sentence=True)
 
@@ -940,9 +1071,9 @@ class SimpleCLI:
             # Style: minimal — just dim prompt. Add a toolbar class for
             # the bottom_toolbar status line; skip the bg color when
             # $NO_COLOR is set (we already degraded to no color elsewhere).
-            style_dict = {'prompt': 'dim'}
+            style_dict = {"prompt": "dim"}
             if not _NO_COLOR:
-                style_dict['toolbar'] = 'bg:#1a1a1a #888888'
+                style_dict["toolbar"] = "bg:#1a1a1a #888888"
             style = Style.from_dict(style_dict)
 
             self._pt_session = PromptSession(
@@ -950,7 +1081,7 @@ class SimpleCLI:
                 key_bindings=bindings,
                 completer=completer,
                 style=style,
-                message=[('class:prompt', '> ')],
+                message=[("class:prompt", "> ")],
                 multiline=False,
                 bottom_toolbar=self._build_toolbar,
             )
@@ -958,7 +1089,7 @@ class SimpleCLI:
         try:
             text = self._pt_session.prompt()
         except (EOFError, KeyboardInterrupt):
-            return ''
+            return ""
         except Exception:
             return input(f"{DIM}> {RESET}").strip()
 
@@ -972,7 +1103,8 @@ class SimpleCLI:
 
     def _update_file_context(self, result: str):
         import re
-        paths = re.findall(r'[\w./\-]+\.(?:py|js|ts|go|rs|java|yaml|json|md)', result)
+
+        paths = re.findall(r"[\w./\-]+\.(?:py|js|ts|go|rs|java|yaml|json|md)", result)
         self.file_context.extend(paths)
         if len(self.file_context) > 10:
             self.file_context = self.file_context[-10:]
@@ -1003,7 +1135,7 @@ class SimpleCLI:
 
         # Prefer the dataclass field; fall back to _handler (set externally
         # by builtin.py for commands registered without handler=).
-        handler = getattr(cmd, 'handler', None) or getattr(cmd, '_handler', None)
+        handler = getattr(cmd, "handler", None) or getattr(cmd, "_handler", None)
         if handler:
             try:
                 return await handler(args, ctx)
@@ -1015,13 +1147,17 @@ class SimpleCLI:
     def run(self):
         print_banner()
         from agent.core.config import config
-        mode = config.get('mode')
-        provider = config.get('provider')
-        model = config.get('model')
-        print(f"  {DIM}Model:{RESET} {CYAN}{model}{RESET}  {DIM}Mode:{RESET} {CYAN}{mode}{RESET}  {DIM}Provider:{RESET} {CYAN}{provider}{RESET}")
+
+        mode = config.get("mode")
+        provider = config.get("provider")
+        model = config.get("model")
+        print(
+            f"  {DIM}Model:{RESET} {CYAN}{model}{RESET}  {DIM}Mode:{RESET} {CYAN}{mode}{RESET}  {DIM}Provider:{RESET} {CYAN}{provider}{RESET}"
+        )
 
         # Show project context status
         from pathlib import Path
+
         context_file = Path.cwd() / "CODING_AGENT.md"
         if context_file.exists():
             size = len(context_file.read_text(encoding="utf-8"))
@@ -1035,8 +1171,10 @@ class SimpleCLI:
         # it to subsequent turns via the hook payload.
         try:
             import asyncio as _asyncio
-            from agent.core.hooks import HookRegistry, ON_SESSION_START
+
+            from agent.core.hooks import ON_SESSION_START, HookRegistry
             from agent.core.hooks_session import load_user_profile_on_start
+
             session_hooks = HookRegistry()
             session_hooks.register(ON_SESSION_START, load_user_profile_on_start)
             payload = {"session_id": f"cli-{id(self)}", "task": None}
@@ -1044,13 +1182,9 @@ class SimpleCLI:
                 loop = _asyncio.get_event_loop()
                 if loop.is_running():
                     # In an async context — schedule it
-                    _asyncio.ensure_future(
-                        session_hooks.execute(ON_SESSION_START, payload)
-                    )
+                    _asyncio.ensure_future(session_hooks.execute(ON_SESSION_START, payload))
                 else:
-                    loop.run_until_complete(
-                        session_hooks.execute(ON_SESSION_START, payload)
-                    )
+                    loop.run_until_complete(session_hooks.execute(ON_SESSION_START, payload))
             except RuntimeError:
                 # No event loop — create one
                 _asyncio.run(session_hooks.execute(ON_SESSION_START, payload))
@@ -1101,7 +1235,9 @@ class SimpleCLI:
 
                 # ── Intent-based routing (LLM classifier → handler) ──
                 task_with_context = self._inject_file_context(user_input)
-                result = _run_async(route(task_with_context) if route else self._run_task(task_with_context))
+                result = _run_async(
+                    route(task_with_context) if route else self._run_task(task_with_context)
+                )
                 if result is None:
                     continue
 
@@ -1144,6 +1280,7 @@ class SimpleCLI:
         direct LLM response — no tool calls, no plan, just an answer.
         """
         from agent.llm.client import Message
+
         from .spinner import StageLabel
 
         # Spinner runs until first token or completion
@@ -1166,6 +1303,7 @@ class SimpleCLI:
             if engine.user_profile is not None:
                 try:
                     from agent.core.fact_extractor import FactExtractor
+
                     extractor = FactExtractor(llm_client=engine.llm)
                     extractor.extract_and_apply(task, engine.user_profile)
                 except Exception:
@@ -1208,13 +1346,8 @@ class SimpleCLI:
             # Inject recent conversation history
             if len(self.history) >= 2:
                 recent = self.history[-6:]  # last 3 exchanges
-                history_text = "\n".join(
-                    f"{h['role']}: {h['content'][:200]}"
-                    for h in recent
-                )
-                prompt_parts.append(
-                    f"\n[Previous conversation]\n{history_text}"
-                )
+                history_text = "\n".join(f"{h['role']}: {h['content'][:200]}" for h in recent)
+                prompt_parts.append(f"\n[Previous conversation]\n{history_text}")
 
             prompt_parts.append(f"\n\nUser: {task}")
             messages = [Message(role="user", content="\n".join(prompt_parts))]
@@ -1255,12 +1388,13 @@ class SimpleCLI:
                     try:
                         from rich.live import Live
                         from rich.spinner import Spinner as _RichSpinner
-                        _live_render = _RichSpinner(
-                            "dots", text=StageLabel.THINKING, style="dim"
-                        )
+
+                        _live_render = _RichSpinner("dots", text=StageLabel.THINKING, style="dim")
                         _live_ctx = Live(
-                            _live_render, console=_RICH,
-                            refresh_per_second=12, transient=True,
+                            _live_render,
+                            console=_RICH,
+                            refresh_per_second=12,
+                            transient=True,
                         )
                         _live_ctx.__enter__()
                     except Exception:
@@ -1271,21 +1405,23 @@ class SimpleCLI:
 
                 try:
                     for chunk in response:
-                        if hasattr(chunk, 'usage') and chunk.usage:
+                        if hasattr(chunk, "usage") and chunk.usage:
                             _usage_info = {
-                                "input": getattr(chunk.usage, 'input_tokens', 0) or getattr(chunk.usage, 'prompt_tokens', 0),
-                                "output": getattr(chunk.usage, 'output_tokens', 0) or getattr(chunk.usage, 'completion_tokens', 0),
+                                "input": getattr(chunk.usage, "input_tokens", 0)
+                                or getattr(chunk.usage, "prompt_tokens", 0),
+                                "output": getattr(chunk.usage, "output_tokens", 0)
+                                or getattr(chunk.usage, "completion_tokens", 0),
                             }
-                        if hasattr(chunk, 'choices') and chunk.choices:
+                        if hasattr(chunk, "choices") and chunk.choices:
                             delta = chunk.choices[0].delta
-                            if hasattr(delta, 'content') and delta.content:
+                            if hasattr(delta, "content") and delta.content:
                                 raw = delta.content
-                                if '<think>' in raw:
+                                if "<think>" in raw:
                                     _in_think = True
-                                    raw = raw.split('<think>')[0]
-                                if _in_think and '</think>' in raw:
+                                    raw = raw.split("<think>")[0]
+                                if _in_think and "</think>" in raw:
                                     _in_think = False
-                                    raw = raw.split('</think>')[-1]
+                                    raw = raw.split("</think>")[-1]
                                 elif _in_think:
                                     raw = ""
                                 if raw:
@@ -1369,7 +1505,9 @@ class SimpleCLI:
             pct = inp / window * 100 if window > 0 else 0
             remaining = max(0, 100 - pct)
             if remaining < 25:
-                line = f"Context low ({remaining:.0f}% remaining) · Run /compact to compact & continue"
+                line = (
+                    f"Context low ({remaining:.0f}% remaining) · Run /compact to compact & continue"
+                )
                 color = RED
             elif remaining < 40:
                 line = f"{remaining:.0f}% until auto-compact"
@@ -1385,17 +1523,20 @@ class SimpleCLI:
 
     def _setup_router(self, model: str, provider: str):
         """Initialize intent classifier + route table. Extensible via register()."""
-        from agent.core.intent import IntentRouter, IntentClassifier
+        from agent.core.intent import IntentClassifier, IntentRouter
 
         router = IntentRouter()
         try:
             from agent.llm.client import LLMClient
+
             llm = LLMClient(model=model, provider=provider)
-            router.set_classifier(IntentClassifier(
-                llm_client=llm,
-                use_llm=True,  # CLI always has LLM
-                fallback_to_legacy=True,  # safety net for API errors
-            ))
+            router.set_classifier(
+                IntentClassifier(
+                    llm_client=llm,
+                    use_llm=True,  # CLI always has LLM
+                    fallback_to_legacy=True,  # safety net for API errors
+                )
+            )
         except BaseException as e:
             # No LLM → heuristic fallback in classifier. Catch BaseException
             # (not just Exception) to handle pydantic/compat errors cleanly.
@@ -1412,7 +1553,8 @@ class SimpleCLI:
 
     async def _run_ask(self, task: str) -> str:
         """Ask handler — simple Q&A, no file changes."""
-        from agent.core.engine import AgentEngine, AgentConfig
+        from agent.core.engine import AgentConfig, AgentEngine
+
         config = AgentConfig(verbose=False, confirm_handler=_confirm_handler)
         engine = AgentEngine(config)
         self._last_engine = engine
@@ -1420,7 +1562,8 @@ class SimpleCLI:
 
     async def _run_edit(self, task: str) -> str:
         """Edit handler — direct execute, no plan phase. Short step limit."""
-        from agent.core.engine import AgentEngine, AgentConfig
+        from agent.core.engine import AgentConfig, AgentEngine
+
         from .spinner import StageLabel
 
         start_time = time.time()
@@ -1521,13 +1664,14 @@ class SimpleCLI:
         The LLM can call enter_plan_mode/exit_plan_mode tools to explore
         and plan before making changes — no hardcoded plan phase.
         """
-        from agent.core.engine import AgentEngine, AgentConfig
+        from agent.core.engine import AgentConfig, AgentEngine
 
         start_time = time.time()
         config = AgentConfig(verbose=False, confirm_handler=_confirm_handler)
         engine = AgentEngine(config)
         self._last_engine = engine
         from agent.core.config import config
+
         mode = config.get("mode")
 
         # Skip for simple conversational questions
@@ -1537,13 +1681,13 @@ class SimpleCLI:
         # Inject conversation history for multi-turn awareness
         if len(self.history) >= 2:
             history_context = "\n".join(
-                f"{h['role']}: {h['content'][:200]}"
-                for h in self.history[-6:]  # last 3 exchanges
+                f"{h['role']}: {h['content'][:200]}" for h in self.history[-6:]  # last 3 exchanges
             )
             task = f"[Previous conversation]\n{history_context}\n\n[Current task]\n{task}"
 
         # ── Single-phase streaming execution ──
         from .spinner import StageLabel
+
         print()
         buffer = []
         # Layer 3: open Live for the spinner phase; on first content event
@@ -1554,10 +1698,13 @@ class SimpleCLI:
             try:
                 from rich.live import Live
                 from rich.spinner import Spinner as _RichSpinner
+
                 _live_render = _RichSpinner("dots", text=StageLabel.THINKING, style="dim")
                 _live_ctx = Live(
-                    _live_render, console=_RICH,
-                    refresh_per_second=12, transient=True,
+                    _live_render,
+                    console=_RICH,
+                    refresh_per_second=12,
+                    transient=True,
                 )
                 _live_ctx.__enter__()
             except Exception:
@@ -1618,17 +1765,27 @@ class SimpleCLI:
                     tool_name = event.get("tool_name", "")
                     if not ok and event.get("error"):
                         if RICH_AVAILABLE:
-                            _rich_print_tool_result(tool_name, event.get('error', '')[:120], success=False)
+                            _rich_print_tool_result(
+                                tool_name, event.get("error", "")[:120], success=False
+                            )
                         else:
                             print(f"  {RED}✗{RESET} {event.get('error')[:120]}")
                     elif ok and tool_name == "exit_plan_mode" and event.get("content"):
                         plan_content = event.get("content", "")
                         if RICH_AVAILABLE:
+                            from rich.box import ROUNDED
                             from rich.panel import Panel
                             from rich.text import Text
-                            from rich.box import ROUNDED
+
                             body = Text("\n".join(plan_content.split("\n")[:15]))
-                            _RICH.print(Panel(body, title="[bold cyan]Plan[/bold cyan]", border_style="cyan", box=ROUNDED))
+                            _RICH.print(
+                                Panel(
+                                    body,
+                                    title="[bold cyan]Plan[/bold cyan]",
+                                    border_style="cyan",
+                                    box=ROUNDED,
+                                )
+                            )
                         else:
                             print(f"\n{CYAN}╭─ Plan ────────────────────────────────{RESET}")
                             for line in plan_content.split("\n")[:15]:
@@ -1641,28 +1798,38 @@ class SimpleCLI:
                             _rich_print_todo(tasks)
                     elif ok:
                         from agent.tools.base import registry as _reg
+
                         tool = _reg.get(tool_name)
                         if tool:
+
                             class _FakeResult:
                                 success = ok
                                 content = event.get("content", "")
                                 error = event.get("error", "")
                                 metadata = event.get("metadata")
+
                             summary = tool.render_result(_FakeResult())
                         else:
                             summary = event.get("content", "").split("\n")[0][:80]
                         if summary:
-                            display_name = (tool.user_facing_name or tool_name) if tool else tool_name
+                            display_name = (
+                                (tool.user_facing_name or tool_name) if tool else tool_name
+                            )
                             _rich_print_tool_result(display_name, summary, success=True)
                     # Reopen Live for the next thinking/content burst
                     if _live_ctx is None and RICH_AVAILABLE and sys.stdout.isatty():
                         try:
                             from rich.live import Live
                             from rich.spinner import Spinner as _RichSpinner
-                            _live_render = _RichSpinner("dots", text=StageLabel.THINKING, style="dim")
+
+                            _live_render = _RichSpinner(
+                                "dots", text=StageLabel.THINKING, style="dim"
+                            )
                             _live_ctx = Live(
-                                _live_render, console=_RICH,
-                                refresh_per_second=12, transient=True,
+                                _live_render,
+                                console=_RICH,
+                                refresh_per_second=12,
+                                transient=True,
                             )
                             _live_ctx.__enter__()
                         except Exception:
@@ -1695,8 +1862,10 @@ class SimpleCLI:
                             pct = _ctx_used / _ctx_window * 100
                             remaining = max(0, 100 - pct)
                             if remaining < 25:
-                                line = (f"Context low ({remaining:.0f}% remaining) "
-                                        f"· Run /compact to compact & continue")
+                                line = (
+                                    f"Context low ({remaining:.0f}% remaining) "
+                                    f"· Run /compact to compact & continue"
+                                )
                                 color = RED
                             elif remaining < 40:
                                 line = f"{remaining:.0f}% until auto-compact"
@@ -1757,6 +1926,7 @@ class SimpleCLI:
 def main():
     """Main entry point."""
     import argparse
+
     parser = argparse.ArgumentParser(prog="coding-agent", add_help=False)
     parser.add_argument("task", nargs="?", default=None)
     parser.add_argument("-p", "--print", dest="print_mode", action="store_true")
@@ -1764,16 +1934,20 @@ def main():
     parser.add_argument("--tui", dest="tui_mode", action="store_true", help="Launch Textual TUI")
     parser.add_argument("--cli", dest="cli_mode", action="store_true", help="Use raw CLI (default)")
     parser.add_argument("--resume", dest="resume", action="store_true", help="Resume last session")
-    parser.add_argument("--list-sessions", dest="list_sessions", action="store_true", help="List saved sessions")
+    parser.add_argument(
+        "--list-sessions", dest="list_sessions", action="store_true", help="List saved sessions"
+    )
     args, _ = parser.parse_known_args()
 
     if args.tui_mode:
         from ui.tui import run_tui
+
         run_tui()
         return
 
     if args.list_sessions:
         from agent.core.session import list_sessions as ls
+
         sessions = ls()
         if not sessions:
             print("No saved sessions.")
@@ -1786,6 +1960,7 @@ def main():
 
     if args.resume:
         from agent.core.session import get_latest_session
+
         s = get_latest_session()
         if not s:
             print("No session to resume.")
@@ -1799,6 +1974,7 @@ def main():
         # Single task mode — use intent routing (same as interactive mode)
         cli = SimpleCLI()
         from agent.core.config import config
+
         cli._setup_router(config.get("model"), config.get("provider"))
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -1818,8 +1994,8 @@ def main():
         print(f"{DIM}Usage: coding-agent [task] [-p] [--help]")
         print("Examples:")
         print("  coding-agent                    # Interactive mode")
-        print("  coding-agent \"write hello.py\"  # Single task")
-        print(f"  coding-agent -p \"task\"         # Print result only")
+        print('  coding-agent "write hello.py"  # Single task')
+        print('  coding-agent -p "task"         # Print result only')
         print()
         print(f"{BOLD}Slash commands:{RESET}")
         print(f"  {CYAN}/help{RESET}             Show available commands")

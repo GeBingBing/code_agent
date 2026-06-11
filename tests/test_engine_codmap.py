@@ -1,10 +1,8 @@
 """Tests for the engine's codmap injection (PR-05)."""
 
-import asyncio
 import pytest
-from pathlib import Path
 
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.engine import AgentConfig, AgentEngine
 from agent.core.hooks import BEFORE_LLM_CALL
 
 
@@ -19,6 +17,7 @@ class TestCodmapRegistration:
         # Engine resolves WORKSPACE dynamically; we patch it to tmp_path so
         # the codmap scans a controlled tree.
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         e = AgentEngine(AgentConfig(codmap_enabled=True))
         assert e._codmap is not None
@@ -26,6 +25,7 @@ class TestCodmapRegistration:
 
     def test_codmap_disabled_via_config(self, tmp_path, monkeypatch):
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         e = AgentEngine(AgentConfig(codmap_enabled=False))
         assert e._codmap is None
@@ -38,6 +38,7 @@ class TestCodmapInjection:
     async def test_codmap_injected_into_last_user_message(self, tmp_path, monkeypatch):
         """The reminder should be appended to the most recent user message."""
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         # Create a small file tree
         (tmp_path / "src").mkdir()
@@ -63,6 +64,7 @@ class TestCodmapInjection:
     async def test_codmap_does_not_mutate_system_prompt(self, tmp_path, monkeypatch):
         """The system prompt is left alone (preserves prompt cache)."""
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         (tmp_path / "a.py").write_text("x = 1\n")
         e = AgentEngine(AgentConfig(codmap_enabled=True))
@@ -75,6 +77,7 @@ class TestCodmapInjection:
     async def test_empty_workspace_no_injection(self, tmp_path, monkeypatch):
         """No source files → no reminder added (we still want to be safe)."""
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         e = AgentEngine(AgentConfig(codmap_enabled=True))
         msgs = [_Msg("user", "test")]
@@ -86,6 +89,7 @@ class TestCodmapInjection:
     @pytest.mark.asyncio
     async def test_disabled_codmap_is_noop(self, tmp_path, monkeypatch):
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         (tmp_path / "a.py").write_text("x = 1\n")
         e = AgentEngine(AgentConfig(codmap_enabled=False))
@@ -97,6 +101,7 @@ class TestCodmapInjection:
     @pytest.mark.asyncio
     async def test_no_messages_is_safe(self, tmp_path, monkeypatch):
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         (tmp_path / "a.py").write_text("x = 1\n")
         e = AgentEngine(AgentConfig(codmap_enabled=True))
@@ -108,6 +113,7 @@ class TestCodmapInjection:
     async def test_no_user_message_no_crash(self, tmp_path, monkeypatch):
         """If there are messages but none from user, codmap is a no-op."""
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         (tmp_path / "a.py").write_text("x = 1\n")
         e = AgentEngine(AgentConfig(codmap_enabled=True))
@@ -123,6 +129,7 @@ class TestCodmapIntegration:
     async def test_other_before_llm_call_hooks_still_run(self, tmp_path, monkeypatch):
         """Codmap doesn't short-circuit other BEFORE_LLM_CALL hooks."""
         import agent.core.engine as eng_mod
+
         monkeypatch.setattr(eng_mod, "WORKSPACE", tmp_path, raising=False)
         (tmp_path / "a.py").write_text("x = 1\n")
         e = AgentEngine(AgentConfig(codmap_enabled=True))

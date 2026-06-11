@@ -20,6 +20,7 @@ from typing import Dict, List, Optional
 @dataclass(frozen=True)
 class AgentRole:
     """Declarative role profile for a sub-agent."""
+
     name: str
     description: str
     system_prompt_addon: str
@@ -120,6 +121,4 @@ def get_role(name: str) -> AgentRole:
     """Look up a built-in role by short name (e.g. 'code' → CODE_ROLE)."""
     if name in BUILTIN_ROLES:
         return BUILTIN_ROLES[name]
-    raise KeyError(
-        f"Unknown role: {name!r}. Built-in roles: {list(BUILTIN_ROLES.keys())}"
-    )
+    raise KeyError(f"Unknown role: {name!r}. Built-in roles: {list(BUILTIN_ROLES.keys())}")

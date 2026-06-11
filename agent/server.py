@@ -1,16 +1,13 @@
 """Local Server - FastAPI service for VS Code extension integration."""
 
-import asyncio
 import json
-import os
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from agent.core.config import config
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.engine import AgentConfig, AgentEngine
 
 # Server configuration
 SERVER_PORT = config.get("server_port")
@@ -126,6 +123,7 @@ async def root():
 def run_server(port: int = SERVER_PORT):
     """Run the server with uvicorn."""
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
 
 

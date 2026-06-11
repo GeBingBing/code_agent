@@ -4,22 +4,19 @@ Requires: gh CLI for PR creation (optional)
 """
 
 import asyncio
-import os
 import re
-import shlex
-import subprocess
-from pathlib import Path
 from typing import Optional
 
-from .base import BaseTool, ToolResult, registry
-from ..llm.client import LLMClient, Message
 from ..core.workspace import WORKSPACE_ROOT as WORKSPACE
+from ..llm.client import LLMClient, Message
+from .base import BaseTool, ToolResult, registry
 
 
 async def _run_git(args: list, cwd: Optional[str] = None, timeout: int = 30) -> tuple:
     """Run a git command and return (stdout, stderr, returncode)."""
     proc = await asyncio.create_subprocess_exec(
-        "git", *args,
+        "git",
+        *args,
         cwd=cwd or str(WORKSPACE),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -61,7 +58,9 @@ async def _get_changed_files(cwd: Optional[str] = None) -> list:
     return files
 
 
-async def _generate_commit_message(diff: str, diff_stat: str, recent: str, model: str = None, provider: str = None) -> str:
+async def _generate_commit_message(
+    diff: str, diff_stat: str, recent: str, model: str = None, provider: str = None
+) -> str:
     """Use LLM to generate a conventional commit message from diff."""
     # Truncate diff if too long
     max_diff_len = 4000
@@ -100,9 +99,9 @@ Generate ONLY the commit message subject line (no body, no explanation):"""
         # Clean up
         msg = msg.strip().strip('"').strip("'")
         # Remove any prefix like "Commit message:" or "Subject:"
-        msg = re.sub(r'^(commit message|subject|message)\s*[:\-]\s*', '', msg, flags=re.I)
+        msg = re.sub(r"^(commit message|subject|message)\s*[:\-]\s*", "", msg, flags=re.I)
         return msg
-    except Exception as e:
+    except Exception:
         # Fallback to simple message
         return f"update: {diff_stat.splitlines()[0] if diff_stat else 'changes'}"
 
@@ -111,7 +110,9 @@ class SmartCommitTool(BaseTool):
     user_facing_name = "Commit"
 
     name = "smart_commit"
-    description = "Stage changes and create a git commit with an LLM-generated message based on the diff"
+    description = (
+        "Stage changes and create a git commit with an LLM-generated message based on the diff"
+    )
 
     async def execute(self, message: str = "", cwd: Optional[str] = None, **kwargs) -> ToolResult:
         """Smart commit with auto-generated message.
@@ -177,7 +178,9 @@ class CreatePRTool(BaseTool):
     user_facing_name = "PR"
 
     name = "create_pr"
-    description = "Create a GitHub Pull Request using gh CLI with auto-generated title and description"
+    description = (
+        "Create a GitHub Pull Request using gh CLI with auto-generated title and description"
+    )
 
     async def execute(
         self,
@@ -202,7 +205,8 @@ class CreatePRTool(BaseTool):
         # Check gh CLI availability
         try:
             proc = await asyncio.create_subprocess_exec(
-                "gh", "--version",
+                "gh",
+                "--version",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -253,7 +257,8 @@ class CreatePRTool(BaseTool):
             cmd.append("--draft")
 
         proc = await asyncio.create_subprocess_exec(
-            "gh", *cmd,
+            "gh",
+            *cmd,
             cwd=workspace,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -269,7 +274,9 @@ class CreatePRTool(BaseTool):
             err = stderr.decode()
             # Check if PR already exists
             if "already exists" in err.lower():
-                return ToolResult(success=False, content="", error=f"PR already exists for branch {branch}")
+                return ToolResult(
+                    success=False, content="", error=f"PR already exists for branch {branch}"
+                )
             return ToolResult(success=False, content="", error=f"gh pr create failed: {err}")
 
     @property
@@ -282,10 +289,24 @@ class CreatePRTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "title": {"type": "string", "description": "PR title (auto-generated if empty)"},
-                        "body": {"type": "string", "description": "PR body (auto-generated if empty)"},
-                        "base": {"type": "string", "default": "main", "description": "Target branch"},
-                        "draft": {"type": "boolean", "default": False, "description": "Create as draft PR"},
+                        "title": {
+                            "type": "string",
+                            "description": "PR title (auto-generated if empty)",
+                        },
+                        "body": {
+                            "type": "string",
+                            "description": "PR body (auto-generated if empty)",
+                        },
+                        "base": {
+                            "type": "string",
+                            "default": "main",
+                            "description": "Target branch",
+                        },
+                        "draft": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "Create as draft PR",
+                        },
                     },
                 },
             },
@@ -339,9 +360,15 @@ class SmartBranchTool(BaseTool):
             if switch:
                 _, err, rc = await _run_git(["checkout", new_branch], workspace)
                 if rc == 0:
-                    return ToolResult(success=True, content=f"✓ Switched to existing branch: {new_branch}")
+                    return ToolResult(
+                        success=True, content=f"✓ Switched to existing branch: {new_branch}"
+                    )
                 return ToolResult(success=False, content="", error=f"Checkout failed: {err}")
-            return ToolResult(success=False, content="", error=f"Branch '{new_branch}' already exists. Use switch=true to switch to it.")
+            return ToolResult(
+                success=False,
+                content="",
+                error=f"Branch '{new_branch}' already exists. Use switch=true to switch to it.",
+            )
 
         # Create new branch from current
         _, err, rc = await _run_git(["checkout", "-b", new_branch], workspace)
@@ -363,9 +390,19 @@ class SmartBranchTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "task": {"type": "string", "description": "Task description to generate branch name from"},
-                        "branch": {"type": "string", "description": "Explicit branch name (overrides task)"},
-                        "switch": {"type": "boolean", "default": False, "description": "Switch to branch if it already exists"},
+                        "task": {
+                            "type": "string",
+                            "description": "Task description to generate branch name from",
+                        },
+                        "branch": {
+                            "type": "string",
+                            "description": "Explicit branch name (overrides task)",
+                        },
+                        "switch": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "Switch to branch if it already exists",
+                        },
                     },
                 },
             },
@@ -375,9 +412,42 @@ class SmartBranchTool(BaseTool):
 def _generate_branch_name(task: str) -> str:
     """Generate a kebab-case branch name from task description."""
     import re
+
     # Extract keywords
-    words = re.findall(r'[a-zA-Z]+', task.lower())
-    stopwords = {"the", "a", "an", "is", "are", "was", "to", "and", "or", "in", "on", "at", "for", "with", "of", "from", "by", "as", "it", "this", "that", "add", "fix", "update", "implement", "create", "delete", "remove", "refactor", "test", "docs"}
+    words = re.findall(r"[a-zA-Z]+", task.lower())
+    stopwords = {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "to",
+        "and",
+        "or",
+        "in",
+        "on",
+        "at",
+        "for",
+        "with",
+        "of",
+        "from",
+        "by",
+        "as",
+        "it",
+        "this",
+        "that",
+        "add",
+        "fix",
+        "update",
+        "implement",
+        "create",
+        "delete",
+        "remove",
+        "refactor",
+        "test",
+        "docs",
+    }
     keywords = [w for w in words if w not in stopwords and len(w) > 2]
 
     # Detect type prefix
@@ -391,7 +461,9 @@ def _generate_branch_name(task: str) -> str:
         prefix = "docs"
     elif any(w in task_lower for w in ("refactor", "clean", "restructure", "rewrite")):
         prefix = "refactor"
-    elif any(w in task_lower for w in ("chore", "ci", "build", "lint", "format", "deps", "dependency")):
+    elif any(
+        w in task_lower for w in ("chore", "ci", "build", "lint", "format", "deps", "dependency")
+    ):
         prefix = "chore"
 
     # Build name: prefix/keyword1-keyword2

@@ -11,9 +11,9 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from .base import BaseTool, ToolResult, registry
 from ..observability import get_metrics
 from ..observability.metrics import _NoOpCounter, _NoOpHistogram
+from .base import BaseTool, ToolResult, registry
 
 
 class MetricsQueryTool(BaseTool):

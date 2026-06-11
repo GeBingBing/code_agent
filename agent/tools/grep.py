@@ -2,7 +2,6 @@
 
 import re
 from pathlib import Path
-from typing import Optional
 
 from .base import BaseTool, ToolResult, registry
 
@@ -16,8 +15,16 @@ class GrepTool(BaseTool):
     description = "Search for text patterns across all files in the project (full-text search)"
 
     SKIP_DIRS = {
-        "__pycache__", ".git", "node_modules", "venv", ".venv",
-        "dist", "build", ".pytest_cache", ".mypy_cache", ".tox",
+        "__pycache__",
+        ".git",
+        "node_modules",
+        "venv",
+        ".venv",
+        "dist",
+        "build",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".tox",
     }
 
     def __init__(self, root_dir: str = "."):
@@ -46,7 +53,9 @@ class GrepTool(BaseTool):
         if raw_path.is_absolute():
             # Block path traversal sequences in absolute paths
             if ".." in str(raw_path):
-                return ToolResult(success=False, content="", error=f"Path traversal blocked: {path}")
+                return ToolResult(
+                    success=False, content="", error=f"Path traversal blocked: {path}"
+                )
             search_path = raw_path.resolve()
         else:
             # Relative path: resolve within root_dir, block traversal
@@ -54,7 +63,9 @@ class GrepTool(BaseTool):
             try:
                 search_path.relative_to(self.root_dir)
             except ValueError:
-                return ToolResult(success=False, content="", error=f"Path escapes workspace: {path}")
+                return ToolResult(
+                    success=False, content="", error=f"Path escapes workspace: {path}"
+                )
         if not search_path.exists():
             return ToolResult(success=False, content="", error=f"Path not found: {path}")
 
@@ -114,11 +125,30 @@ class GrepTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "pattern": {"type": "string", "description": "Text or regex pattern to search"},
-                        "path": {"type": "string", "default": ".", "description": "Directory to search"},
-                        "glob": {"type": "string", "default": "*", "description": "File glob pattern (e.g. '*.py')"},
-                        "case_sensitive": {"type": "boolean", "default": False, "description": "Case-sensitive matching"},
-                        "max_results": {"type": "integer", "default": 20, "description": "Max results"},
+                        "pattern": {
+                            "type": "string",
+                            "description": "Text or regex pattern to search",
+                        },
+                        "path": {
+                            "type": "string",
+                            "default": ".",
+                            "description": "Directory to search",
+                        },
+                        "glob": {
+                            "type": "string",
+                            "default": "*",
+                            "description": "File glob pattern (e.g. '*.py')",
+                        },
+                        "case_sensitive": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "Case-sensitive matching",
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "default": 20,
+                            "description": "Max results",
+                        },
                     },
                     "required": ["pattern"],
                 },

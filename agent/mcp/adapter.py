@@ -10,9 +10,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .client import MCPClient, MCPServerConfig
 from ..tools.base import BaseTool, ToolResult, registry
-
+from .client import MCPClient, MCPServerConfig
 
 # Default MCP servers config path
 DEFAULT_MCP_CONFIG_PATH = Path.home() / ".coding-agent" / "mcp_servers.json"

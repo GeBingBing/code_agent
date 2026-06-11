@@ -75,12 +75,12 @@ class TestPromptAssembler:
 
     def test_dead_code_removed(self):
         """EXECUTE_SYSTEM_PROMPT and build_execute_prompt are removed."""
-        assert not hasattr(PromptAssembler, 'EXECUTE_SYSTEM_PROMPT'), (
-            "EXECUTE_SYSTEM_PROMPT should be removed (dead code)"
-        )
-        assert not hasattr(PromptAssembler, 'build_execute_prompt'), (
-            "build_execute_prompt should be removed (dead code)"
-        )
+        assert not hasattr(
+            PromptAssembler, "EXECUTE_SYSTEM_PROMPT"
+        ), "EXECUTE_SYSTEM_PROMPT should be removed (dead code)"
+        assert not hasattr(
+            PromptAssembler, "build_execute_prompt"
+        ), "build_execute_prompt should be removed (dead code)"
 
 
 class TestPlanPrompt:
@@ -138,9 +138,7 @@ class TestSystemReminder:
         assert "<project_dir>my-app</project_dir>" in reminder
 
     def test_includes_git_status(self):
-        reminder = PromptAssembler.build_system_reminder(
-            git_status="On branch feat-x\n M file.py"
-        )
+        reminder = PromptAssembler.build_system_reminder(git_status="On branch feat-x\n M file.py")
         assert "<git_status>" in reminder
         assert "</git_status>" in reminder
         assert "feat-x" in reminder
@@ -161,9 +159,7 @@ class TestSystemReminder:
 
     def test_system_reminder_is_single_block(self):
         """System-reminder should be a single tagged block."""
-        reminder = PromptAssembler.build_system_reminder(
-            cwd="/test", mode="plan"
-        )
+        reminder = PromptAssembler.build_system_reminder(cwd="/test", mode="plan")
         # Count opening/closing tags — should be exactly one pair
         assert reminder.count("<system-reminder>") == 1
         assert reminder.count("</system-reminder>") == 1
@@ -185,8 +181,9 @@ class TestToolListSync:
 
         # Extract tool names from the <available_tools> section
         import re
+
         tools_section = prompt.split("<available_tools>")[1].split("</available_tools>")[0]
-        listed = set(re.findall(r'- (\w+)\(', tools_section))
+        listed = set(re.findall(r"- (\w+)\(", tools_section))
 
         for name in listed:
             assert name in registered, f"Tool '{name}' in prompt but NOT in registry"

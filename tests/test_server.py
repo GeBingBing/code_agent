@@ -1,6 +1,5 @@
 """Tests for Local Server (agent/server.py)."""
 
-import asyncio
 import json
 import os
 
@@ -15,6 +14,7 @@ os.environ["AGENT_SERVER_PORT"] = "18793"  # Use different port for testing
 
 class MockStreamResponse:
     """Simulate OpenAI streaming response."""
+
     def __init__(self, chunks):
         self.chunks = chunks
 
@@ -24,7 +24,7 @@ class MockStreamResponse:
 
 class MockChunk:
     def __init__(self, content: str):
-        self.choices = [type('Choice', (), {'delta': type('Delta', (), {'content': content})()})()]
+        self.choices = [type("Choice", (), {"delta": type("Delta", (), {"content": content})()})()]
 
 
 class TestServerAPI:
@@ -33,6 +33,7 @@ class TestServerAPI:
     @pytest.fixture
     def mock_engine_stream(self, monkeypatch):
         """Mock AgentEngine.run_stream to return test events."""
+
         async def mock_stream(self, task):
             yield {"type": "step_start", "step": 1, "max_steps": 20}
             yield {"type": "thinking", "content": ""}
@@ -48,12 +49,14 @@ class TestServerAPI:
         monkeypatch.setenv("AGENT_SERVER_PORT", "18793")
 
         from agent.core.engine import AgentEngine
+
         monkeypatch.setattr(AgentEngine, "run_stream", mock_stream)
 
     @pytest.fixture
     def client(self, mock_engine_stream):
         """Create test client with mocked engine."""
         from agent.server import app
+
         return TestClient(app)
 
     def test_health_endpoint(self, client):
@@ -74,10 +77,7 @@ class TestServerAPI:
 
     def test_completion_stream(self, client):
         """GET /completion/stream should return SSE."""
-        response = client.get(
-            "/completion/stream",
-            params={"task": "test task"}
-        )
+        response = client.get("/completion/stream", params={"task": "test task"})
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
 
@@ -102,10 +102,7 @@ class TestServerAPI:
 
     def test_completion_stream_sse_format(self, client):
         """SSE events should be properly formatted."""
-        response = client.get(
-            "/completion/stream",
-            params={"task": "hello"}
-        )
+        response = client.get("/completion/stream", params={"task": "hello"})
         lines = list(response.iter_lines())
 
         # Each line should be "data: {...}"
@@ -121,7 +118,8 @@ class TestServerConfig:
 
     def test_server_defaults(self):
         """Server should have sensible defaults for port and key."""
-        from agent.server import SERVER_PORT, SERVER_KEY
+        from agent.server import SERVER_KEY, SERVER_PORT
+
         # Default values from .env or fallback
         assert isinstance(SERVER_PORT, int)
         assert SERVER_PORT > 0

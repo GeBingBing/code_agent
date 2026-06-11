@@ -24,7 +24,6 @@ from typing import List, Tuple
 
 from .llm_extractor import LLMExtractor
 
-
 # ── Regex fallback constants (PR-14) ─────────────────────────
 
 
@@ -38,70 +37,154 @@ PATTERNS: List[Tuple[str, str]] = [
     # Charlie" we need to match the WHOLE phrase, not just "I'm" and
     # then capture "known". So "I'm/I am known as" is its own pattern
     # that comes FIRST, then the general "I am X" pattern.
-    (r"\b(?:i'?m|i am)\s+known\s+as\s+([A-Za-z\u4e00-\u9fff][A-Za-z0-9_\u4e00-\u9fff]{0,30})", "name"),
+    (
+        r"\b(?:i'?m|i am)\s+known\s+as\s+([A-Za-z\u4e00-\u9fff][A-Za-z0-9_\u4e00-\u9fff]{0,30})",
+        "name",
+    ),
     # Longer alternatives first (e.g. "I am called" before "I am")
-    (r"\b(?:i am called|i go by|my name is|my name'?s|the name is|name'?s|you can call me|call me|this is|i'?m|i am)\s+([A-Za-z\u4e00-\u9fff][A-Za-z0-9_\u4e00-\u9fff]{0,30})", "name"),
-
+    (
+        r"\b(?:i am called|i go by|my name is|my name'?s|the name is|name'?s|you can call me|call me|this is|i'?m|i am)\s+([A-Za-z\u4e00-\u9fff][A-Za-z0-9_\u4e00-\u9fff]{0,30})",
+        "name",
+    ),
     # ── Chinese: name (broad — multiple phrasings) ──
-    (r"(?:我(?:的?名字|的名字)?(?:叫|是|为)|我叫|叫我|可以叫我|请叫我|请叫|名字叫|名字是|我是)\s*([A-Za-z\u4e00-\u9fff][A-Za-z0-9_\u4e00-\u9fff]{0,30})", "name"),
-
+    (
+        r"(?:我(?:的?名字|的名字)?(?:叫|是|为)|我叫|叫我|可以叫我|请叫我|请叫|名字叫|名字是|我是)\s*([A-Za-z\u4e00-\u9fff][A-Za-z0-9_\u4e00-\u9fff]{0,30})",
+        "name",
+    ),
     # ── Pronouns (English) ──
-    (r"(?:my pronouns are|i use (?:pronouns|he|she|they))\s+(he/him|she/her|they/them|he|she|they)", "pronouns"),
-
+    (
+        r"(?:my pronouns are|i use (?:pronouns|he|she|they))\s+(he/him|she/her|they/them|he|she|they)",
+        "pronouns",
+    ),
     # ── Pronouns (Chinese) ──
     (r"(?:用|代词是|请用)\s*(他|她|它|他们|她们)", "pronouns"),
-
     # ── Language (English) ──
-    (r"\b(?:i (?:speak|prefer|use)|please (?:use|speak|reply in))\s+(english|chinese|japanese|french|german|spanish|中文|英文|日文|法语|德语|西班牙语|汉语)", "language"),
-
+    (
+        r"\b(?:i (?:speak|prefer|use)|please (?:use|speak|reply in))\s+(english|chinese|japanese|french|german|spanish|中文|英文|日文|法语|德语|西班牙语|汉语)",
+        "language",
+    ),
     # ── Language (Chinese) ──
     (r"(?:说|用|请用|请说|回复用|用.*回复)\s*(中文|英文|日文|英语|汉语|日语)", "language"),
-
     # ── Timezone (English) ──
     (r"(?:my timezone is|i'?m in(?: the)?|i live in)\s+([A-Za-z][A-Za-z/_]{2,30})", "timezone"),
-
     # ── Timezone (Chinese) ──
     (r"(?:我在|时区是|时区为|当前时区)\s*([A-Za-z\u4e00-\u9fff/]{1,30})", "timezone"),
-
     # ── Expertise (English) ──
     # Note: longer alternatives listed first so regex engine doesn't
     # prematurely match "高级" before "高级开发者" etc.
-    (r"\bi(?:'m| am)\s+(?:an?\s+|the\s+)?(intermediate level|advanced|beginner|intermediate|expert|senior|junior|novice)", "expertise"),
-
+    (
+        r"\bi(?:'m| am)\s+(?:an?\s+|the\s+)?(intermediate level|advanced|beginner|intermediate|expert|senior|junior|novice)",
+        "expertise",
+    ),
     # ── Expertise (Chinese) ──
     # Longest alternatives first.
     (r"我(?:是)?\s*(高级开发者|中级开发者|初学者|新手|中级|高级|专家|小白|老手)", "expertise"),
-
     # ── Preferences (English) — generic, key generated from value ──
-    (r"\bi (?:prefer|like|always (?:do|use|write)|need|want)\s+(.{3,80}?)(?:[\.!?]|$)", "_preference"),
+    (
+        r"\bi (?:prefer|like|always (?:do|use|write)|need|want)\s+(.{3,80}?)(?:[\.!?]|$)",
+        "_preference",
+    ),
     (r"\bplease (?:always|never)\s+(.{3,80}?)(?:[\.!?]|$)", "_preference"),
-
     # ── Preferences (Chinese) — generic, more conservative ──
     # Original pattern was too broad (matched "记住我明天要开会" → pref).
     # Now requires either "请" (polite request) or longer value (≥5 chars)
     # to reduce false positives on "记住我" / "记一下" etc.
-    (r"(?:请记住|请记一下|我(?:更)?喜欢|我(?:不)?要(?:求)?)\s*(.{2,60}?)(?:[。！？，]|$)", "_preference"),
+    (
+        r"(?:请记住|请记一下|我(?:更)?喜欢|我(?:不)?要(?:求)?)\s*(.{2,60}?)(?:[。！？，]|$)",
+        "_preference",
+    ),
 ]
 
 
 # Words to IGNORE even if they match a name pattern
 # These are common English/CJK function words/verbs that would produce
 # false positives from statements like "I'm going to fix this".
-NAME_BLACKLIST = frozenset({
-    # English function words / common verbs
-    "a", "an", "the", "not", "sorry", "hello", "hi", "hey",
-    "going", "trying", "working", "looking", "thinking", "feeling",
-    "doing", "having", "making", "getting", "wanting",
-    "good", "bad", "fine", "ok", "okay", "sure", "ready",
-    "tired", "busy", "free", "happy", "sad", "confused",
-    "interested", "curious", "concerned", "worried", "excited",
-    "from", "with", "for", "to", "in", "on", "at", "by",
-    # CJK function words / particles
-    "很", "的", "了", "在", "是", "我", "你", "他", "她", "它",
-    "们", "吗", "呢", "啊", "哦", "嗯", "这", "那", "这", "哪",
-    "什么", "怎么", "为什么", "谁", "哪个", "的", "得", "地",
-    "中", "上", "下", "里", "外", "前", "后", "左", "右",
-})
+NAME_BLACKLIST = frozenset(
+    {
+        # English function words / common verbs
+        "a",
+        "an",
+        "the",
+        "not",
+        "sorry",
+        "hello",
+        "hi",
+        "hey",
+        "going",
+        "trying",
+        "working",
+        "looking",
+        "thinking",
+        "feeling",
+        "doing",
+        "having",
+        "making",
+        "getting",
+        "wanting",
+        "good",
+        "bad",
+        "fine",
+        "ok",
+        "okay",
+        "sure",
+        "ready",
+        "tired",
+        "busy",
+        "free",
+        "happy",
+        "sad",
+        "confused",
+        "interested",
+        "curious",
+        "concerned",
+        "worried",
+        "excited",
+        "from",
+        "with",
+        "for",
+        "to",
+        "in",
+        "on",
+        "at",
+        "by",
+        # CJK function words / particles
+        "很",
+        "的",
+        "了",
+        "在",
+        "是",
+        "我",
+        "你",
+        "他",
+        "她",
+        "它",
+        "们",
+        "吗",
+        "呢",
+        "啊",
+        "哦",
+        "嗯",
+        "这",
+        "那",
+        "哪",
+        "什么",
+        "怎么",
+        "为什么",
+        "谁",
+        "哪个",
+        "得",
+        "地",
+        "中",
+        "上",
+        "下",
+        "里",
+        "外",
+        "前",
+        "后",
+        "左",
+        "右",
+    }
+)
 
 # CJK sentence-final particles that may cling to a name when the user
 # writes casually (e.g. "我是hay啊" → "hay啊"). The regex captures them
@@ -109,11 +192,26 @@ NAME_BLACKLIST = frozenset({
 # NOT part of the name. Strip them after the regex match.
 # NOTE: keep the set small and explicit — only particles that are
 # demonstrably NEVER part of a name in any natural Chinese name.
-_NAME_TRAILING_PARTICLES = frozenset({
-    "啊", "呀", "哦", "呢", "吧", "哈", "嘿", "哼", "嗯", "嘞", "咯",
-    "哇", "嘛", "诶", "哟", "哦", "呐",  # casual sentence closers
-    "呀",  # duplicate already in the set; explicit for clarity
-})
+_NAME_TRAILING_PARTICLES = frozenset(
+    {
+        "啊",
+        "呀",
+        "哦",
+        "呢",
+        "吧",
+        "哈",
+        "嘿",
+        "哼",
+        "嗯",
+        "嘞",
+        "咯",
+        "哇",
+        "嘛",
+        "诶",
+        "哟",
+        "呐",  # casual sentence closers
+    }
+)
 
 # Punctuation that the post-processing step in `_regex_extract` also strips
 _NAME_TRAILING_PUNCT = ".,!?;:'\"，。！？；："
@@ -144,14 +242,51 @@ _QUESTION_END_MARKERS = ("?", "？")
 
 _QUESTION_START_WORDS = (
     # CJK interrogatives (most common first)
-    "谁", "什么", "怎么", "为什么", "为啥", "如何", "哪", "哪里",
-    "哪个", "哪些", "是不是", "对不对", "对吗", "是吗", "行不行",
-    "可以吗", "能不能", "会不会", "要不要",
+    "谁",
+    "什么",
+    "怎么",
+    "为什么",
+    "为啥",
+    "如何",
+    "哪",
+    "哪里",
+    "哪个",
+    "哪些",
+    "是不是",
+    "对不对",
+    "对吗",
+    "是吗",
+    "行不行",
+    "可以吗",
+    "能不能",
+    "会不会",
+    "要不要",
     # English interrogatives
-    "who", "what", "where", "when", "why", "how", "which",
-    "is", "are", "do", "does", "did", "can", "could",
-    "would", "should", "will", "won't", "aren't", "isn't",
-    "don't", "doesn't", "didn't", "can't", "couldn't",
+    "who",
+    "what",
+    "where",
+    "when",
+    "why",
+    "how",
+    "which",
+    "is",
+    "are",
+    "do",
+    "does",
+    "did",
+    "can",
+    "could",
+    "would",
+    "should",
+    "will",
+    "won't",
+    "aren't",
+    "isn't",
+    "don't",
+    "doesn't",
+    "didn't",
+    "can't",
+    "couldn't",
 )
 
 
@@ -215,8 +350,14 @@ def _is_question_form(text: str) -> bool:
     # Patterns that introduce identity; if the FIRST character(s) AFTER
     # the pattern is a CJK question word, the whole sentence is a question.
     identity_intro_patterns = (
-        "我是", "我叫", "名字是", "名字叫", "我的名字是", "我的名字叫",
-        "我叫做", "我是叫",
+        "我是",
+        "我叫",
+        "名字是",
+        "名字叫",
+        "我的名字是",
+        "我的名字叫",
+        "我叫做",
+        "我是叫",
     )
     for pat in identity_intro_patterns:
         idx = s.find(pat)
@@ -233,8 +374,16 @@ def _is_question_form(text: str) -> bool:
                 return True
         # English identity pattern: "I am" / "I'm" / "my name is" etc.
     en_intro_patterns = (
-        "i am ", "i'm ", "my name is ", "my name's ", "name is ", "name's ",
-        "i'm called ", "i am called ", "call me ", "this is ",
+        "i am ",
+        "i'm ",
+        "my name is ",
+        "my name's ",
+        "name is ",
+        "name's ",
+        "i'm called ",
+        "i am called ",
+        "call me ",
+        "this is ",
     )
     for pat in en_intro_patterns:
         idx = lower.find(pat)
@@ -253,8 +402,9 @@ def _is_question_form(text: str) -> bool:
 # ── Regex fallback (PR-14 implementation, moved verbatim) ────
 
 
-def _regex_extract(text: str, patterns: List[Tuple[str, str]] = None,
-                   name_blacklist: frozenset = None) -> List[Tuple[str, str]]:
+def _regex_extract(
+    text: str, patterns: List[Tuple[str, str]] = None, name_blacklist: frozenset = None
+) -> List[Tuple[str, str]]:
     """The original PR-14 regex implementation.
 
     Extracted as a module-level function so it can be used both as the
@@ -300,10 +450,12 @@ def _regex_extract(text: str, patterns: List[Tuple[str, str]] = None,
                 while value and value[-1] in _NAME_TRAILING_PARTICLES:
                     value = value[:-1]
                 value = value.rstrip(_NAME_TRAILING_PUNCT)
-                if (not value
-                        or len(value) < MIN_NAME_LENGTH
-                        or len(value) > MAX_NAME_LENGTH
-                        or value.lower() in name_blacklist):
+                if (
+                    not value
+                    or len(value) < MIN_NAME_LENGTH
+                    or len(value) > MAX_NAME_LENGTH
+                    or value.lower() in name_blacklist
+                ):
                     continue
 
             # ── Generic preference → stable key ──
@@ -465,15 +617,13 @@ RULES:
             truncated = True
         suffix = "\n... (truncated)" if truncated else ""
         return (
-            f'Previous conversation (for context only — do NOT extract '
-            f'facts from these lines, only from the LATEST user message):\n'
+            f"Previous conversation (for context only — do NOT extract "
+            f"facts from these lines, only from the LATEST user message):\n"
             f'"""\n{h}{suffix}\n"""\n\n'
             f'User said: "{text_truncated}"\n\nOutput JSON:'
         )
 
-    async def extract_with_history(
-        self, text: str, history: str = ""
-    ) -> List[Tuple[str, str]]:
+    async def extract_with_history(self, text: str, history: str = "") -> List[Tuple[str, str]]:
         """Async extraction with prior conversation as context (M1).
 
         Returns the list of (key, value) facts WITHOUT applying to
@@ -481,6 +631,7 @@ RULES:
         `FactConfirmExtractor`) is responsible for applying.
         """
         from ..llm.client import Message
+
         messages = [
             Message(role="system", content=self._system_prompt()),
             Message(role="user", content=self._user_message(text, history=history)),
@@ -489,8 +640,10 @@ RULES:
             return self._legacy_extract(text)
         try:
             resp, _ = await self._llm.chat(messages, stream=False)
-            text_resp = resp if isinstance(resp, str) else getattr(
-                getattr(resp, "choices", [None])[0], "message", None
+            text_resp = (
+                resp
+                if isinstance(resp, str)
+                else getattr(getattr(resp, "choices", [None])[0], "message", None)
             )
             text_resp = getattr(text_resp, "content", text_resp)
             if not isinstance(text_resp, str):
@@ -604,13 +757,14 @@ RULES:
         if not facts:
             return []
         from ..llm.client import Message
+
         prompt = self._confirm_prompt(message, facts)
         try:
-            resp, _ = await self._llm.chat(
-                [Message(role="system", content=prompt)], stream=False
-            )
-            text = resp if isinstance(resp, str) else getattr(
-                getattr(resp, "choices", [None])[0], "message", None
+            resp, _ = await self._llm.chat([Message(role="system", content=prompt)], stream=False)
+            text = (
+                resp
+                if isinstance(resp, str)
+                else getattr(getattr(resp, "choices", [None])[0], "message", None)
             )
             text = getattr(text, "content", text)
             if not isinstance(text, str):

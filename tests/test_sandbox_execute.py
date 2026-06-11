@@ -2,8 +2,6 @@
 
 import asyncio
 
-import pytest
-
 from agent.tools.sandbox import SandboxExecuteTool
 
 

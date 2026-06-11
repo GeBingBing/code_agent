@@ -1,16 +1,13 @@
 """Tests for spec_loader and spec_verifier tools."""
 
-import pytest
 from pathlib import Path
+
 from agent.core.spec_loader import (
-    load_spec,
-    _parse_spec,
     _parse_tasks,
+    load_spec,
     mark_task_done,
     verify_against_spec,
-    SpecTask,
 )
-
 
 SAMPLE_SPECS = """# Test Spec
 

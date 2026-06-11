@@ -19,59 +19,61 @@ engine code.
 """
 
 import asyncio
-import inspect
 from collections import defaultdict
-from typing import Any, Callable, Union
-
+from typing import Any, Callable
 
 # ── Standard hook names ──────────────────────────────────────────────
 # Fired by the engine at well-defined lifecycle points. Plugins register
 # against these strings; the engine does not import any hook implementation.
 
 # Task perception
-BEFORE_PERCEIVE = "before_perceive"   # payload: {"task": str}
+BEFORE_PERCEIVE = "before_perceive"  # payload: {"task": str}
 
 # LLM interaction
-BEFORE_LLM_CALL = "before_llm_call"   # payload: {"messages": list, "system": str}
-AFTER_LLM_CALL = "after_llm_call"     # payload: {"response": Any, "usage": dict|None}
+BEFORE_LLM_CALL = "before_llm_call"  # payload: {"messages": list, "system": str}
+AFTER_LLM_CALL = "after_llm_call"  # payload: {"response": Any, "usage": dict|None}
 
 # Decision
-BEFORE_DECIDE = "before_decide"       # payload: {"response": Any}
+BEFORE_DECIDE = "before_decide"  # payload: {"response": Any}
 
 # Tool execution
 BEFORE_TOOL_EXECUTION = "before_tool_execution"  # payload: {"tool": str, "args": dict}
-AFTER_TOOL_EXECUTION = "after_tool_execution"    # payload: {"tool": str, "args": dict, "result": Any, "error": Any}
+AFTER_TOOL_EXECUTION = (
+    "after_tool_execution"  # payload: {"tool": str, "args": dict, "result": Any, "error": Any}
+)
 
 # Error handling
-ON_ERROR = "on_error"                 # payload: {"exception": Exception, "context": dict}
+ON_ERROR = "on_error"  # payload: {"exception": Exception, "context": dict}
 
 # Streaming
-ON_TOKEN = "on_token"                 # payload: {"chunk": str}
+ON_TOKEN = "on_token"  # payload: {"chunk": str}
 
 # Memory management
-BEFORE_COMPACT = "before_compact"     # payload: {"messages": list}
-AFTER_COMPACT = "after_compact"       # payload: {"summary": str}
+BEFORE_COMPACT = "before_compact"  # payload: {"messages": list}
+AFTER_COMPACT = "after_compact"  # payload: {"summary": str}
 
 # Session lifecycle
-ON_SESSION_START = "on_session_start" # payload: {"session_id": str, "task": str|None}
-ON_SESSION_END = "on_session_end"     # payload: {"final_state": dict, "result": Any}
+ON_SESSION_START = "on_session_start"  # payload: {"session_id": str, "task": str|None}
+ON_SESSION_END = "on_session_end"  # payload: {"final_state": dict, "result": Any}
 
 
 # All standard hook names — useful for listing in /status or docs
-STANDARD_HOOKS = frozenset({
-    BEFORE_PERCEIVE,
-    BEFORE_LLM_CALL,
-    AFTER_LLM_CALL,
-    BEFORE_DECIDE,
-    BEFORE_TOOL_EXECUTION,
-    AFTER_TOOL_EXECUTION,
-    ON_ERROR,
-    ON_TOKEN,
-    BEFORE_COMPACT,
-    AFTER_COMPACT,
-    ON_SESSION_START,
-    ON_SESSION_END,
-})
+STANDARD_HOOKS = frozenset(
+    {
+        BEFORE_PERCEIVE,
+        BEFORE_LLM_CALL,
+        AFTER_LLM_CALL,
+        BEFORE_DECIDE,
+        BEFORE_TOOL_EXECUTION,
+        AFTER_TOOL_EXECUTION,
+        ON_ERROR,
+        ON_TOKEN,
+        BEFORE_COMPACT,
+        AFTER_COMPACT,
+        ON_SESSION_START,
+        ON_SESSION_END,
+    }
+)
 
 
 HookFn = Callable[[Any], Any]
@@ -94,9 +96,11 @@ class HookRegistry:
         """
         # Decorator form: register("name") returns a decorator
         if name_or_fn is not None and fn is None and isinstance(name_or_fn, str):
+
             def decorator(real_fn):
                 self._hooks[name_or_fn].append(real_fn)
                 return real_fn
+
             return decorator
         # Decorator form: @reg.register (no parens) — name_or_fn is the function
         if name_or_fn is not None and fn is None and callable(name_or_fn):
@@ -134,7 +138,8 @@ class HookRegistry:
             prevents the silent "coroutine was never awaited" warning.
         """
         for fn in self._hooks.get(name, []):
-            call_attr = getattr(fn, "__call__", None)
+            # Using __call__ to detect async, not to test callability — B004 false-positive.
+            call_attr = getattr(fn, "__call__", None)  # noqa: B004
             if asyncio.iscoroutinefunction(fn) or asyncio.iscoroutinefunction(call_attr):
                 result = await fn(payload)
             else:

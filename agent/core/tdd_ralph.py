@@ -15,18 +15,20 @@ In `off` mode, Ralph is a no-op.
 import logging
 from typing import Optional
 
-from .tdd_state_machine import TDDState, TDDStateMachine, InvalidTDDTransition
+from .tdd_state_machine import TDDState, TDDStateMachine
 
 logger = logging.getLogger(__name__)
 
 
 # Tool names that write implementation code (not tests)
-_IMPLEMENTATION_TOOLS = frozenset({
-    "write_file",
-    "apply_diff",
-    "insert_after_line",
-    "replace_lines",
-})
+_IMPLEMENTATION_TOOLS = frozenset(
+    {
+        "write_file",
+        "apply_diff",
+        "insert_after_line",
+        "replace_lines",
+    }
+)
 
 
 class RalphSupervisor:
@@ -48,8 +50,7 @@ class RalphSupervisor:
             return None
 
         # Rule 1: Cannot write implementation in RED state
-        if (tool_name in _IMPLEMENTATION_TOOLS
-                and self.sm.current_state == TDDState.RED):
+        if tool_name in _IMPLEMENTATION_TOOLS and self.sm.current_state == TDDState.RED:
             target = self._extract_target(args)
             if self._looks_like_implementation(target):
                 return self._violation(

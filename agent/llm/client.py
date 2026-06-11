@@ -1,8 +1,7 @@
 """LLM Client - Supports OpenAI, DashScope (Alibaba), Ollama, and more."""
 
-import os
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List, Optional
 
 from ..core.config import config
 
@@ -48,8 +47,7 @@ class LLMClient:
         if api_key:
             self.api_key = api_key
         else:
-            self.api_key = (config.get_api_key(self.provider)
-                            or config.get_api_key("openai"))
+            self.api_key = config.get_api_key(self.provider) or config.get_api_key("openai")
 
         if not self.api_key and self.provider not in ("ollama", "mock"):
             raise ValueError(
@@ -61,7 +59,9 @@ class LLMClient:
         if base_url:
             self.base_url = base_url
         elif self.provider in ("minimax", "ollama"):
-            self.base_url = config.get_base_url(self.provider) or self.PROVIDERS.get(self.provider, self.PROVIDERS["openai"])
+            self.base_url = config.get_base_url(self.provider) or self.PROVIDERS.get(
+                self.provider, self.PROVIDERS["openai"]
+            )
         else:
             self.base_url = self.PROVIDERS.get(self.provider, self.PROVIDERS["openai"])
 
@@ -69,18 +69,20 @@ class LLMClient:
         if self.provider == "ollama":
             try:
                 from openai import OpenAI
+
                 self.client = OpenAI(
                     api_key="ollama",
                     base_url=self.base_url,
                 )
-            except ImportError:
-                raise ImportError("Please install openai: pip install openai")
+            except ImportError as err:
+                raise ImportError("Please install openai: pip install openai") from err
         else:
             try:
                 from openai import OpenAI
+
                 self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-            except ImportError:
-                raise ImportError("Please install openai: pip install openai")
+            except ImportError as err:
+                raise ImportError("Please install openai: pip install openai") from err
 
     def _detect_provider(self, provider: str, model: str) -> str:
         """Auto-detect provider from model name"""
@@ -120,6 +122,7 @@ class LLMClient:
     ):
         """Send a chat request"""
         import json
+
         msg_dicts = []
         system_content = ""
 

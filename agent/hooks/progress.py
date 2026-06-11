@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from ..core.progress_anchor import ProgressRecord
 
@@ -77,8 +77,7 @@ class ProgressUpdateHook:
     coupled to AgentEngine — the engine passes lambdas, not itself.
     """
 
-    def __init__(self, anchor, max_steps: int, get_current_plan,
-                 get_last_task):
+    def __init__(self, anchor, max_steps: int, get_current_plan, get_last_task):
         self._anchor = anchor
         self._max_steps = max_steps
         self._get_current_plan = get_current_plan
@@ -110,8 +109,7 @@ class ProgressUpdateHook:
                 # Remove any existing entries that mention this tool
                 # (recovery after a retry)
                 record.known_issues = [
-                    i for i in record.known_issues
-                    if not i.startswith(f"{tool_name}:")
+                    i for i in record.known_issues if not i.startswith(f"{tool_name}:")
                 ]
             # Update next_step: best-effort from plan; else keep existing
             plan = self._get_current_plan()
@@ -128,6 +126,7 @@ class ProgressUpdateHook:
             except Exception:
                 op_str = f"{tool_name}:{str(args)[:200]}"
             from ..core.progress_anchor import ProgressAnchor
+
             record.op_hash = ProgressAnchor.compute_hash(record.op_hash, op_str)
             record.updated_at = datetime.now().isoformat()
             self._anchor.write(record)

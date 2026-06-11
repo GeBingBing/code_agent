@@ -8,7 +8,6 @@ The LLM passes the plan content and a list of permitted action categories.
 """
 
 from pathlib import Path
-from typing import Optional
 
 from .base import BaseTool, ToolResult, registry
 
@@ -104,8 +103,7 @@ class ExitPlanModeTool(BaseTool):
         summary = plan.split("\n")[0][:60] if plan else "no plan provided"
         return f"Plan: {summary}"
 
-    async def execute(self, plan: str = "", allowed_prompts: str = "",
-                      **kwargs) -> ToolResult:
+    async def execute(self, plan: str = "", allowed_prompts: str = "", **kwargs) -> ToolResult:
         if not plan.strip():
             return ToolResult(
                 success=False,
@@ -117,8 +115,11 @@ class ExitPlanModeTool(BaseTool):
         plan_dir = Path.home() / ".coding-agent" / "plans"
         plan_dir.mkdir(parents=True, exist_ok=True)
         import time
+
         plan_file = plan_dir / f"plan_{int(time.time())}.md"
-        plan_content = f"# Plan\n\n{plan}\n\n## Allowed Actions\n\n{allowed_prompts or 'All actions'}"
+        plan_content = (
+            f"# Plan\n\n{plan}\n\n## Allowed Actions\n\n{allowed_prompts or 'All actions'}"
+        )
         plan_file.write_text(plan_content, encoding="utf-8")
 
         return ToolResult(

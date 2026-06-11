@@ -1,9 +1,6 @@
 """Tests for Phase 1: Memory system (L1/L2/L3)."""
 
-import os
 import tempfile
-
-import pytest
 
 from agent.core.memory import MemoryManager
 

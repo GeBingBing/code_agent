@@ -4,8 +4,6 @@ import asyncio
 import os
 import re
 import sys
-from pathlib import Path
-from typing import Optional
 
 from .base import BaseTool, ToolResult, registry
 
@@ -51,17 +49,13 @@ class RunTestsTool(BaseTool):
             )
 
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=120
-                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
             except asyncio.TimeoutError:
                 try:
                     proc.kill()
                 except Exception:
                     pass
-                return ToolResult(
-                    success=False, content="", error="Tests timed out after 120s"
-                )
+                return ToolResult(success=False, content="", error="Tests timed out after 120s")
 
             output = stdout.decode("utf-8", errors="replace")
             error_output = stderr.decode("utf-8", errors="replace")
@@ -203,11 +197,13 @@ class WriteFailingTestTool(BaseTool):
             feature: Short feature name for the TDD cycle (optional)
         """
         from pathlib import Path as _Path
+
         from .base import registry as _registry
 
         target = _Path(path)
         if not target.is_absolute():
             from ..core.workspace import WORKSPACE_ROOT as WORKSPACE
+
             target = WORKSPACE / path
 
         # Write the test
@@ -215,18 +211,12 @@ class WriteFailingTestTool(BaseTool):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(test_code, encoding="utf-8")
         except Exception as e:
-            return ToolResult(
-                success=False, content="",
-                error=f"Failed to write test file: {e}"
-            )
+            return ToolResult(success=False, content="", error=f"Failed to write test file: {e}")
 
         # Run the test — expect it to fail
         run_tool = _registry.get("run_tests")
         if not run_tool:
-            return ToolResult(
-                success=False, content="",
-                error="run_tests tool not registered"
-            )
+            return ToolResult(success=False, content="", error="run_tests tool not registered")
 
         run_result = await run_tool.execute(path=str(target), verbose=False)
 
@@ -259,7 +249,12 @@ class WriteFailingTestTool(BaseTool):
         return ToolResult(
             success=True,
             content=content,
-            metadata={"tdd_step": "red", "test_path": path, "feature": feature, "unexpected_pass": True},
+            metadata={
+                "tdd_step": "red",
+                "test_path": path,
+                "feature": feature,
+                "unexpected_pass": True,
+            },
         )
 
     @property

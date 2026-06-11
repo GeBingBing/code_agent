@@ -38,13 +38,15 @@ class AuditHook:
         tool_name = payload.get("tool", "")
         args = payload.get("args", {})
         try:
-            self._audit.log({
-                "session_id": self._trace_id,
-                "agent_id": "main",
-                "action": "tool_call",
-                "tool": tool_name,
-                "args": args,
-            })
+            self._audit.log(
+                {
+                    "session_id": self._trace_id,
+                    "agent_id": "main",
+                    "action": "tool_call",
+                    "tool": tool_name,
+                    "args": args,
+                }
+            )
         except Exception:
             pass  # Audit must never break tool execution
         return payload
@@ -61,15 +63,17 @@ class AuditHook:
         result = payload.get("result")
         error = payload.get("error")
         try:
-            self._audit.log({
-                "session_id": self._trace_id,
-                "agent_id": "main",
-                "action": "tool_result",
-                "tool": tool_name,
-                "result": result if result is not None else None,
-                "duration_ms": duration_ms,
-                "error": str(error) if error else None,
-            })
+            self._audit.log(
+                {
+                    "session_id": self._trace_id,
+                    "agent_id": "main",
+                    "action": "tool_result",
+                    "tool": tool_name,
+                    "result": result if result is not None else None,
+                    "duration_ms": duration_ms,
+                    "error": str(error) if error else None,
+                }
+            )
         except Exception:
             pass
         return payload

@@ -8,32 +8,35 @@ ctx provides: engine, cli, model, provider, mode, workspace
 
 import asyncio
 import os
-import time
 from datetime import datetime
-from pathlib import Path
 
 from .base import SlashCommand, registry
 
-
 # ── Helper ──────────────────────────────────────────────────────────────────
+
 
 def _dim(text: str) -> str:
     return f"\033[2m{text}\033[0m"
 
+
 def _bold(text: str) -> str:
     return f"\033[1m{text}\033[0m"
+
 
 def _cyan(text: str) -> str:
     return f"\033[36m{text}\033[0m"
 
+
 def _green(text: str) -> str:
     return f"\033[32m{text}\033[0m"
+
 
 def _yellow(text: str) -> str:
     return f"\033[33m{text}\033[0m"
 
 
 # ── /clear ──────────────────────────────────────────────────────────────────
+
 
 async def _handle_clear(args: str, ctx: dict) -> str:
     """Clear the current conversation context and memory."""
@@ -48,16 +51,19 @@ async def _handle_clear(args: str, ctx: dict) -> str:
     return f"{_green('✓')} Conversation cleared. Fresh start."
 
 
-registry.register(SlashCommand(
-    name="clear",
-    description="Clear the current conversation and start fresh",
-    usage="/clear",
-    aliases=["reset"],
-))
+registry.register(
+    SlashCommand(
+        name="clear",
+        description="Clear the current conversation and start fresh",
+        usage="/clear",
+        aliases=["reset"],
+    )
+)
 registry._commands["clear"]._handler = _handle_clear
 
 
 # ── /plan ───────────────────────────────────────────────────────────────────
+
 
 async def _handle_plan(args: str, ctx: dict) -> str:
     """Switch to or manage plan mode."""
@@ -102,15 +108,18 @@ async def _handle_plan(args: str, ctx: dict) -> str:
     )
 
 
-registry.register(SlashCommand(
-    name="plan",
-    description="Enter plan mode or manage plans (accept / reject / edit / show)",
-    usage="/plan [accept|reject|edit N desc|show]",
-))
+registry.register(
+    SlashCommand(
+        name="plan",
+        description="Enter plan mode or manage plans (accept / reject / edit / show)",
+        usage="/plan [accept|reject|edit N desc|show]",
+    )
+)
 registry._commands["plan"]._handler = _handle_plan
 
 
 # ── /commit ─────────────────────────────────────────────────────────────────
+
 
 async def _handle_commit(args: str, ctx: dict) -> str:
     """Stage changes and create a git commit with LLM-generated message."""
@@ -120,7 +129,9 @@ async def _handle_commit(args: str, ctx: dict) -> str:
     try:
         # Check for changes
         proc = await asyncio.create_subprocess_exec(
-            "git", "status", "--porcelain",
+            "git",
+            "status",
+            "--porcelain",
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -133,7 +144,9 @@ async def _handle_commit(args: str, ctx: dict) -> str:
 
         # Show diff stat
         proc = await asyncio.create_subprocess_exec(
-            "git", "diff", "--stat",
+            "git",
+            "diff",
+            "--stat",
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -149,6 +162,7 @@ async def _handle_commit(args: str, ctx: dict) -> str:
 
         # Use smart_commit tool for LLM-generated message
         from agent.tools.git_smart import SmartCommitTool
+
         tool = SmartCommitTool()
         result = await tool.execute(message=args.strip() or "", cwd=cwd)
 
@@ -163,16 +177,19 @@ async def _handle_commit(args: str, ctx: dict) -> str:
         return f"Error: {e}"
 
 
-registry.register(SlashCommand(
-    name="commit",
-    description="Stage all changes and create a git commit with auto-generated message",
-    usage="/commit",
-    aliases=["cmt"],
-))
+registry.register(
+    SlashCommand(
+        name="commit",
+        description="Stage all changes and create a git commit with auto-generated message",
+        usage="/commit",
+        aliases=["cmt"],
+    )
+)
 registry._commands["commit"]._handler = _handle_commit
 
 
 # ── /help ───────────────────────────────────────────────────────────────────
+
 
 async def _handle_help(args: str, ctx: dict) -> str:
     """Show available commands."""
@@ -190,16 +207,19 @@ async def _handle_help(args: str, ctx: dict) -> str:
     return "\n".join(lines)
 
 
-registry.register(SlashCommand(
-    name="help",
-    description="Show this help message",
-    usage="/help",
-    aliases=["h", "?"],
-))
+registry.register(
+    SlashCommand(
+        name="help",
+        description="Show this help message",
+        usage="/help",
+        aliases=["h", "?"],
+    )
+)
 registry._commands["help"]._handler = _handle_help
 
 
 # ── /model ──────────────────────────────────────────────────────────────────
+
 
 async def _handle_model(args: str, ctx: dict) -> str:
     """Show or switch the current model."""
@@ -217,15 +237,18 @@ async def _handle_model(args: str, ctx: dict) -> str:
     )
 
 
-registry.register(SlashCommand(
-    name="model",
-    description="Show or switch the current LLM model",
-    usage="/model [model-name]",
-))
+registry.register(
+    SlashCommand(
+        name="model",
+        description="Show or switch the current LLM model",
+        usage="/model [model-name]",
+    )
+)
 registry._commands["model"]._handler = _handle_model
 
 
 # ── /mode ───────────────────────────────────────────────────────────────────
+
 
 async def _handle_mode(args: str, ctx: dict) -> str:
     """Show or switch the permission mode."""
@@ -260,16 +283,19 @@ async def _handle_mode(args: str, ctx: dict) -> str:
     return f"{_green('✓')} Mode switched to {_bold(new_mode)}"
 
 
-registry.register(SlashCommand(
-    name="mode",
-    description="Show or switch permission mode (plan / default / auto / bypass)",
-    usage="/mode [plan|default|auto|bypass]",
-    aliases=["permission"],
-))
+registry.register(
+    SlashCommand(
+        name="mode",
+        description="Show or switch permission mode (plan / default / auto / bypass)",
+        usage="/mode [plan|default|auto|bypass]",
+        aliases=["permission"],
+    )
+)
 registry._commands["mode"]._handler = _handle_mode
 
 
 # ── /memory ──────────────────────────────────────────────────────────────────
+
 
 async def _handle_memory(args: str, ctx: dict) -> str:
     """Show or manage long-term memory.
@@ -374,16 +400,19 @@ async def _handle_memory(args: str, ctx: dict) -> str:
     return "\n".join(lines)
 
 
-registry.register(SlashCommand(
-    name="memory",
-    description="Show or manage long-term memory",
-    usage="/memory [clear | search <query>]",
-    aliases=["mem"],
-))
+registry.register(
+    SlashCommand(
+        name="memory",
+        description="Show or manage long-term memory",
+        usage="/memory [clear | search <query>]",
+        aliases=["mem"],
+    )
+)
 registry._commands["memory"]._handler = _handle_memory
 
 
 # ── /status ──────────────────────────────────────────────────────────────────
+
 
 async def _handle_status(args: str, ctx: dict) -> str:
     """Show current agent status."""
@@ -403,7 +432,9 @@ async def _handle_status(args: str, ctx: dict) -> str:
     git_branch = ""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "git", "branch", "--show-current",
+            "git",
+            "branch",
+            "--show-current",
             cwd=workspace,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
@@ -423,26 +454,35 @@ async def _handle_status(args: str, ctx: dict) -> str:
         lines.append(f"  Git:        {_cyan(git_branch)}")
     if project_dir:
         lines.append(f"  Project:    {_bold(project_dir)}/")
-    lines.append(f"  Context:    {_green('CODING_AGENT.md loaded') if has_project_ctx else _dim('no CODING_AGENT.md')}")
+    lines.append(
+        f"  Context:    {_green('CODING_AGENT.md loaded') if has_project_ctx else _dim('no CODING_AGENT.md')}"
+    )
     if spec_phase:
-        lines.append(f"  Spec phase: {_cyan(f'Phase {spec_phase.number}: {spec_phase.name}')} ({spec_phase.status})")
-    lines.extend([
-        f"  Memory:     {wm_count} working messages, {summary_count} summaries",
-        f"  Timestamp:  {datetime.now().strftime('%H:%M:%S')}",
-    ])
+        lines.append(
+            f"  Spec phase: {_cyan(f'Phase {spec_phase.number}: {spec_phase.name}')} ({spec_phase.status})"
+        )
+    lines.extend(
+        [
+            f"  Memory:     {wm_count} working messages, {summary_count} summaries",
+            f"  Timestamp:  {datetime.now().strftime('%H:%M:%S')}",
+        ]
+    )
     return "\n".join(lines)
 
 
-registry.register(SlashCommand(
-    name="status",
-    description="Show agent status (model, mode, memory, git branch)",
-    usage="/status",
-    aliases=["st", "info"],
-))
+registry.register(
+    SlashCommand(
+        name="status",
+        description="Show agent status (model, mode, memory, git branch)",
+        usage="/status",
+        aliases=["st", "info"],
+    )
+)
 registry._commands["status"]._handler = _handle_status
 
 
 # ── /context ─────────────────────────────────────────────────────────────────
+
 
 async def _handle_context(args: str, ctx: dict) -> str:
     """Show the current conversation context."""
@@ -482,7 +522,9 @@ async def _handle_context(args: str, ctx: dict) -> str:
     if args.strip() == "full":
         lines.append(f"{_bold('Full context:')}")
         for i, msg in enumerate(messages[-20:]):
-            role_prefix = {"system": "S", "user": "U", "assistant": "A", "tool": "T"}.get(msg.role, "?")
+            role_prefix = {"system": "S", "user": "U", "assistant": "A", "tool": "T"}.get(
+                msg.role, "?"
+            )
             content_preview = msg.content[:100].replace("\n", " ")
             lines.append(f"  [{role_prefix}] {_dim(content_preview)}")
     else:
@@ -491,16 +533,19 @@ async def _handle_context(args: str, ctx: dict) -> str:
     return "\n".join(lines)
 
 
-registry.register(SlashCommand(
-    name="context",
-    description="Show context window usage and recent messages",
-    usage="/context [full]",
-    aliases=["ctx"],
-))
+registry.register(
+    SlashCommand(
+        name="context",
+        description="Show context window usage and recent messages",
+        usage="/context [full]",
+        aliases=["ctx"],
+    )
+)
 registry._commands["context"]._handler = _handle_context
 
 
 # ── /review ──────────────────────────────────────────────────────────────────
+
 
 async def _handle_review(args: str, ctx: dict) -> str:
     """Show git diff of current changes."""
@@ -508,7 +553,10 @@ async def _handle_review(args: str, ctx: dict) -> str:
     try:
         # Staged changes
         proc = await asyncio.create_subprocess_exec(
-            "git", "diff", "--cached", "--stat",
+            "git",
+            "diff",
+            "--cached",
+            "--stat",
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -518,7 +566,9 @@ async def _handle_review(args: str, ctx: dict) -> str:
 
         # Unstaged changes
         proc = await asyncio.create_subprocess_exec(
-            "git", "diff", "--stat",
+            "git",
+            "diff",
+            "--stat",
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -539,7 +589,8 @@ async def _handle_review(args: str, ctx: dict) -> str:
             lines.append(f"{_dim('No changes to review.')}")
         elif args.strip() == "diff":
             proc = await asyncio.create_subprocess_exec(
-                "git", "diff",
+                "git",
+                "diff",
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -553,16 +604,19 @@ async def _handle_review(args: str, ctx: dict) -> str:
         return f"Error: {e}"
 
 
-registry.register(SlashCommand(
-    name="review",
-    description="Review git changes (diff stat, or /review diff for full diff)",
-    usage="/review [diff]",
-    aliases=["diff"],
-))
+registry.register(
+    SlashCommand(
+        name="review",
+        description="Review git changes (diff stat, or /review diff for full diff)",
+        usage="/review [diff]",
+        aliases=["diff"],
+    )
+)
 registry._commands["review"]._handler = _handle_review
 
 
 # ── /undo ────────────────────────────────────────────────────────────────────
+
 
 async def _handle_undo(args: str, ctx: dict) -> str:
     """Undo the last git commit, discard working changes, or revert a profile edit.
@@ -579,6 +633,7 @@ async def _handle_undo(args: str, ctx: dict) -> str:
         # L4: revert a profile mutation
         if target == "profile":
             from ..core.user_profile import UserProfile
+
             engine = ctx.get("engine")
             profile = (
                 engine.user_profile
@@ -588,8 +643,7 @@ async def _handle_undo(args: str, ctx: dict) -> str:
             record = profile.undo_last()
             if record is None:
                 return (
-                    f"{_yellow('Nothing to undo.')}\n"
-                    f"{_dim('Profile has no recorded changes.')}"
+                    f"{_yellow('Nothing to undo.')}\n" f"{_dim('Profile has no recorded changes.')}"
                 )
             before_repr = record.before if record.before is not None else "(none)"
             after_repr = record.after if record.after is not None else "(none)"
@@ -603,7 +657,10 @@ async def _handle_undo(args: str, ctx: dict) -> str:
 
         if target == "commit":
             proc = await asyncio.create_subprocess_exec(
-                "git", "reset", "--soft", "HEAD~1",
+                "git",
+                "reset",
+                "--soft",
+                "HEAD~1",
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -616,7 +673,10 @@ async def _handle_undo(args: str, ctx: dict) -> str:
         # Default: discard unstaged changes
         if target in ("changes", "unstaged"):
             proc = await asyncio.create_subprocess_exec(
-                "git", "checkout", "--", ".",
+                "git",
+                "checkout",
+                "--",
+                ".",
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -641,6 +701,7 @@ async def _handle_quit(args: str, ctx: dict) -> str:
 async def _handle_fork(args: str, ctx: dict) -> str:
     """Handle /fork command."""
     from agent.core.session import make_session_id, save_session
+
     cli = ctx.get("cli")
     if not cli:
         return "No CLI context"
@@ -658,6 +719,7 @@ async def _handle_fork(args: str, ctx: dict) -> str:
 async def _handle_switch(args: str, ctx: dict) -> str:
     """Handle /switch command."""
     from agent.core.session import load_session
+
     cli = ctx.get("cli")
     if not cli:
         return "No CLI context"
@@ -671,32 +733,40 @@ async def _handle_switch(args: str, ctx: dict) -> str:
     return f"Switched to session {sid} ({len(cli.history)} messages loaded)"
 
 
-registry.register(SlashCommand(
-    name="quit",
-    description="Exit the coding agent",
-    usage="/quit",
-))
+registry.register(
+    SlashCommand(
+        name="quit",
+        description="Exit the coding agent",
+        usage="/quit",
+    )
+)
 registry._commands["quit"]._handler = _handle_quit
 
-registry.register(SlashCommand(
-    name="fork",
-    description="Save current session as a branch",
-    usage="/fork [label]",
-))
+registry.register(
+    SlashCommand(
+        name="fork",
+        description="Save current session as a branch",
+        usage="/fork [label]",
+    )
+)
 registry._commands["fork"]._handler = _handle_fork
 
-registry.register(SlashCommand(
-    name="switch",
-    description="Switch to a saved session",
-    usage="/switch <session_id>",
-))
+registry.register(
+    SlashCommand(
+        name="switch",
+        description="Switch to a saved session",
+        usage="/switch <session_id>",
+    )
+)
 registry._commands["switch"]._handler = _handle_switch
 
-registry.register(SlashCommand(
-    name="undo",
-    description="Undo last changes (discard unstaged) or undo last commit",
-    usage="/undo [changes|commit]",
-))
+registry.register(
+    SlashCommand(
+        name="undo",
+        description="Undo last changes (discard unstaged) or undo last commit",
+        usage="/undo [changes|commit]",
+    )
+)
 registry._commands["undo"]._handler = _handle_undo
 
 
@@ -728,14 +798,16 @@ async def _handle_orchestrate(args: str, ctx: dict) -> str:
     return result
 
 
-registry.register(SlashCommand(
-    name="orchestrate",
-    description=(
-        "Run a complex task through the Orchestrator PM Agent "
-        "(decomposes into code/test/reviewer/devops subtasks)"
-    ),
-    usage="/orchestrate <task>",
-))
+registry.register(
+    SlashCommand(
+        name="orchestrate",
+        description=(
+            "Run a complex task through the Orchestrator PM Agent "
+            "(decomposes into code/test/reviewer/devops subtasks)"
+        ),
+        usage="/orchestrate <task>",
+    )
+)
 registry._commands["orchestrate"]._handler = _handle_orchestrate
 
 
@@ -754,6 +826,7 @@ async def _handle_audit(args: str, ctx: dict) -> str:
     sub = parts[0].lower() if parts else "stats"
     try:
         from ..core.audit_log import get_audit_logger
+
         audit = get_audit_logger()
     except Exception as e:
         return f"{_yellow('⚠ Failed to load audit logger:')} {e}"
@@ -790,6 +863,7 @@ async def _handle_audit(args: str, ctx: dict) -> str:
         if not records:
             return _yellow("(audit log empty)")
         import json
+
         return json.dumps(records[-n:], indent=2, ensure_ascii=False, default=str)
 
     if sub == "rotate":
@@ -808,11 +882,13 @@ async def _handle_audit(args: str, ctx: dict) -> str:
     )
 
 
-registry.register(SlashCommand(
-    name="audit",
-    description="Inspect the append-only audit log (stats/query/rotate)",
-    usage="/audit [stats|query|rotate]",
-))
+registry.register(
+    SlashCommand(
+        name="audit",
+        description="Inspect the append-only audit log (stats/query/rotate)",
+        usage="/audit [stats|query|rotate]",
+    )
+)
 registry._commands["audit"]._handler = _handle_audit
 
 
@@ -861,11 +937,13 @@ async def _handle_dual_review(args: str, ctx: dict) -> str:
     )
 
 
-registry.register(SlashCommand(
-    name="dual-review",
-    description="Show dual-agent review stats (PR-11) for high-risk tool calls",
-    usage="/dual-review [reset]",
-))
+registry.register(
+    SlashCommand(
+        name="dual-review",
+        description="Show dual-agent review stats (PR-11) for high-risk tool calls",
+        usage="/dual-review [reset]",
+    )
+)
 registry._commands["dual-review"]._handler = _handle_dual_review
 
 
@@ -921,9 +999,7 @@ async def _handle_ab(args: str, ctx: dict) -> str:
         exp = mgr.get(parts[1])
         if exp is None:
             return _yellow(f"Experiment {parts[1]!r} not found")
-        variants = ", ".join(
-            f"{v.id}({v.name},w={v.weight})" for v in exp.variants
-        )
+        variants = ", ".join(f"{v.id}({v.name},w={v.weight})" for v in exp.variants)
         winner = f"  winner: {exp.winner}" if exp.winner else ""
         return (
             f"{_bold(f'Experiment {exp.id}')}\n"
@@ -994,10 +1070,7 @@ def _format_analysis(analysis) -> str:
     # analyzed
     lines = [_bold("Analysis:")]
     for vid, r in analysis.results.items():
-        avg_rating = (
-            f", rating: {r['avg_rating']:.1f}"
-            if r.get("avg_rating") is not None else ""
-        )
+        avg_rating = f", rating: {r['avg_rating']:.1f}" if r.get("avg_rating") is not None else ""
         lines.append(
             f"  {vid}: n={r['n']:<4d}  "
             f"success: {r['success_rate']:.0%}  "
@@ -1011,11 +1084,13 @@ def _format_analysis(analysis) -> str:
     return "\n".join(lines)
 
 
-registry.register(SlashCommand(
-    name="ab",
-    description="A/B testing framework (PR-12): list/create/status/analyze/conclude",
-    usage="/ab [summary|list|status|analyze|conclude|abandon] [exp_id]",
-))
+registry.register(
+    SlashCommand(
+        name="ab",
+        description="A/B testing framework (PR-12): list/create/status/analyze/conclude",
+        usage="/ab [summary|list|status|analyze|conclude|abandon] [exp_id]",
+    )
+)
 registry._commands["ab"]._handler = _handle_ab
 
 
@@ -1067,11 +1142,13 @@ async def _handle_progress(args: str, ctx: dict) -> str:
     return "\n".join(lines)
 
 
-registry.register(SlashCommand(
-    name="progress",
-    description="View/clear the .claude-progress.txt anchor file (PR-13)",
-    usage="/progress [show|clear|path]",
-))
+registry.register(
+    SlashCommand(
+        name="progress",
+        description="View/clear the .claude-progress.txt anchor file (PR-13)",
+        usage="/progress [show|clear|path]",
+    )
+)
 registry._commands["progress"]._handler = _handle_progress
 
 
@@ -1089,9 +1166,10 @@ async def _handle_evaluate(args: str, ctx: dict) -> str:
     if engine is None:
         return f"{_yellow('⚠ No engine available — cannot evaluate.')}"
     try:
+        from pathlib import Path
+
         from ..agents.evaluator import EvaluatorAgent
         from ..core.audit_log import get_audit_logger
-        from pathlib import Path
     except Exception as e:
         return f"{_yellow('⚠ Evaluator import failed:')} {e}"
     task = args.strip() or getattr(engine, "_last_task", "(unknown task)")
@@ -1106,7 +1184,8 @@ async def _handle_evaluate(args: str, ctx: dict) -> str:
     try:
         evaluator = EvaluatorAgent(engine)
         report = await evaluator.evaluate(
-            task=task, agent_id="main",
+            task=task,
+            agent_id="main",
             audit_records=audit_records,
             workspace=Path(workspace),
         )
@@ -1120,9 +1199,11 @@ async def _handle_evaluate(args: str, ctx: dict) -> str:
     )
 
 
-registry.register(SlashCommand(
-    name="evaluate",
-    description="Run the Evaluator Agent on the last task and write SCORE.md",
-    usage="/evaluate [task description]",
-))
+registry.register(
+    SlashCommand(
+        name="evaluate",
+        description="Run the Evaluator Agent on the last task and write SCORE.md",
+        usage="/evaluate [task description]",
+    )
+)
 registry._commands["evaluate"]._handler = _handle_evaluate

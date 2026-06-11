@@ -2,8 +2,8 @@
 
 import pytest
 
-from agent.core.tdd_state_machine import TDDState, TDDStateMachine, InvalidTDDTransition
 from agent.core.tdd_ralph import RalphSupervisor
+from agent.core.tdd_state_machine import InvalidTDDTransition, TDDState, TDDStateMachine
 
 
 class TestRalphBlocksInRedState:

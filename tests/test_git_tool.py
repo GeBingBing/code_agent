@@ -1,10 +1,7 @@
 """Tests for git tool."""
 
 import asyncio
-import os
 import subprocess
-
-import pytest
 
 from agent.tools.git_tool import GitTool
 
@@ -49,8 +46,15 @@ class TestGitTool:
 
     def test_add_and_commit(self, tmp_path):
         subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True, check=True
+        )
         (tmp_path / "a.txt").write_text("hello")
 
         tool = GitTool()

@@ -1,6 +1,6 @@
 """Tests for Phase 6: Code indexing and retrieval."""
 
-from index.code_indexer import CodeIndexer, Symbol
+from index.code_indexer import CodeIndexer
 from index.retriever import CodeRetriever
 
 

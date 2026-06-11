@@ -1,19 +1,16 @@
 """Tests for the AC-aware SPECS.md parser (PR-06)."""
 
 import json
-import pytest
 from pathlib import Path
 
 from agent.core.spec_loader import (
     AcceptanceCriterion,
     SpecDocument,
-    ACSpecPhase,
-    parse_spec_document,
     load_spec_document,
-    save_ac_state,
     mark_ac_done,
+    parse_spec_document,
+    save_ac_state,
 )
-
 
 SAMPLE = """# Test Specs
 
@@ -52,9 +49,12 @@ class TestAcceptanceCriterion:
 
     def test_to_from_dict_round_trip(self):
         ac = AcceptanceCriterion(
-            id="P1-1", phase_id="P1",
-            description="do something", status="done",
-            verified_at="2026-01-01T00:00:00", verified_by="agent",
+            id="P1-1",
+            phase_id="P1",
+            description="do something",
+            status="done",
+            verified_at="2026-01-01T00:00:00",
+            verified_by="agent",
         )
         d = ac.to_dict()
         restored = AcceptanceCriterion.from_dict(d)
@@ -250,9 +250,11 @@ class TestLoadSpecDocument:
     def test_unreadable_returns_empty(self, tmp_path, monkeypatch):
         spec_file = tmp_path / "SPECS.md"
         spec_file.write_text(SAMPLE)
+
         # Make read_text fail
         def boom(*a, **k):
             raise OSError("denied")
+
         monkeypatch.setattr(Path, "read_text", boom)
         doc = load_spec_document(tmp_path)
         assert doc.phases == []

@@ -31,7 +31,6 @@ import logging
 import os
 import re
 import tarfile
-import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -50,6 +49,7 @@ class AuditEntry:
     `args` and `result` are sensitive — `log()` will replace them with
     their hash + size in the persisted record.
     """
+
     session_id: str
     agent_id: str
     action: str  # "tool_call" | "tool_result" | "permission_check" | "state_transition"
@@ -90,8 +90,7 @@ class AuditLogger:
 
     SCHEMA_VERSION = "1.0"
 
-    def __init__(self, log_dir: Optional[Path] = None,
-                 archive_dir: Optional[Path] = None):
+    def __init__(self, log_dir: Optional[Path] = None, archive_dir: Optional[Path] = None):
         if log_dir is None:
             log_dir = Path(
                 os.getenv(
@@ -137,7 +136,9 @@ class AuditLogger:
         if "args" in record and record["args"] is not None:
             args = record.pop("args")
             args_str = json.dumps(args, sort_keys=True, default=str)
-            record["args_hash"] = "sha256:" + hashlib.sha256(args_str.encode("utf-8")).hexdigest()[:32]
+            record["args_hash"] = (
+                "sha256:" + hashlib.sha256(args_str.encode("utf-8")).hexdigest()[:32]
+            )
             record["args_size"] = len(args_str)
         elif "args" in record:
             record.pop("args", None)
@@ -147,7 +148,9 @@ class AuditLogger:
                 result_str = json.dumps(result, default=str)
             except (TypeError, ValueError):
                 result_str = str(result)
-            record["result_hash"] = "sha256:" + hashlib.sha256(result_str.encode("utf-8")).hexdigest()[:32]
+            record["result_hash"] = (
+                "sha256:" + hashlib.sha256(result_str.encode("utf-8")).hexdigest()[:32]
+            )
             record["result_size"] = len(result_str)
         elif "result" in record:
             record.pop("result", None)
@@ -277,9 +280,7 @@ class AuditLogger:
 
     def delete_record(self, *args, **kwargs):
         """Intentionally not implemented. Audit logs are append-only."""
-        raise NotImplementedError(
-            "AuditLogger is append-only. Use rotate() to archive old files."
-        )
+        raise NotImplementedError("AuditLogger is append-only. Use rotate() to archive old files.")
 
 
 # ── Singleton ──────────────────────────────────────────────────────

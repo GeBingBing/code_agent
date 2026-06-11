@@ -1,7 +1,6 @@
 """Web search tool — Bing primary, DDG fallback."""
 
 import re
-from typing import Optional
 
 import httpx
 
@@ -11,10 +10,11 @@ from .base import BaseTool, ToolResult, registry
 def _clean_html(text: str) -> str:
     """Decode HTML entities and clean whitespace."""
     import html as _html
+
     text = _html.unescape(text)
-    text = re.sub(r'&#\d+;', '', text)
-    text = re.sub(r'&[a-z]+;', ' ', text)
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r"&#\d+;", "", text)
+    text = re.sub(r"&[a-z]+;", " ", text)
+    text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
@@ -34,7 +34,6 @@ class WebSearchTool(BaseTool):
         **kwargs,
     ) -> ToolResult:
         """Search the web and return results."""
-        from urllib.parse import quote
 
         # Try Bing first (works in China), fall back to DuckDuckGo
         results = None
@@ -54,8 +53,9 @@ class WebSearchTool(BaseTool):
 
         if not results:
             return ToolResult(
-                success=False, content="",
-                error=f"Search failed: {error or 'no results from any backend'}"
+                success=False,
+                content="",
+                error=f"Search failed: {error or 'no results from any backend'}",
             )
 
         lines = [f"Search results for: {query}", ""]
@@ -67,7 +67,7 @@ class WebSearchTool(BaseTool):
 
         content = "\n".join(lines)
         if len(content) > max_length:
-            content = content[:max_length] + f"\n\n... [truncated]"
+            content = content[:max_length] + "\n\n... [truncated]"
 
         return ToolResult(success=True, content=content)
 
@@ -76,13 +76,16 @@ class WebSearchTool(BaseTool):
     async def _search_bing(self, query: str, max_results: int) -> list:
         """Search Bing and return (title, url, snippet) tuples."""
         from urllib.parse import quote
+
         url = f"https://www.bing.com/search?q={quote(query)}"
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
-        async with httpx.AsyncClient(timeout=15.0, headers=headers, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=15.0, headers=headers, follow_redirects=True
+        ) as client:
             response = await client.get(url)
             response.raise_for_status()
             html = response.text
@@ -96,10 +99,10 @@ class WebSearchTool(BaseTool):
                 break
 
             # Title: from <h2> (strip all HTML tags inside)
-            title_m = re.search(r'<h2[^>]*>(.*?)</h2>', block, re.DOTALL)
+            title_m = re.search(r"<h2[^>]*>(.*?)</h2>", block, re.DOTALL)
             if not title_m:
                 continue
-            title = _clean_html(re.sub(r'<[^>]+>', '', title_m.group(1)))
+            title = _clean_html(re.sub(r"<[^>]+>", "", title_m.group(1)))
 
             # URL: first external http(s) link in the block
             href = ""
@@ -115,9 +118,9 @@ class WebSearchTool(BaseTool):
 
             # Snippet: from <p> in the block, or b_caption div
             snippet = ""
-            snippet_m = re.search(r'<p[^>]*>(.{20,400}?)</p>', block, re.DOTALL)
+            snippet_m = re.search(r"<p[^>]*>(.{20,400}?)</p>", block, re.DOTALL)
             if snippet_m:
-                snippet = _clean_html(re.sub(r'<[^>]+>', '', snippet_m.group(1)))
+                snippet = _clean_html(re.sub(r"<[^>]+>", "", snippet_m.group(1)))
 
             results.append((title, href, snippet))
 
@@ -128,10 +131,13 @@ class WebSearchTool(BaseTool):
     async def _search_ddg(self, query: str, max_results: int) -> list:
         """Search DuckDuckGo HTML and return (title, url, snippet) tuples."""
         from urllib.parse import quote
+
         url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
         headers = {"User-Agent": "Mozilla/5.0 (Coding-Agent; compatible)"}
 
-        async with httpx.AsyncClient(timeout=15.0, headers=headers, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=15.0, headers=headers, follow_redirects=True
+        ) as client:
             response = await client.get(url)
             response.raise_for_status()
             html = response.text
@@ -141,15 +147,17 @@ class WebSearchTool(BaseTool):
             r'<a class="result__a" href="([^"]+)"[^>]*>([^<]*)</a>', html, re.IGNORECASE
         )
         result_snippets = re.findall(
-            r'<a class="result__snippet"[^>]*>([^<]*(?:<[^>]+>[^<]*)*)</a>', html, re.IGNORECASE | re.DOTALL
+            r'<a class="result__snippet"[^>]*>([^<]*(?:<[^>]+>[^<]*)*)</a>',
+            html,
+            re.IGNORECASE | re.DOTALL,
         )
 
         clean_snippets = []
         for s in result_snippets[:max_results]:
-            clean_snippets.append(_clean_html(re.sub(r'<[^>]+>', '', s)))
+            clean_snippets.append(_clean_html(re.sub(r"<[^>]+>", "", s)))
 
         for i, (url, title) in enumerate(result_links[:max_results]):
-            title = re.sub(r'<[^>]+>', '', title).strip()
+            title = re.sub(r"<[^>]+>", "", title).strip()
             snippet = clean_snippets[i] if i < len(clean_snippets) else ""
             if url.startswith("http"):
                 results.append((title, url, snippet))
@@ -168,11 +176,13 @@ class WebSearchTool(BaseTool):
                     "properties": {
                         "query": {"type": "string", "description": "Search query"},
                         "max_results": {
-                            "type": "integer", "default": 10,
+                            "type": "integer",
+                            "default": 10,
                             "description": "Max number of results",
                         },
                         "max_length": {
-                            "type": "integer", "default": 4000,
+                            "type": "integer",
+                            "default": 4000,
                             "description": "Max total characters to return",
                         },
                     },

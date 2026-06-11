@@ -47,13 +47,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-
 # ── Data classes ────────────────────────────────────────────────────
 
 
 @dataclass
 class ProgressRecord:
     """A single snapshot of the progress anchor file."""
+
     current_task: str = ""
     current_step: str = ""
     next_step: str = ""
@@ -64,10 +64,16 @@ class ProgressRecord:
 
     def is_empty(self) -> bool:
         """True if the record carries no useful state."""
-        return not any([
-            self.current_task, self.current_step, self.next_step,
-            self.op_hash, self.known_issues, self.extra,
-        ])
+        return not any(
+            [
+                self.current_task,
+                self.current_step,
+                self.next_step,
+                self.op_hash,
+                self.known_issues,
+                self.extra,
+            ]
+        )
 
     def to_prompt(self) -> str:
         """Format for injection into the LLM's system-reminder."""
@@ -129,7 +135,7 @@ class ProgressAnchor:
                 in_known_issues = False
                 continue
             key, value = m.group(1), m.group(2).strip()
-            in_known_issues = (key == "known_issues")
+            in_known_issues = key == "known_issues"
             if in_known_issues:
                 # Inline issue on the same line
                 if value.startswith("-"):

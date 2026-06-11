@@ -7,6 +7,7 @@ rules in isolation.
 
 import asyncio
 import json
+
 import pytest
 
 from agent.core.dual_review import (
@@ -21,7 +22,6 @@ from agent.core.dual_review import (
     get_dual_review_manager,
     reset_dual_review_manager,
 )
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -43,9 +43,7 @@ async def _error_chat(messages, stream=False):
 
 
 def _decision(verdict, reviewer="r", rationale="r"):
-    return ReviewDecision(
-        reviewer_id=reviewer, model="m", verdict=verdict, rationale=rationale
-    )
+    return ReviewDecision(reviewer_id=reviewer, model="m", verdict=verdict, rationale=rationale)
 
 
 # ── TestVerdictEnum ────────────────────────────────────────────────
@@ -140,16 +138,31 @@ class TestRateLimiter:
 class TestHighRiskTools:
     def test_known_high_risk(self):
         mgr = DualReviewManager()
-        for tool in ("write_file", "execute_command", "git_push",
-                     "create_pr", "web_fetch", "install_package",
-                     "uninstall_package", "apply_diff", "edit_file",
-                     "sandbox_execute"):
+        for tool in (
+            "write_file",
+            "execute_command",
+            "git_push",
+            "create_pr",
+            "web_fetch",
+            "install_package",
+            "uninstall_package",
+            "apply_diff",
+            "edit_file",
+            "sandbox_execute",
+        ):
             assert mgr.is_high_risk(tool), f"expected {tool} high-risk"
 
     def test_low_risk_excluded(self):
         mgr = DualReviewManager()
-        for tool in ("read_file", "grep", "list_files", "code_search",
-                     "glob", "list_skills", "list_sub_agents"):
+        for tool in (
+            "read_file",
+            "grep",
+            "list_files",
+            "code_search",
+            "glob",
+            "list_skills",
+            "list_sub_agents",
+        ):
             assert not mgr.is_high_risk(tool), f"expected {tool} low-risk"
 
     def test_high_risk_is_frozenset(self):
@@ -214,8 +227,10 @@ class TestReviewDecisionHook:
     def test_approve_no_raise(self):
         mgr = DualReviewManager()
         r = DualReviewResult(
-            decisions=[_decision(ReviewVerdict.APPROVE, "p"),
-                       _decision(ReviewVerdict.APPROVE, "s")],
+            decisions=[
+                _decision(ReviewVerdict.APPROVE, "p"),
+                _decision(ReviewVerdict.APPROVE, "s"),
+            ],
             final_verdict=ReviewVerdict.APPROVE,
             requires_user=False,
             consensus=True,
@@ -226,8 +241,10 @@ class TestReviewDecisionHook:
     def test_reject_raises_permission_denied(self):
         mgr = DualReviewManager()
         r = DualReviewResult(
-            decisions=[_decision(ReviewVerdict.APPROVE, "p"),
-                       _decision(ReviewVerdict.REJECT, "s", "dangerous")],
+            decisions=[
+                _decision(ReviewVerdict.APPROVE, "p"),
+                _decision(ReviewVerdict.REJECT, "s", "dangerous"),
+            ],
             final_verdict=ReviewVerdict.REJECT,
             requires_user=False,
             consensus=False,
@@ -240,8 +257,10 @@ class TestReviewDecisionHook:
     def test_split_raises_review_requires_user(self):
         mgr = DualReviewManager()
         r = DualReviewResult(
-            decisions=[_decision(ReviewVerdict.APPROVE, "p"),
-                       _decision(ReviewVerdict.ABSTAIN, "s")],
+            decisions=[
+                _decision(ReviewVerdict.APPROVE, "p"),
+                _decision(ReviewVerdict.ABSTAIN, "s"),
+            ],
             final_verdict=ReviewVerdict.ABSTAIN,
             requires_user=True,
             consensus=False,
@@ -261,7 +280,7 @@ class TestParseVerdictResponse:
         assert r == "ok"
 
     def test_smart_quotes(self):
-        v, r = _parse_verdict_response('{“verdict”: “reject”, “rationale”: “bad”}')
+        v, r = _parse_verdict_response("{“verdict”: “reject”, “rationale”: “bad”}")
         assert v == ReviewVerdict.REJECT
         assert r == "bad"
 
@@ -332,9 +351,7 @@ class TestReviewBothApprove:
 class TestReviewOneReject:
     @pytest.mark.asyncio
     async def test_rejects_when_any_rejects(self):
-        mgr = DualReviewManager(
-            primary_chat=_approve_chat, secondary_chat=_reject_chat
-        )
+        mgr = DualReviewManager(primary_chat=_approve_chat, secondary_chat=_reject_chat)
         r = await mgr.review("write_file", {"path": "rm -rf /"})
         assert r.final_verdict == ReviewVerdict.REJECT
         assert mgr.reviews_rejected == 1
@@ -346,9 +363,7 @@ class TestReviewOneReject:
 class TestReviewAbstain:
     @pytest.mark.asyncio
     async def test_one_abstain_requires_user(self):
-        mgr = DualReviewManager(
-            primary_chat=_approve_chat, secondary_chat=_abstain_chat
-        )
+        mgr = DualReviewManager(primary_chat=_approve_chat, secondary_chat=_abstain_chat)
         r = await mgr.review("execute_command", {"command": "ls"})
         assert r.requires_user is True
         assert mgr.reviews_user_required == 1
@@ -360,9 +375,7 @@ class TestReviewAbstain:
 class TestReviewError:
     @pytest.mark.asyncio
     async def test_reviewer_error_becomes_abstain(self):
-        mgr = DualReviewManager(
-            primary_chat=_approve_chat, secondary_chat=_error_chat
-        )
+        mgr = DualReviewManager(primary_chat=_approve_chat, secondary_chat=_error_chat)
         r = await mgr.review("write_file", {"path": "x.py"})
         # The errored reviewer abstains; the other approved → split → user
         assert r.requires_user is True
@@ -379,7 +392,8 @@ class TestReviewRateLimited:
     @pytest.mark.asyncio
     async def test_rate_limit_forces_user(self):
         mgr = DualReviewManager(
-            primary_chat=_approve_chat, secondary_chat=_approve_chat,
+            primary_chat=_approve_chat,
+            secondary_chat=_approve_chat,
             max_per_minute=2,
         )
         # Burn 2 calls
@@ -413,8 +427,11 @@ class TestReviewPromptBuilding:
 
     def test_prompt_handles_uncopyable_args(self):
         mgr = DualReviewManager()
+
         # Set with non-JSON-serializable value
-        class Foo: pass
+        class Foo:
+            pass
+
         prompt = mgr._build_review_prompt("write_file", {"obj": Foo()}, "")
         # Should not raise
         assert "write_file" in prompt
@@ -441,6 +458,7 @@ class TestSingleton:
         reset_dual_review_manager()
         # Now manager must be re-instantiated
         from agent.core.dual_review import _default_manager
+
         assert _default_manager is None
 
 
@@ -684,9 +702,7 @@ class TestStubSecondaryEdgeCases:
         # → split (ABSTAIN + APPROVE) → requires_user
         assert r.requires_user is True
         # The stub's decision should be APPROVE
-        stub_decisions = [
-            d for d in r.decisions if d.reviewer_id == "secondary"
-        ]
+        stub_decisions = [d for d in r.decisions if d.reviewer_id == "secondary"]
         assert len(stub_decisions) == 1
         assert stub_decisions[0].verdict == ReviewVerdict.APPROVE
 
@@ -726,10 +742,7 @@ class TestHighConcurrency:
             secondary_chat=_approve_chat,
             max_per_minute=20,  # Above the 10 we'll send
         )
-        coros = [
-            mgr.review("write_file", {"path": f"f{i}.py"})
-            for i in range(10)
-        ]
+        coros = [mgr.review("write_file", {"path": f"f{i}.py"}) for i in range(10)]
         results = await asyncio.gather(*coros)
         assert len(results) == 10
         assert all(r.final_verdict == ReviewVerdict.APPROVE for r in results)
@@ -796,7 +809,7 @@ class TestParseVerdictResponseEdgeCases:
             '{"verdict": "reject", "rationale": "contains \\"quoted\\" text"}'
         )
         assert v == ReviewVerdict.REJECT
-        assert 'quoted' in r
+        assert "quoted" in r
 
     def test_nested_json_object(self):
         # If the response has nested JSON, we only pull the verdict/rationale
@@ -807,16 +820,16 @@ class TestParseVerdictResponseEdgeCases:
 
     def test_array_response_becomes_abstain(self):
         # An array at the top level → not a dict → abstain
-        v, r = _parse_verdict_response('[1, 2, 3]')
+        v, r = _parse_verdict_response("[1, 2, 3]")
         assert v == ReviewVerdict.ABSTAIN
         assert "Could not parse" in r
 
     def test_empty_string(self):
-        v, r = _parse_verdict_response('')
+        v, r = _parse_verdict_response("")
         assert v == ReviewVerdict.ABSTAIN
 
     def test_only_whitespace(self):
-        v, r = _parse_verdict_response('   \n  \t  ')
+        v, r = _parse_verdict_response("   \n  \t  ")
         assert v == ReviewVerdict.ABSTAIN
 
     def test_markdown_table(self):
@@ -855,9 +868,7 @@ class TestParseVerdictResponseEdgeCases:
 class TestReviewElapseTiming:
     @pytest.mark.asyncio
     async def test_elapsed_ms_recorded_per_reviewer(self):
-        mgr = DualReviewManager(
-            primary_chat=_approve_chat, secondary_chat=_approve_chat
-        )
+        mgr = DualReviewManager(primary_chat=_approve_chat, secondary_chat=_approve_chat)
         r = await mgr.review("write_file", {"path": "x.py"})
         assert len(r.decisions) == 2
         for d in r.decisions:

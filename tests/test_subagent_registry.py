@@ -3,8 +3,10 @@
 import pytest
 
 from agent.core.subagent_registry import (
-    SubAgentRegistry, SubAgentRecord, SubAgentStatus,
-    get_registry, reset_registry
+    SubAgentRegistry,
+    SubAgentStatus,
+    get_registry,
+    reset_registry,
 )
 
 
@@ -35,7 +37,6 @@ class TestSubAgentRegistry:
 
     def test_max_depth_exceeded(self):
         """Test that spawning beyond MAX_DEPTH raises ValueError."""
-        from agent.core.subagent_registry import SubAgentRegistry
         # Create a fresh registry with MAX_DEPTH=3
         registry = SubAgentRegistry()
         registry.MAX_DEPTH = 3

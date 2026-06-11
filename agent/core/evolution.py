@@ -13,7 +13,6 @@ from typing import List, Optional
 
 from .memory import MemoryManager
 
-
 _EVOLUTION_DIR = Path(os.getenv("CODING_AGENT_CACHE_DIR", Path.home() / ".coding-agent"))
 _EVOLUTION_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -55,10 +54,7 @@ class EvolutionEngine:
         messages = memory.working_memory
 
         # Determine outcome
-        has_errors = any(
-            m.role == "tool" and m.content and "Error:" in m.content
-            for m in messages
-        )
+        has_errors = any(m.role == "tool" and m.content and "Error:" in m.content for m in messages)
         tool_calls = sum(1 for m in messages if m.role == "assistant" and m.tool_calls)
 
         # Success heuristic: multiple tool calls executed without errors
@@ -121,7 +117,37 @@ class EvolutionEngine:
 
         # Generate skill name from task
         keywords = re.findall(r"[a-zA-Z]+", task_lower)
-        stopwords = {"the", "a", "an", "is", "are", "was", "to", "and", "or", "in", "on", "at", "for", "with", "of", "from", "by", "as", "it", "this", "that", "write", "create", "build", "make", "implement", "add", "using", "use"}
+        stopwords = {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "to",
+            "and",
+            "or",
+            "in",
+            "on",
+            "at",
+            "for",
+            "with",
+            "of",
+            "from",
+            "by",
+            "as",
+            "it",
+            "this",
+            "that",
+            "write",
+            "create",
+            "build",
+            "make",
+            "implement",
+            "add",
+            "using",
+            "use",
+        }
         skill_words = [w for w in keywords if w not in stopwords and len(w) > 2]
         skill_name = "_".join(skill_words[:4]) or "auto_skill"
 
@@ -222,7 +248,9 @@ Result: Successful execution pattern.
                         continue
                     data = json.loads(line)
                     # Deduplicate by signature
-                    existing = next((p for p in patterns if p.error_signature == data["error_signature"]), None)
+                    existing = next(
+                        (p for p in patterns if p.error_signature == data["error_signature"]), None
+                    )
                     if existing:
                         existing.count += data.get("count", 1)
                     else:
@@ -234,19 +262,29 @@ Result: Successful execution pattern.
     def _save_failure_patterns(self, patterns: List[FailurePattern]):
         with open(self.failure_log, "w", encoding="utf-8") as f:
             for p in patterns:
-                f.write(json.dumps({
-                    "task_type": p.task_type,
-                    "error_signature": p.error_signature,
-                    "context": p.context,
-                    "resolution": p.resolution,
-                    "count": p.count,
-                }, ensure_ascii=False) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "task_type": p.task_type,
+                            "error_signature": p.error_signature,
+                            "context": p.context,
+                            "resolution": p.resolution,
+                            "count": p.count,
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
 
     def get_failure_context(self, task: str) -> str:
         """Get relevant failure patterns for a task as context string."""
         patterns = self._load_failure_patterns()
         task_lower = task.lower()
-        relevant = [p for p in patterns if p.task_type.lower() in task_lower or task_lower in p.task_type.lower()]
+        relevant = [
+            p
+            for p in patterns
+            if p.task_type.lower() in task_lower or task_lower in p.task_type.lower()
+        ]
         if not relevant:
             return ""
 

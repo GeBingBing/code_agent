@@ -8,35 +8,44 @@ Provides:
   subtasks and dispatches them via EventBus
 """
 
-from .roles import (
-    AgentRole,
-    CODE_ROLE,
-    TEST_ROLE,
-    REVIEWER_ROLE,
-    DEVOPS_ROLE,
-    BUILTIN_ROLES,
-    get_role,
+from .evaluator import (
+    DIMENSIONS,
+    EvaluationReport,
+    EvaluationScore,
+    EvaluatorAgent,
 )
 from .orchestrator import (
+    CyclicDependencyError,
     OrchestratorAgent,
+    TaskExecutionError,
     TaskRequest,
     TaskResponse,
-    TaskExecutionError,
-    CyclicDependencyError,
 )
-from .evaluator import (
-    EvaluatorAgent,
-    EvaluationScore,
-    EvaluationReport,
-    DIMENSIONS,
+from .roles import (
+    BUILTIN_ROLES,
+    CODE_ROLE,
+    DEVOPS_ROLE,
+    REVIEWER_ROLE,
+    TEST_ROLE,
+    AgentRole,
+    get_role,
 )
 
 __all__ = [
     "AgentRole",
-    "CODE_ROLE", "TEST_ROLE", "REVIEWER_ROLE", "DEVOPS_ROLE",
-    "BUILTIN_ROLES", "get_role",
+    "CODE_ROLE",
+    "TEST_ROLE",
+    "REVIEWER_ROLE",
+    "DEVOPS_ROLE",
+    "BUILTIN_ROLES",
+    "get_role",
     "OrchestratorAgent",
-    "TaskRequest", "TaskResponse",
-    "TaskExecutionError", "CyclicDependencyError",
-    "EvaluatorAgent", "EvaluationScore", "EvaluationReport", "DIMENSIONS",
+    "TaskRequest",
+    "TaskResponse",
+    "TaskExecutionError",
+    "CyclicDependencyError",
+    "EvaluatorAgent",
+    "EvaluationScore",
+    "EvaluationReport",
+    "DIMENSIONS",
 ]

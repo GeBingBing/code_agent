@@ -1,11 +1,10 @@
 """Tests for code indexer semantic features: references, call graph, related symbols."""
 
-import pytest
 from pathlib import Path
+
 from index.code_indexer import CodeIndexer
 
-
-SAMPLE_PY = '''
+SAMPLE_PY = """
 class AuthManager:
     def __init__(self):
         self.token = None
@@ -27,15 +26,15 @@ def main():
     auth = get_auth_manager()
     auth.login("alice")
     auth.logout()
-'''
+"""
 
-SAMPLE_B = '''
+SAMPLE_B = """
 from auth import AuthManager
 
 def verify_user():
     auth = AuthManager()
     return auth.login("bob")
-'''
+"""
 
 
 class TestReferences:

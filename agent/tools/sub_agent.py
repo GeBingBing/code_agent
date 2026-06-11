@@ -9,11 +9,10 @@
 """
 
 import asyncio
-from pathlib import Path
 from typing import Optional
 
+from ..core.subagent_registry import get_registry
 from .base import BaseTool, ToolResult, registry
-from ..core.subagent_registry import get_registry, SubAgentStatus
 
 
 class SpawnSubAgentTool(BaseTool):
@@ -51,7 +50,7 @@ class SpawnSubAgentTool(BaseTool):
             background: If True, return task_id immediately and run in background
         """
         try:
-            from ..core.engine import AgentEngine, AgentConfig
+            from ..core.engine import AgentConfig, AgentEngine
             from ..core.subagent_registry import get_registry
 
             reg = get_registry()
@@ -95,7 +94,7 @@ class SpawnSubAgentTool(BaseTool):
                 return ToolResult(
                     success=True,
                     content=f"Background task started: {run_id} — {label or task[:40]}\n"
-                            f"Use list_sub_agents to check status.",
+                    f"Use list_sub_agents to check status.",
                     metadata={"task_id": run_id, "background": True},
                 )
 
@@ -104,7 +103,9 @@ class SpawnSubAgentTool(BaseTool):
                 result = await async_task
                 if isinstance(result, str) and result.startswith("Error:"):
                     return ToolResult(
-                        success=False, content=result, error=result,
+                        success=False,
+                        content=result,
+                        error=result,
                         metadata={"task_id": run_id},
                     )
                 return ToolResult(
@@ -166,7 +167,9 @@ class ListSubAgentsTool(BaseTool):
     name = "list_sub_agents"
     description = "List all sub-agents or show children of a specific sub-agent"
 
-    async def execute(self, parent_id: Optional[str] = None, show_tree: bool = False, **kwargs) -> ToolResult:
+    async def execute(
+        self, parent_id: Optional[str] = None, show_tree: bool = False, **kwargs
+    ) -> ToolResult:
         """List sub-agents.
 
         Args:
@@ -181,6 +184,7 @@ class ListSubAgentsTool(BaseTool):
             if show_tree and parent_id:
                 tree = registry.get_tree(parent_id)
                 import json
+
                 return ToolResult(
                     success=True,
                     content=f"Sub-agent tree:\n{json.dumps(tree, indent=2)}",
@@ -314,8 +318,7 @@ class SpawnParallelTool(BaseTool):
         if not task_list:
             return ToolResult(success=False, content="", error="Empty task list")
 
-        from ..core.engine import AgentEngine, AgentConfig
-        from ..core.subagent_registry import get_registry
+        from ..core.engine import AgentConfig, AgentEngine
 
         reg = get_registry()
 
@@ -333,7 +336,9 @@ class SpawnParallelTool(BaseTool):
                     depth = parent.depth + 1
 
             try:
-                record = reg.spawn(parent_id=parent_run_id, label=label, task=task_desc, depth=depth)
+                record = reg.spawn(
+                    parent_id=parent_run_id, label=label, task=task_desc, depth=depth
+                )
             except ValueError as e:
                 return {"label": label, "success": False, "error": str(e)}
 

@@ -4,13 +4,11 @@ Supports: brew, apt, dnf, yum, pacman, pip, npm, yarn, pnpm, gem, cargo, poetry,
 """
 
 import asyncio
-import os
 import shutil
 from pathlib import Path
-from typing import Optional
 
-from .base import BaseTool, ToolResult, registry, read_process, IdleTimeoutError
 from ..core.workspace import get_workspace_root
+from .base import BaseTool, IdleTimeoutError, ToolResult, read_process, registry
 
 
 def _workspace() -> Path:
@@ -87,7 +85,11 @@ async def _run_install(cmd_parts: list, cwd: str, timeout: int = 120) -> tuple:
     except IdleTimeoutError as e:
         proc.kill()
         await proc.wait()
-        return e.stdout, f"No output for {timeout}s — process killed\n[partial output]\n{e.stdout[-500:]}", -1
+        return (
+            e.stdout,
+            f"No output for {timeout}s — process killed\n[partial output]\n{e.stdout[-500:]}",
+            -1,
+        )
 
     return (stdout, stderr, proc.returncode)
 
@@ -144,8 +146,17 @@ class InstallPackageTool(BaseTool):
     # Common package suffixes for smart retry when a bare name fails.
     # e.g. if "hermes" fails, try "hermes-agent", "hermes-cli", "hermes-sdk" etc.
     _SMART_SUFFIXES = [
-        "-agent", "-cli", "-tool", "-server", "-client",
-        "-sdk", "-lib", "-python", "-js", "-go", "-rs",
+        "-agent",
+        "-cli",
+        "-tool",
+        "-server",
+        "-client",
+        "-sdk",
+        "-lib",
+        "-python",
+        "-js",
+        "-go",
+        "-rs",
     ]
 
     async def execute(
@@ -183,17 +194,38 @@ class InstallPackageTool(BaseTool):
         # ── First attempt failed — try smart package name correction ──
         # If the package name has no hyphen (e.g. "hermes"), the user might
         # have meant "hermes-agent", "hermes-cli", etc. Try common suffixes.
-        if "-" not in package[1:] and manager_cmd in ("pip install", "pip3 install", "npm install", "brew install"):
+        if "-" not in package[1:] and manager_cmd in (
+            "pip install",
+            "pip3 install",
+            "npm install",
+            "brew install",
+        ):
             manager_cmd = _detect_package_manager(package, manager)
             # Re-read project hints to pick the right suffixes
             ws = _workspace()
             suffixes = list(self._SMART_SUFFIXES)
             if (ws / "package.json").exists():
                 # Prefer JS/TS suffixes
-                suffixes = ["-cli", "-tool", "-agent", "-server", "-client", "-sdk", "-js"] + suffixes
+                suffixes = [
+                    "-cli",
+                    "-tool",
+                    "-agent",
+                    "-server",
+                    "-client",
+                    "-sdk",
+                    "-js",
+                ] + suffixes
             elif (ws / "requirements.txt").exists() or (ws / "pyproject.toml").exists():
                 # Prefer Python suffixes
-                suffixes = ["-agent", "-cli", "-tool", "-server", "-client", "-sdk", "-python"] + suffixes
+                suffixes = [
+                    "-agent",
+                    "-cli",
+                    "-tool",
+                    "-server",
+                    "-client",
+                    "-sdk",
+                    "-python",
+                ] + suffixes
 
             for suffix in suffixes:
                 if suffix in package:
@@ -206,9 +238,10 @@ class InstallPackageTool(BaseTool):
         # ── All attempts failed ──
         # Clean up stderr: remove pip version notices that mask real errors
         import re as _re
+
         clean_stderr = result.error or ""
         if clean_stderr:
-            clean_stderr = _re.sub(r'\[notice\].*\n?', '', clean_stderr)
+            clean_stderr = _re.sub(r"\[notice\].*\n?", "", clean_stderr)
             clean_stderr = clean_stderr.strip()
 
         # Build a helpful error that guides the LLM toward the right fix
@@ -220,10 +253,16 @@ class InstallPackageTool(BaseTool):
         return ToolResult(
             success=False,
             content=result.content or "",
-            error=f"Failed to install {package} (exit code 1): {clean_stderr}" if clean_stderr else hint,
+            error=(
+                f"Failed to install {package} (exit code 1): {clean_stderr}"
+                if clean_stderr
+                else hint
+            ),
         )
 
-    async def _try_install(self, package: str, manager_cmd: str, args: str, work_dir: str) -> ToolResult:
+    async def _try_install(
+        self, package: str, manager_cmd: str, args: str, work_dir: str
+    ) -> ToolResult:
         """Run a single install attempt. Returns ToolResult."""
         parts = manager_cmd.split() + [package]
         if args:
@@ -233,11 +272,12 @@ class InstallPackageTool(BaseTool):
 
         if rc == 0:
             import re
+
             version = ""
-            pkg_norm = re.escape(package).replace(r'\-', r'[-_]')
+            pkg_norm = re.escape(package).replace(r"\-", r"[-_]")
             for pattern in [
-                r'Successfully installed\s+' + pkg_norm + r'-([\d.]+)',
-                r'Requirement already satisfied:\s+' + pkg_norm + r'\s+in\s+\S+\s+\(([\d.]+)\)',
+                r"Successfully installed\s+" + pkg_norm + r"-([\d.]+)",
+                r"Requirement already satisfied:\s+" + pkg_norm + r"\s+in\s+\S+\s+\(([\d.]+)\)",
             ]:
                 vm = re.search(pattern, stdout)
                 if vm:
@@ -254,7 +294,11 @@ class InstallPackageTool(BaseTool):
             return ToolResult(
                 success=False,
                 content=stdout or "",
-                error=f"Failed to install {package} (exit code {rc}): {stderr[-500:]}" if stderr else f"Failed to install {package} (exit code {rc})",
+                error=(
+                    f"Failed to install {package} (exit code {rc}): {stderr[-500:]}"
+                    if stderr
+                    else f"Failed to install {package} (exit code {rc})"
+                ),
             )
 
 
@@ -339,8 +383,11 @@ class UninstallPackageTool(BaseTool):
             return ToolResult(
                 success=False,
                 content=stdout or "",
-                error=f"Failed to uninstall {package} (exit code {rc}): {stderr[-300:]}" if stderr
-                else f"Failed to uninstall {package} (exit code {rc})",
+                error=(
+                    f"Failed to uninstall {package} (exit code {rc}): {stderr[-300:]}"
+                    if stderr
+                    else f"Failed to uninstall {package} (exit code {rc})"
+                ),
             )
 
 

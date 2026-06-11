@@ -11,20 +11,16 @@ Covers:
 
 import asyncio
 import io
-import time
 
 import pytest
 
 from ui.spinner import (
     CLEAR_LINE,
-    DIM,
     RED,
-    RESET,
     SPINNERS,
     SpinnerController,
     StageLabel,
 )
-
 
 # ── StageLabel ────────────────────────────────────────────────
 
@@ -44,8 +40,12 @@ class TestStageLabel:
     def test_no_emoji_in_any_label(self):
         """Plain text only — no emoji for terminal safety."""
         for attr in (
-            StageLabel.THINKING, StageLabel.PLANNING, StageLabel.TOOL,
-            StageLabel.SUBAGENT, StageLabel.COMPACTING, StageLabel.STALLED,
+            StageLabel.THINKING,
+            StageLabel.PLANNING,
+            StageLabel.TOOL,
+            StageLabel.SUBAGENT,
+            StageLabel.COMPACTING,
+            StageLabel.STALLED,
         ):
             # Crude check: no chars above U+FFFF (where most emoji live)
             for ch in attr:
@@ -227,7 +227,9 @@ class TestRender:
         monkeypatch.setenv("NO_COLOR", "1")
         # Re-import to pick up env var
         import importlib
+
         from ui import spinner
+
         importlib.reload(spinner)
         try:
             spin = spinner.SpinnerController(

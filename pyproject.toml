@@ -26,7 +26,12 @@ dependencies = [
 
 [project.optional-dependencies]
 tui = ["textual>=0.50.0"]
-dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=24.0.0",
+    "ruff>=0.6.0",
+]
 
 [project.scripts]
 coding-agent = "ui.cli:main"
@@ -42,3 +47,42 @@ markers = [
 where = ["."]
 include = ["agent*", "ui*", "index*"]
 exclude = ["tests*", "workspace*", "skills*"]
+
+# ── Linting (ruff: pycodestyle + pyflakes + isort + bugbear subset) ──
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "B",   # bugbear (common pitfalls: mutable defaults, etc.)
+]
+ignore = [
+    "E501",  # line too long (black handles; ruff would double-warn)
+    "B008",  # function call in default argument (FastAPI Depends(...) pattern)
+    "E741",  # ambiguous variable name (l/I/O — common in math/index loops)
+    "B007",  # unused loop variable (often intentional in counter loops)
+    "F841",  # unused local variable (often intentional for clarity/destructuring)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent", "ui", "index"]
+
+# ── Formatting (black) ──
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+  | workspace
+  | \.claude
+  | data
+  | docs
+)/
+'''

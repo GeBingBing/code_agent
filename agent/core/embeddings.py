@@ -47,12 +47,10 @@ class EmbeddingProvider(Protocol):
     satisfies this protocol — useful for tests with lightweight fakes.
     """
 
-    def encode(self, text: str) -> List[float]:
-        ...
+    def encode(self, text: str) -> List[float]: ...
 
     @property
-    def dim(self) -> int:
-        ...
+    def dim(self) -> int: ...
 
 
 # ── Hashing (default fallback) ─────────────────────────────────────
@@ -80,7 +78,7 @@ class HashingEmbeddingProvider:
 
     def encode(self, text: str) -> List[float]:
         """Return a unit-norm embedding for `text`."""
-        words = re.findall(r'[\w]+', text.lower())
+        words = re.findall(r"[\w]+", text.lower())
         if not words:
             return [0.0] * self._dim
 
@@ -243,9 +241,7 @@ def get_default_provider(name: str = "auto", **kwargs) -> EmbeddingProvider:
                     model_name=kwargs.get("model_name", SentenceTransformerProvider.DEFAULT_MODEL)
                 )
             except Exception as e:
-                logger.warning(
-                    "sentence-transformers load failed (%s); falling back to hashing", e
-                )
+                logger.warning("sentence-transformers load failed (%s); falling back to hashing", e)
         return HashingEmbeddingProvider(dim=kwargs.get("dim", 128))
 
     if name in ("sentence-transformers", "st", "minilm"):
@@ -267,6 +263,7 @@ def _sentence_transformers_available() -> bool:
     """True if sentence-transformers is importable."""
     try:
         import sentence_transformers  # noqa: F401
+
         return True
     except ImportError:
         return False

@@ -1,17 +1,12 @@
 """Integration test: verify all registered tools can be invoked in ReAct loop."""
 
 import asyncio
-import json
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
-import pytest
-
-from agent.core.engine import AgentEngine, AgentConfig
-from agent.llm.client import Message
-from agent.tools import *  # noqa: F401 - registers all tools
-from agent.tools.base import registry, ToolResult
-
+from agent.core.engine import AgentConfig, AgentEngine
+from agent.tools import *  # noqa: F401,F403 - registers all tools
+from agent.tools.base import registry
 
 WORKSPACE = Path(__file__).parent.parent / "workspace"
 
@@ -91,7 +86,9 @@ class TestAllToolsIntegration:
             # 5. apply_diff
             (tmp_path / "diff.txt").write_text("old content\n")
             tool = registry.get("apply_diff")
-            r = await tool.execute(path=str(tmp_path / "diff.txt"), search="old content", replace="new content")
+            r = await tool.execute(
+                path=str(tmp_path / "diff.txt"), search="old content", replace="new content"
+            )
             tool_results["apply_diff"] = r.success
             assert r.success
 
@@ -105,7 +102,9 @@ class TestAllToolsIntegration:
             # 7. replace_lines
             (tmp_path / "replace.txt").write_text("a\nb\nc\n")
             tool = registry.get("replace_lines")
-            r = await tool.execute(path=str(tmp_path / "replace.txt"), start=2, end=2, content="REPLACED")
+            r = await tool.execute(
+                path=str(tmp_path / "replace.txt"), start=2, end=2, content="REPLACED"
+            )
             tool_results["replace_lines"] = r.success
             assert r.success
 
@@ -120,10 +119,13 @@ class TestAllToolsIntegration:
             skills_dir = tmp_path / "skills"
             skills_dir.mkdir()
             from agent.tools.skill_manager import SkillManager
+
             mgr = SkillManager(skills_dir=skills_dir)
             tool = registry.get("create_skill")
             tool.manager = mgr
-            r = await tool.execute(name="test-skill", description="A test skill", content="do this", tags=["test"])
+            r = await tool.execute(
+                name="test-skill", description="A test skill", content="do this", tags=["test"]
+            )
             tool_results["create_skill"] = r.success
             assert r.success
 
@@ -145,6 +147,7 @@ class TestAllToolsIntegration:
 
             # 12. spawn_sub_agent (needs mock env for its own AgentConfig)
             import os as _os2
+
             _os2.environ["DEFAULT_MODEL"] = "mock"
             _os2.environ["DEFAULT_PROVIDER"] = "mock"
             _os2.environ["OPENAI_API_KEY"] = "sk-test"
@@ -176,6 +179,7 @@ class TestAllToolsIntegration:
 
             # 16. git
             import subprocess
+
             subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=True)
             tool = registry.get("git")
             r = await tool.execute(command="status", cwd=str(tmp_path))
@@ -226,9 +230,11 @@ class TestAllToolsIntegration:
 
             # 24-26. spec tools (need CODING_AGENT_WORKSPACE env)
             import os as _os
+
             _os.environ["CODING_AGENT_WORKSPACE"] = str(tmp_path)
             # Reload workspace path in spec_verifier
             from agent.tools import spec_verifier as _sv
+
             _sv.WORKSPACE = tmp_path
 
             (tmp_path / "SPECS.md").write_text("## Phase 1: Test\n\n- [ ] Task A\n- [x] Task B\n")
@@ -251,7 +257,9 @@ class TestAllToolsIntegration:
             assert r.success
 
             # 27. find_references
-            (tmp_path / "ref_test.py").write_text("def calculate(): pass\ndef main(): calculate()\n")
+            (tmp_path / "ref_test.py").write_text(
+                "def calculate(): pass\ndef main(): calculate()\n"
+            )
             tool = registry.get("find_references")
             r = await tool.execute(symbol="calculate")
             tool_results["find_references"] = r.success
@@ -263,11 +271,26 @@ class TestAllToolsIntegration:
 
             # 29. smart_branch
             import subprocess as _subprocess
+
             _subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=True)
-            _subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=str(tmp_path), capture_output=True, check=True)
-            _subprocess.run(["git", "config", "user.name", "Test"], cwd=str(tmp_path), capture_output=True, check=True)
-            _subprocess.run(["git", "add", "-A"], cwd=str(tmp_path), capture_output=True, check=True)
-            _subprocess.run(["git", "commit", "-m", "init"], cwd=str(tmp_path), capture_output=True, check=True)
+            _subprocess.run(
+                ["git", "config", "user.email", "test@test.com"],
+                cwd=str(tmp_path),
+                capture_output=True,
+                check=True,
+            )
+            _subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=str(tmp_path),
+                capture_output=True,
+                check=True,
+            )
+            _subprocess.run(
+                ["git", "add", "-A"], cwd=str(tmp_path), capture_output=True, check=True
+            )
+            _subprocess.run(
+                ["git", "commit", "-m", "init"], cwd=str(tmp_path), capture_output=True, check=True
+            )
 
             tool = registry.get("smart_branch")
             r = await tool.execute(task="fix auth bug", cwd=str(tmp_path))
@@ -297,6 +320,7 @@ class TestAllToolsIntegration:
 
             # 34. install_package (mock _run_install)
             from unittest.mock import patch
+
             with patch("agent.tools.install._run_install") as mock_run:
                 mock_run.return_value = ("installed test-pkg\n", "", 0)
                 tool = registry.get("install_package")
@@ -320,7 +344,9 @@ class TestAllToolsIntegration:
 
             # 37. exit_plan_mode (requires plan text)
             tool = registry.get("exit_plan_mode")
-            r = await tool.execute(plan="## Plan: test\n\n- [ ] Step 1", allowed_prompts="edit files")
+            r = await tool.execute(
+                plan="## Plan: test\n\n- [ ] Step 1", allowed_prompts="edit files"
+            )
             tool_results["exit_plan_mode"] = r.success
             assert r.success
 
@@ -352,10 +378,15 @@ class TestAllToolsIntegration:
 
             # 41. notebook_read — read .ipynb
             import json as _json
-            nb = _json.dumps({
-                "cells": [{"cell_type": "code", "source": ["print(1)"], "outputs": []}],
-                "metadata": {}, "nbformat": 4, "nbformat_minor": 5,
-            })
+
+            nb = _json.dumps(
+                {
+                    "cells": [{"cell_type": "code", "source": ["print(1)"], "outputs": []}],
+                    "metadata": {},
+                    "nbformat": 4,
+                    "nbformat_minor": 5,
+                }
+            )
             (tmp_path / "test.ipynb").write_text(nb)
             tool = registry.get("notebook_read")
             r = await tool.execute(path=str(tmp_path / "test.ipynb"))
@@ -366,7 +397,8 @@ class TestAllToolsIntegration:
             tool = registry.get("notebook_edit")
             r = await tool.execute(
                 path=str(tmp_path / "test.ipynb"),
-                cell_index=0, operation="replace",
+                cell_index=0,
+                operation="replace",
                 new_source="print(42)",
             )
             tool_results["notebook_edit"] = r.success
@@ -393,6 +425,7 @@ class TestAllToolsIntegration:
 
             # 45. semantic_search (PR-04) — uses long-term memory singleton
             from agent.core.vector_memory import get_vector_memory, reset_vector_memory
+
             reset_vector_memory()
             vm = get_vector_memory()
             vm.add("python", "def hello(): return 42")
@@ -415,7 +448,6 @@ class TestAllToolsIntegration:
             assert r.success
 
             # 48. mark_ac_done (PR-06) — mark an AC and check persistence
-            from agent.core.spec_loader import mark_ac_done, load_spec_document
             tool = registry.get("mark_ac_done")
             r = await tool.execute(ac_id="P0-1")
             tool_results["mark_ac_done"] = r.success

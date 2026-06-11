@@ -2,25 +2,21 @@
 
 import asyncio
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.mcp.client import MCPClient, MCPServerConfig
 from agent.mcp.adapter import (
-    MCPToolAdapter,
     MCPServerManager,
-    register_mcp_tools_from_config,
-    _load_mcp_config,
-    _mcp_tool_name,
+    MCPToolAdapter,
     _convert_mcp_schema,
     _format_mcp_result,
-    DEFAULT_MCP_CONFIG_PATH,
+    _load_mcp_config,
+    _mcp_tool_name,
+    register_mcp_tools_from_config,
 )
-from agent.tools.base import ToolResult, registry
-
+from agent.mcp.client import MCPClient, MCPServerConfig
+from agent.tools.base import registry
 
 # ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -191,19 +187,11 @@ class TestFormatMCPResult:
         assert _format_mcp_result(result) == "Line 1\nLine 2"
 
     def test_image_content(self):
-        result = {
-            "content": [
-                {"type": "image", "data": "base64...", "mimeType": "image/png"}
-            ]
-        }
+        result = {"content": [{"type": "image", "data": "base64...", "mimeType": "image/png"}]}
         assert "image: image/png" in _format_mcp_result(result)
 
     def test_resource_content(self):
-        result = {
-            "content": [
-                {"type": "resource", "uri": "file:///tmp/data.csv"}
-            ]
-        }
+        result = {"content": [{"type": "resource", "uri": "file:///tmp/data.csv"}]}
         assert "resource: file:///tmp/data.csv" in _format_mcp_result(result)
 
     def test_string_result(self):
@@ -247,24 +235,20 @@ class TestMCPToolAdapter:
     @pytest.mark.asyncio
     async def test_adapter_execute_success(self, sample_tool_def):
         mock_client = MagicMock(spec=MCPClient)
-        mock_client.call_tool = AsyncMock(return_value={
-            "content": [{"type": "text", "text": "file contents here"}]
-        })
+        mock_client.call_tool = AsyncMock(
+            return_value={"content": [{"type": "text", "text": "file contents here"}]}
+        )
         adapter = MCPToolAdapter(mock_client, sample_tool_def, "test-server")
 
         result = await adapter.execute(path="/tmp/test.txt")
         assert result.success is True
         assert result.content == "file contents here"
-        mock_client.call_tool.assert_called_once_with(
-            "read_file", {"path": "/tmp/test.txt"}
-        )
+        mock_client.call_tool.assert_called_once_with("read_file", {"path": "/tmp/test.txt"})
 
     @pytest.mark.asyncio
     async def test_adapter_execute_error_response(self, sample_tool_def):
         mock_client = MagicMock(spec=MCPClient)
-        mock_client.call_tool = AsyncMock(return_value={
-            "error": "Permission denied"
-        })
+        mock_client.call_tool = AsyncMock(return_value={"error": "Permission denied"})
         adapter = MCPToolAdapter(mock_client, sample_tool_def, "test-server")
 
         result = await adapter.execute(path="/etc/shadow")
@@ -329,9 +313,7 @@ class TestRegisterMCPToolsFromConfig:
     @pytest.mark.asyncio
     async def test_no_config_file(self, tmp_path):
         """Returns None when no config file exists."""
-        result = await register_mcp_tools_from_config(
-            str(tmp_path / "nonexistent.json")
-        )
+        result = await register_mcp_tools_from_config(str(tmp_path / "nonexistent.json"))
         assert result is None
 
     @pytest.mark.asyncio
@@ -347,11 +329,15 @@ class TestRegisterMCPToolsFromConfig:
     async def test_config_with_invalid_server(self, tmp_path):
         """Skips non-dict server configs."""
         config_file = tmp_path / "mcp_servers.json"
-        config_file.write_text(json.dumps({
-            "mcpServers": {
-                "broken": "not a dict",
-            }
-        }))
+        config_file.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "broken": "not a dict",
+                    }
+                }
+            )
+        )
 
         result = await register_mcp_tools_from_config(str(config_file))
         assert result is None  # No valid server configs
@@ -360,14 +346,18 @@ class TestRegisterMCPToolsFromConfig:
     async def test_valid_config_but_server_fails(self, tmp_path):
         """Server has valid config but command doesn't work — no crash."""
         config_file = tmp_path / "mcp_servers.json"
-        config_file.write_text(json.dumps({
-            "mcpServers": {
-                "doomed": {
-                    "command": "/dev/null/nope",
-                    "args": [],
+        config_file.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "doomed": {
+                            "command": "/dev/null/nope",
+                            "args": [],
+                        }
+                    }
                 }
-            }
-        }))
+            )
+        )
 
         # Should not raise, just return manager with 0 tools
         manager = await register_mcp_tools_from_config(str(config_file))
@@ -460,9 +450,7 @@ class TestMCPClient:
         assert ok is True
         # Read stdout to check env
         try:
-            stdout_data = await asyncio.wait_for(
-                client._proc.stdout.read(4096), timeout=2
-            )
+            stdout_data = await asyncio.wait_for(client._proc.stdout.read(4096), timeout=2)
             output = stdout_data.decode("utf-8", errors="replace")
             assert "TEST_VAR=hello_mcp" in output
         except asyncio.TimeoutError:
@@ -500,8 +488,7 @@ class TestMCPToolRegistryIntegration:
 
         # Verify schema is in the right format
         schemas = registry.schemas
-        matching = [s for s in schemas
-                     if s.get("function", {}).get("name") == "mcp_unique_op"]
+        matching = [s for s in schemas if s.get("function", {}).get("name") == "mcp_unique_op"]
         assert len(matching) >= 1
         assert matching[0]["type"] == "function"
 
@@ -509,14 +496,24 @@ class TestMCPToolRegistryIntegration:
         """Multiple tools from the same server get unique names."""
         mock_client = MagicMock(spec=MCPClient)
 
-        tool1 = MCPToolAdapter(mock_client, {
-            "name": "read", "description": "Read file",
-            "inputSchema": {"type": "object", "properties": {}}
-        }, "fs")
-        tool2 = MCPToolAdapter(mock_client, {
-            "name": "write", "description": "Write file",
-            "inputSchema": {"type": "object", "properties": {}}
-        }, "fs")
+        tool1 = MCPToolAdapter(
+            mock_client,
+            {
+                "name": "read",
+                "description": "Read file",
+                "inputSchema": {"type": "object", "properties": {}},
+            },
+            "fs",
+        )
+        tool2 = MCPToolAdapter(
+            mock_client,
+            {
+                "name": "write",
+                "description": "Write file",
+                "inputSchema": {"type": "object", "properties": {}},
+            },
+            "fs",
+        )
 
         assert tool1.name != tool2.name
         assert tool1.name == "mcp__fs__read"

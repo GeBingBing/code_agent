@@ -1,12 +1,9 @@
 """Tests for Phase 5: Sub-agent tool."""
 
 import asyncio
-from unittest.mock import AsyncMock, patch
 
-import pytest
-
-from agent.tools.sub_agent import SpawnSubAgentTool
 from agent.core.subagent_registry import reset_registry
+from agent.tools.sub_agent import SpawnSubAgentTool
 
 
 def _run(async_fn):
@@ -25,9 +22,7 @@ class TestSpawnSubAgent:
         async def fake_run(self, task):
             return f"Mock result for: {task}"
 
-        monkeypatch.setattr(
-            "agent.core.engine.AgentEngine.run", fake_run
-        )
+        monkeypatch.setattr("agent.core.engine.AgentEngine.run", fake_run)
 
         result = _run(tool.execute(task="write hello.py"))
         assert result.success is True

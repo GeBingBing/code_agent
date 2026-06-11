@@ -2,12 +2,11 @@
 
 import os
 from pathlib import Path
-from typing import Optional
 
-from .base import BaseTool, ToolResult, registry
 from index.code_indexer import CodeIndexer
 from index.retriever import CodeRetriever
 
+from .base import BaseTool, ToolResult, registry
 
 # Global shared indexer instance (lazy, persistent)
 _global_indexer = None
@@ -70,7 +69,9 @@ class CodeSearchTool(BaseTool):
             self._retriever = CodeRetriever(self.indexer)
         return self._retriever
 
-    async def execute(self, query: str, top_k: int = 5, semantic: bool = False, **kwargs) -> ToolResult:
+    async def execute(
+        self, query: str, top_k: int = 5, semantic: bool = False, **kwargs
+    ) -> ToolResult:
         try:
             if semantic:
                 results = self.retriever.semantic_search(query, top_k=top_k)
@@ -101,9 +102,20 @@ class CodeSearchTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Search query (e.g., 'auth', 'User class')"},
-                        "top_k": {"type": "integer", "default": 5, "description": "Max results to return"},
-                        "semantic": {"type": "boolean", "default": False, "description": "Include related symbols and references"},
+                        "query": {
+                            "type": "string",
+                            "description": "Search query (e.g., 'auth', 'User class')",
+                        },
+                        "top_k": {
+                            "type": "integer",
+                            "default": 5,
+                            "description": "Max results to return",
+                        },
+                        "semantic": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "Include related symbols and references",
+                        },
                     },
                     "required": ["query"],
                 },
@@ -149,7 +161,10 @@ class FindReferencesTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "symbol": {"type": "string", "description": "Symbol name to find references for (e.g., 'User', 'get_auth_token')"},
+                        "symbol": {
+                            "type": "string",
+                            "description": "Symbol name to find references for (e.g., 'User', 'get_auth_token')",
+                        },
                     },
                     "required": ["symbol"],
                 },
@@ -195,11 +210,15 @@ class GetCallGraphTool(BaseTool):
                         for c in callers:
                             lines.append(f"  ← {c}")
                         return ToolResult(success=True, content="\n".join(lines))
-                    return ToolResult(success=True, content=f"'{function}' not found in call graph.")
+                    return ToolResult(
+                        success=True, content=f"'{function}' not found in call graph."
+                    )
 
             # Summary
             lines = [f"Call graph summary ({len(graph)} functions):"]
-            for caller, callees in sorted(graph.items(), key=lambda x: len(x[1]), reverse=True)[:10]:
+            for caller, callees in sorted(graph.items(), key=lambda x: len(x[1]), reverse=True)[
+                :10
+            ]:
                 lines.append(f"  {caller} → {len(callees)} calls")
             return ToolResult(success=True, content="\n".join(lines))
         except Exception as e:
@@ -215,7 +234,11 @@ class GetCallGraphTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "function": {"type": "string", "description": "Function name to focus on (empty for summary)", "default": ""},
+                        "function": {
+                            "type": "string",
+                            "description": "Function name to focus on (empty for summary)",
+                            "default": "",
+                        },
                     },
                 },
             },

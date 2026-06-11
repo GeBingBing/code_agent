@@ -31,13 +31,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Generic, Optional, TypeVar
 
-
 T = TypeVar("T")
 
 
 @dataclass
 class _CacheEntry(Generic[T]):
     """One cached extraction result with TTL."""
+
     result: T
     expires_at: float
 
@@ -64,10 +64,14 @@ class LLMExtractor(ABC, Generic[T]):
     DEFAULT_CACHE_TTL = 300.0  # 5 minutes — matches _IntentCache
     DEFAULT_CACHE_MAX = 256
 
-    def __init__(self, llm_client=None, use_llm: bool = True,
-                 fallback_to_legacy: bool = True,
-                 cache_ttl: float = DEFAULT_CACHE_TTL,
-                 cache_max: int = DEFAULT_CACHE_MAX):
+    def __init__(
+        self,
+        llm_client=None,
+        use_llm: bool = True,
+        fallback_to_legacy: bool = True,
+        cache_ttl: float = DEFAULT_CACHE_TTL,
+        cache_max: int = DEFAULT_CACHE_MAX,
+    ):
         self._llm = llm_client
         self._use_llm = bool(use_llm) and llm_client is not None
         self._fallback = fallback_to_legacy
@@ -133,13 +137,14 @@ class LLMExtractor(ABC, Generic[T]):
         """Call the LLM and parse its response. Subclasses don't override this."""
         # Imported lazily to avoid circular import: llm.client → ... → core
         from ..llm.client import Message
+
         messages = [
             Message(role="system", content=self._system_prompt()),
             Message(role="user", content=self._user_message(text)),
         ]
         resp, _ = await self._llm.chat(messages, stream=False)
-        text_resp = resp if isinstance(resp, str) else getattr(
-            resp.choices[0].message, "content", ""
+        text_resp = (
+            resp if isinstance(resp, str) else getattr(resp.choices[0].message, "content", "")
         )
         if not isinstance(text_resp, str):
             text_resp = str(text_resp)

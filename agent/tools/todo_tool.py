@@ -1,7 +1,7 @@
 """TodoWrite tool — track multi-step task progress."""
 
 import json
-from typing import Optional
+
 from .base import BaseTool, ToolResult, registry
 
 

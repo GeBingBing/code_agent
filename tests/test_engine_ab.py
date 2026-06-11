@@ -8,53 +8,57 @@ Verifies:
 - A/B is opt-out via AgentConfig.ab_test_enabled
 """
 
-import asyncio
 import json
-import os
 import time
-import pytest
-from pathlib import Path
 
-from agent.core.engine import AgentEngine, AgentConfig
+import pytest
+
 from agent.core.audit_log import reset_audit_logger
+from agent.core.engine import AgentConfig, AgentEngine
+from agent.core.hooks import BEFORE_LLM_CALL
 from agent.governance.ab_test import (
     ABTestManager,
     Experiment,
-    ExperimentObservation,
     ExperimentStatus,
-    ExperimentTarget,
     ExperimentVariant,
     reset_ab_test_manager,
 )
-from agent.core.hooks import BEFORE_LLM_CALL, ON_SESSION_END
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
 
 def _config(**overrides) -> AgentConfig:
     base = dict(
-        model="mock", provider="mock", tdd_mode="off",
-        ab_test_enabled=True, ab_user_id="alice",
+        model="mock",
+        provider="mock",
+        tdd_mode="off",
+        ab_test_enabled=True,
+        ab_user_id="alice",
     )
     base.update(overrides)
     return AgentConfig(**base)
 
 
-def _make_exp(exp_id: str = "exp_test", target="system_prompt",
-              target_key="INTRO", min_samples=5, **overrides) -> Experiment:
+def _make_exp(
+    exp_id: str = "exp_test", target="system_prompt", target_key="INTRO", min_samples=5, **overrides
+) -> Experiment:
     return Experiment(
         id=exp_id,
         name=overrides.get("name", f"Test {exp_id}"),
         description=overrides.get("description", "test"),
         target=target,
         target_key=target_key,
-        variants=overrides.get("variants", [
-            ExperimentVariant(id="A", name="control",
-                              config={"new_content": "You are a control agent."}),
-            ExperimentVariant(id="B", name="treatment",
-                              config={"new_content": "You are a treatment agent."}),
-        ]),
+        variants=overrides.get(
+            "variants",
+            [
+                ExperimentVariant(
+                    id="A", name="control", config={"new_content": "You are a control agent."}
+                ),
+                ExperimentVariant(
+                    id="B", name="treatment", config={"new_content": "You are a treatment agent."}
+                ),
+            ],
+        ),
         min_samples=min_samples,
     )
 
@@ -134,8 +138,10 @@ class TestApplyVariantsHook:
         # depending on hash bucketing — we just verify *some* variant
         # was applied and the marker was replaced).
         assert "INTRO" not in out["system"]
-        assert ("You are a control agent." in out["system"] or
-                "You are a treatment agent." in out["system"])
+        assert (
+            "You are a control agent." in out["system"]
+            or "You are a treatment agent." in out["system"]
+        )
         # In-flight list tracks this experiment
         assert any(x["experiment_id"] == "apply_a" for x in out["_ab_experiments"])
         # And the variant_id is recorded
@@ -171,8 +177,7 @@ class TestApplyVariantsHook:
     @pytest.mark.asyncio
     async def test_skips_non_system_prompt_target(self):
         e = AgentEngine(_config())
-        e.ab_test.create(_make_exp("tool_target", target="tool_default",
-                                   target_key="INTRO"))
+        e.ab_test.create(_make_exp("tool_target", target="tool_default", target_key="INTRO"))
         payload = {"system": "INTRO marker here."}
         out = await e._ab_apply_variants_hook(payload)
         # tool_default is not applied to system prompt
@@ -193,8 +198,9 @@ class TestApplyVariantsHook:
         e.ab_test.create(_make_exp("once", target_key="INTRO"))
         payload = {"system": "INTRO marker."}
         out = await e._ab_apply_variants_hook(payload)
-        ids = [x["experiment_id"] for x in out["_ab_experiments"]
-               if x.get("experiment_id") == "once"]
+        ids = [
+            x["experiment_id"] for x in out["_ab_experiments"] if x.get("experiment_id") == "once"
+        ]
         assert len(ids) == 1
 
 
@@ -272,6 +278,7 @@ class TestRecordObservationHook:
     @pytest.mark.asyncio
     async def test_computes_duration(self):
         import time
+
         e = AgentEngine(_config())
         e.ab_test.create(_make_exp("dur", target_key="INTRO"))
         e._ab_task_start_ts = time.time() - 1.0  # 1 second ago
@@ -429,7 +436,6 @@ class TestUserIdResolution:
 class TestSingletonSharedAcrossEngines:
     def test_same_singleton(self):
         # Reset to ensure clean state
-        from agent.governance.ab_test import _default
         reset_ab_test_manager()
         e1 = AgentEngine(_config())
         e2 = AgentEngine(_config())
@@ -460,6 +466,7 @@ class TestMultipleExperimentsInFlight:
     @pytest.fixture(autouse=True)
     def _reset(self, tmp_path, monkeypatch):
         from agent.governance.ab_test import reset_ab_test_manager
+
         reset_ab_test_manager()
         monkeypatch.setenv("CODING_AGENT_EXPERIMENTS_DIR", str(tmp_path))
         yield
@@ -469,20 +476,26 @@ class TestMultipleExperimentsInFlight:
     async def test_tracks_two_experiments(self, monkeypatch):
         e = AgentEngine(_config(ab_user_id="alice"))
         # Two experiments
-        e.ab_test.create(_make_exp("exp_a", target_key="marker_a",
-                                   variants=[
-                                       ExperimentVariant(id="A", name="c1",
-                                                         config={"new_content": "v_a"}),
-                                       ExperimentVariant(id="B", name="t1",
-                                                         config={"new_content": "v_b"}),
-                                   ]))
-        e.ab_test.create(_make_exp("exp_b", target_key="marker_b",
-                                   variants=[
-                                       ExperimentVariant(id="A", name="c2",
-                                                         config={"new_content": "v_c"}),
-                                       ExperimentVariant(id="B", name="t2",
-                                                         config={"new_content": "v_d"}),
-                                   ]))
+        e.ab_test.create(
+            _make_exp(
+                "exp_a",
+                target_key="marker_a",
+                variants=[
+                    ExperimentVariant(id="A", name="c1", config={"new_content": "v_a"}),
+                    ExperimentVariant(id="B", name="t1", config={"new_content": "v_b"}),
+                ],
+            )
+        )
+        e.ab_test.create(
+            _make_exp(
+                "exp_b",
+                target_key="marker_b",
+                variants=[
+                    ExperimentVariant(id="A", name="c2", config={"new_content": "v_c"}),
+                    ExperimentVariant(id="B", name="t2", config={"new_content": "v_d"}),
+                ],
+            )
+        )
         payload = {
             "system": "before\nmarker_a\n---\nbefore\nmarker_b\n---",
             "messages": [],
@@ -505,13 +518,16 @@ class TestMultipleExperimentsInFlight:
         running system_prompt experiment gets an observation per session,
         even if its specific marker wasn't present."""
         e = AgentEngine(_config(ab_user_id="alice"))
-        e.ab_test.create(_make_exp("exp_x", target_key="marker_x",
-                                   variants=[
-                                       ExperimentVariant(id="A", name="c",
-                                                         config={"new_content": "new"}),
-                                       ExperimentVariant(id="B", name="t",
-                                                         config={"new_content": "new"}),
-                                   ]))
+        e.ab_test.create(
+            _make_exp(
+                "exp_x",
+                target_key="marker_x",
+                variants=[
+                    ExperimentVariant(id="A", name="c", config={"new_content": "new"}),
+                    ExperimentVariant(id="B", name="t", config={"new_content": "new"}),
+                ],
+            )
+        )
         # System prompt has no marker
         payload = {"system": "no marker here", "messages": []}
         out = await e._ab_apply_variants_hook(payload)
@@ -531,6 +547,7 @@ class TestABRecordFailureRecovery:
     @pytest.fixture(autouse=True)
     def _reset(self, tmp_path, monkeypatch):
         from agent.governance.ab_test import reset_ab_test_manager
+
         reset_ab_test_manager()
         monkeypatch.setenv("CODING_AGENT_EXPERIMENTS_DIR", str(tmp_path))
         yield
@@ -605,6 +622,7 @@ class TestABApplyVariantsEdgeCases:
     @pytest.fixture(autouse=True)
     def _reset(self, tmp_path, monkeypatch):
         from agent.governance.ab_test import reset_ab_test_manager
+
         reset_ab_test_manager()
         monkeypatch.setenv("CODING_AGENT_EXPERIMENTS_DIR", str(tmp_path))
         yield
@@ -615,13 +633,16 @@ class TestABApplyVariantsEdgeCases:
         """Marker should be replaced only once (replace count=1) to
         prevent runaway substitutions."""
         e = AgentEngine(_config(ab_user_id="alice"))
-        e.ab_test.create(_make_exp("exp_rep", target_key="marker",
-                                   variants=[
-                                       ExperimentVariant(id="A", name="c",
-                                                         config={"new_content": "X"}),
-                                       ExperimentVariant(id="B", name="t",
-                                                         config={"new_content": "X"}),
-                                   ]))
+        e.ab_test.create(
+            _make_exp(
+                "exp_rep",
+                target_key="marker",
+                variants=[
+                    ExperimentVariant(id="A", name="c", config={"new_content": "X"}),
+                    ExperimentVariant(id="B", name="t", config={"new_content": "X"}),
+                ],
+            )
+        )
         payload = {"system": "marker one marker two", "messages": []}
         out = await e._ab_apply_variants_hook(payload)
         # First occurrence replaced; second left alone
@@ -631,13 +652,16 @@ class TestABApplyVariantsEdgeCases:
     async def test_empty_replacement_does_not_substitute(self):
         """If the variant's new_content is empty, no replacement happens."""
         e = AgentEngine(_config(ab_user_id="alice"))
-        e.ab_test.create(_make_exp("exp_empty", target_key="marker",
-                                   variants=[
-                                       ExperimentVariant(id="A", name="c",
-                                                         config={"new_content": ""}),
-                                       ExperimentVariant(id="B", name="t",
-                                                         config={"new_content": ""}),
-                                   ]))
+        e.ab_test.create(
+            _make_exp(
+                "exp_empty",
+                target_key="marker",
+                variants=[
+                    ExperimentVariant(id="A", name="c", config={"new_content": ""}),
+                    ExperimentVariant(id="B", name="t", config={"new_content": ""}),
+                ],
+            )
+        )
         original = "marker is here"
         payload = {"system": original, "messages": []}
         out = await e._ab_apply_variants_hook(payload)
@@ -650,13 +674,15 @@ class TestABApplyVariantsEdgeCases:
     async def test_apply_then_record_in_full_cycle(self):
         """Full cycle: apply variant, then record observation."""
         e = AgentEngine(_config(ab_user_id="alice"))
-        e.ab_test.create(_make_exp("exp_full",
-                                   variants=[
-                                       ExperimentVariant(id="A", name="c",
-                                                         config={"new_content": "control"}),
-                                       ExperimentVariant(id="B", name="t",
-                                                         config={"new_content": "treatment"}),
-                                   ]))
+        e.ab_test.create(
+            _make_exp(
+                "exp_full",
+                variants=[
+                    ExperimentVariant(id="A", name="c", config={"new_content": "control"}),
+                    ExperimentVariant(id="B", name="t", config={"new_content": "treatment"}),
+                ],
+            )
+        )
         e._ab_task_start_ts = time.time()
         e._ab_last_task = "do something"
         e._total_input_tokens = 100

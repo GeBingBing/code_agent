@@ -2,8 +2,6 @@
 
 import asyncio
 
-import pytest
-
 from agent.tools.file_ops import ApplyDiffTool, InsertAfterLineTool, ReadFileTool, ReplaceLinesTool
 
 
@@ -17,11 +15,13 @@ class TestApplyDiff:
         f.write_text("def hello():\n    print('hello')\n    return 42\n")
 
         tool = ApplyDiffTool()
-        result = _run(tool.execute(
-            path=str(f),
-            search="    print('hello')",
-            replace="    print('hello')\n    print('extra')",
-        ))
+        result = _run(
+            tool.execute(
+                path=str(f),
+                search="    print('hello')",
+                replace="    print('hello')\n    print('extra')",
+            )
+        )
         assert result.success is True
         assert "Applied diff" in result.content
         assert "+    print('extra')" in result.content
@@ -34,11 +34,13 @@ class TestApplyDiff:
         f.write_text("def hello(): pass\n")
 
         tool = ApplyDiffTool()
-        result = _run(tool.execute(
-            path=str(f),
-            search="not_in_file",
-            replace="replacement",
-        ))
+        result = _run(
+            tool.execute(
+                path=str(f),
+                search="not_in_file",
+                replace="replacement",
+            )
+        )
         assert result.success is False
         assert "not found" in result.error
 

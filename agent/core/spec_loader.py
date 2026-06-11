@@ -29,8 +29,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict
-
+from typing import Dict, List, Optional
 
 # ── AC-aware structures (PR-06) ─────────────────────────────────────
 
@@ -42,6 +41,7 @@ class AcceptanceCriterion:
     IDs are derived from the parent phase and a sequence number, e.g.
     `P1-2-3` (3rd AC in phase P1-2). This is stable across re-parses.
     """
+
     id: str
     phase_id: str  # e.g. "P1-2"
     description: str
@@ -79,6 +79,7 @@ class ACSpecPhase:
     `number` / `name` / `tasks` fields. This class uses string `id` and
     `acceptance_criteria`. The two coexist for backwards compatibility.
     """
+
     id: str  # e.g. "P0", "P1-2"
     title: str
     status: str  # "completed" | "partial" | "planned" | "backlog"
@@ -110,6 +111,7 @@ class ACSpecPhase:
 @dataclass
 class SpecDocument:
     """Full parsed view of SPECS.md with ACs."""
+
     phases: List[ACSpecPhase]
     file_path: Optional[Path] = None
     loaded_at: str = ""
@@ -336,8 +338,9 @@ def save_ac_state(workspace: Path, doc: SpecDocument, cache_path: Optional[Path]
         cache.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def mark_ac_done(workspace: Path, ac_id: str, verified_by: str = "agent",
-                 cache_path: Optional[Path] = None) -> bool:
+def mark_ac_done(
+    workspace: Path, ac_id: str, verified_by: str = "agent", cache_path: Optional[Path] = None
+) -> bool:
     """Mark an AC done in the workspace's spec, persisting the state."""
     doc = load_spec_document(workspace, cache_path=cache_path)
     if doc.mark_ac_done(ac_id, verified_by=verified_by):
@@ -370,7 +373,7 @@ class SpecTask:
 class SpecPhase:
     number: int
     name: str
-    status: str   # completed | partial | planned | backlog
+    status: str  # completed | partial | planned | backlog
     items: List[str] = field(default_factory=list)
     tasks: List[SpecTask] = field(default_factory=list)
 
@@ -402,7 +405,9 @@ class SpecContext:
 
         # Active phase
         if self.active_phase:
-            lines.append(f"Current phase: Phase {self.active_phase.number}: {self.active_phase.name} ({self.active_phase.status})")
+            lines.append(
+                f"Current phase: Phase {self.active_phase.number}: {self.active_phase.name} ({self.active_phase.status})"
+            )
             # Include pending tasks for active phase
             pending = self.active_phase.pending_tasks
             if pending:
@@ -476,8 +481,8 @@ def _parse_spec(content: str) -> List[SpecPhase]:
     # Group 1 captures the number (e.g., "0", "1-1", "11")
     # Group 2 captures the name (emoji stripped later)
     phase_pattern = re.compile(
-        r'^#{2,3}\s*(?:Phase\s*)?(?:P)?(\d+(?:-\d+)?)\s*:\s*(.+?)(?:\s*✅|\s*⚠️|\s*🔜|\s*📋)?\s*$',
-        re.MULTILINE
+        r"^#{2,3}\s*(?:Phase\s*)?(?:P)?(\d+(?:-\d+)?)\s*:\s*(.+?)(?:\s*✅|\s*⚠️|\s*🔜|\s*📋)?\s*$",
+        re.MULTILINE,
     )
 
     # Find all phase headings and their positions
@@ -491,17 +496,17 @@ def _parse_spec(content: str) -> List[SpecPhase]:
         # Parse number — for P1-1 style, take the first digit (main phase)
         # Skip range phases like "0–8" by checking for non-digit characters beyond simple "N-N" pattern
         try:
-            num = int(num_raw.split('-')[0])
+            num = int(num_raw.split("-")[0])
         except ValueError:
             continue
 
-        if '✅' in line:
+        if "✅" in line:
             status = "completed"
-        elif '⚠️' in line:
+        elif "⚠️" in line:
             status = "partial"
-        elif '🔜' in line:
+        elif "🔜" in line:
             status = "planned"
-        elif '📋' in line:
+        elif "📋" in line:
             status = "backlog"
         else:
             status = "planned"
@@ -527,23 +532,20 @@ def _parse_tasks(section: str) -> List[SpecTask]:
     - Plain list item (treats as pending checklist)
     """
     # Truncate at any sub-heading to avoid picking up tasks from later phases
-    heading_match = re.search(r'^\s*#{1,6}\s', section, re.MULTILINE)
+    heading_match = re.search(r"^\s*#{1,6}\s", section, re.MULTILINE)
     if heading_match:
-        section = section[:heading_match.start()]
+        section = section[: heading_match.start()]
 
     tasks = []
     # Match checklist or plain list items
-    task_pattern = re.compile(
-        r'^\s*[-*]\s*(?:\[([ xX])\])?\s*(.+)$',
-        re.MULTILINE
-    )
+    task_pattern = re.compile(r"^\s*[-*]\s*(?:\[([ xX])\])?\s*(.+)$", re.MULTILINE)
     for match in task_pattern.finditer(section):
         checkbox = match.group(1)
         description = match.group(2).strip()
         # Stop at empty lines or sub-headings (belt and suspenders)
-        if not description or description.startswith('#'):
+        if not description or description.startswith("#"):
             break
-        done = checkbox in ('x', 'X')
+        done = checkbox in ("x", "X")
         tasks.append(SpecTask(description=description, done=done))
     return tasks
 
@@ -567,8 +569,7 @@ def mark_task_done(workspace: Path, phase_number: int, task_description: str) ->
 
     # Build regex to find the phase heading
     phase_pattern = re.compile(
-        rf'^(#{{2,3}}\s*(?:Phase\s*)?(?:P)?{phase_number}(?:-\d+)?\s*:.*)$',
-        re.MULTILINE
+        rf"^(#{{2,3}}\s*(?:Phase\s*)?(?:P)?{phase_number}(?:-\d+)?\s*:.*)$", re.MULTILINE
     )
     match = phase_pattern.search(content)
     if not match:
@@ -583,18 +584,16 @@ def mark_task_done(workspace: Path, phase_number: int, task_description: str) ->
     # Find the task in this section and mark it done
     # Match the task line with - [ ] or plain -
     task_regex = re.compile(
-        rf'^(\s*[-*]\s*)(?:\[\s*\])?\s*({re.escape(task_description)}.*?)$',
-        re.MULTILINE
+        rf"^(\s*[-*]\s*)(?:\[\s*\])?\s*({re.escape(task_description)}.*?)$", re.MULTILINE
     )
 
-    updated_section, count = task_regex.subn(r'\1[x] \2', phase_section, count=1)
+    updated_section, count = task_regex.subn(r"\1[x] \2", phase_section, count=1)
     if count == 0:
         # Try partial match
         task_regex = re.compile(
-            rf'^(\s*[-*]\s*)(?:\[\s*\])?\s*(.*{re.escape(task_description[:20])}.*?)$',
-            re.MULTILINE
+            rf"^(\s*[-*]\s*)(?:\[\s*\])?\s*(.*{re.escape(task_description[:20])}.*?)$", re.MULTILINE
         )
-        updated_section, count = task_regex.subn(r'\1[x] \2', phase_section, count=1)
+        updated_section, count = task_regex.subn(r"\1[x] \2", phase_section, count=1)
 
     if count == 0:
         return False

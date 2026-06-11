@@ -26,7 +26,6 @@ import sys
 import time
 from typing import IO, Optional
 
-
 # ── ANSI constants (mirror ui/cli.py to keep this module standalone) ──
 
 _NO_COLOR = os.environ.get("NO_COLOR", "") != ""
@@ -52,6 +51,7 @@ class StageLabel:
     `{tool}` / `{name}` placeholders are filled by the caller:
         spin.update_label(StageLabel.TOOL.format(tool="read_file"))
     """
+
     THINKING = "[思考中]"
     PLANNING = "[规划中]"
     TOOL = "[工具: {tool}]"
@@ -92,13 +92,13 @@ class SpinnerController:
         clock: Optional[callable] = None,
     ) -> None:
         """Args:
-            file: Output stream (default sys.stdout). Tests can pass a
-                StringIO to capture writes.
-            tick_ms: Animation tick interval in milliseconds.
-            stall_threshold_s: Seconds without a token update before
-                the spinner turns red (signals "model is taking long").
-            clock: Callable returning current monotonic time. Defaults
-                to `time.monotonic`. Tests can inject a fake clock.
+        file: Output stream (default sys.stdout). Tests can pass a
+            StringIO to capture writes.
+        tick_ms: Animation tick interval in milliseconds.
+        stall_threshold_s: Seconds without a token update before
+            the spinner turns red (signals "model is taking long").
+        clock: Callable returning current monotonic time. Defaults
+            to `time.monotonic`. Tests can inject a fake clock.
         """
         self._file = file or sys.stdout
         self._tick_s = tick_ms / 1000.0

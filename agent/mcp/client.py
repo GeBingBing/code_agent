@@ -7,15 +7,14 @@ Reference: https://modelcontextprotocol.io/
 import asyncio
 import json
 import os
-import shlex
-from pathlib import Path
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class MCPServerConfig:
     """Configuration for an MCP server connection."""
+
     name: str
     command: str  # e.g. "npx", "python"
     args: List[str]  # e.g. ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
@@ -146,9 +145,7 @@ class MCPClient:
             # Read response lines until we find matching id
             while True:
                 try:
-                    line = await asyncio.wait_for(
-                        self._proc.stdout.readline(), timeout=30
-                    )
+                    line = await asyncio.wait_for(self._proc.stdout.readline(), timeout=30)
                 except asyncio.TimeoutError:
                     print(f"[MCP] Read timeout for request {req_id}")
                     return None
@@ -190,7 +187,7 @@ async def _test_client():
     config = MCPServerConfig(
         name="test",
         command="echo",
-        args=["{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}}"],
+        args=['{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}'],
     )
     client = MCPClient(config)
     ok = await client.start()

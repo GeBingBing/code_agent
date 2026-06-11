@@ -1,15 +1,14 @@
 """Tests for the AC-aware spec tools (PR-06)."""
 
 import json
+
 import pytest
-from pathlib import Path
 
 from agent.tools.spec_verifier import (
-    SpecStatusTool,
     MarkAcDoneTool,
+    SpecStatusTool,
     VerifySpecACSTool,
 )
-
 
 SAMPLE = """# Test
 
@@ -28,6 +27,7 @@ def workspace_with_spec(tmp_path, monkeypatch):
     """Provide a workspace with SPECS.md and patch WORKSPACE to point at it."""
     (tmp_path / "SPECS.md").write_text(SAMPLE)
     import agent.tools.spec_verifier as sv
+
     monkeypatch.setattr(sv, "WORKSPACE", tmp_path, raising=False)
     return tmp_path
 
@@ -65,6 +65,7 @@ class TestSpecStatusTool:
     @pytest.mark.asyncio
     async def test_no_specs_returns_error(self, tmp_path, monkeypatch):
         import agent.tools.spec_verifier as sv
+
         monkeypatch.setattr(sv, "WORKSPACE", tmp_path, raising=False)
         tool = SpecStatusTool()
         result = await tool.execute()
@@ -138,6 +139,7 @@ class TestVerifySpecACSTool:
     @pytest.mark.asyncio
     async def test_no_phase_returns_error(self, tmp_path, monkeypatch):
         import agent.tools.spec_verifier as sv
+
         (tmp_path / "SPECS.md").write_text("# No phases here")
         monkeypatch.setattr(sv, "WORKSPACE", tmp_path, raising=False)
         tool = VerifySpecACSTool()
@@ -162,6 +164,7 @@ class TestVerifySpecACSTool:
 """
         (tmp_path / "SPECS.md").write_text(spec)
         import agent.tools.spec_verifier as sv
+
         monkeypatch.setattr(sv, "WORKSPACE", tmp_path, raising=False)
         tool = VerifySpecACSTool()
         result = await tool.execute(phase_id="P1")
@@ -177,12 +180,15 @@ class TestVerifySpecACSTool:
 class TestRegistration:
     def test_spec_status_registered(self):
         from agent.tools.base import registry
+
         assert registry.get("spec_status") is not None
 
     def test_mark_ac_done_registered(self):
         from agent.tools.base import registry
+
         assert registry.get("mark_ac_done") is not None
 
     def test_verify_acs_registered(self):
         from agent.tools.base import registry
+
         assert registry.get("verify_acs") is not None

@@ -5,6 +5,8 @@ Delegates to real language servers (gopls, pyright, typescript-language-server, 
 for compiler-grade accuracy.
 """
 
+from pathlib import Path
+
 from ..tools.base import BaseTool, ToolResult, registry
 
 
@@ -51,9 +53,13 @@ class LSPTool(BaseTool):
                                 "incomingCalls, outgoingCalls"
                             ),
                             "enum": [
-                                "goToDefinition", "findReferences", "hover",
-                                "documentSymbol", "workspaceSymbol",
-                                "incomingCalls", "outgoingCalls",
+                                "goToDefinition",
+                                "findReferences",
+                                "hover",
+                                "documentSymbol",
+                                "workspaceSymbol",
+                                "incomingCalls",
+                                "outgoingCalls",
                             ],
                         },
                         "file_path": {
@@ -100,12 +106,14 @@ class LSPTool(BaseTool):
         **kwargs,
     ) -> ToolResult:
         """Execute an LSP operation."""
-        from agent.lsp.client import get_lsp_client, LSPError
-
         # Normalize path
         from pathlib import Path
-        fp = str(Path(file_path).resolve() if not Path(file_path).is_absolute()
-                 else Path(file_path))
+
+        from agent.lsp.client import LSPError, get_lsp_client
+
+        fp = str(
+            Path(file_path).resolve() if not Path(file_path).is_absolute() else Path(file_path)
+        )
 
         client = await get_lsp_client(fp)
         if not client:
@@ -140,8 +148,7 @@ class LSPTool(BaseTool):
                 result = await self._call_hierarchy(client, fp, line, character, "outgoing")
             else:
                 return ToolResult(
-                    success=False, content="",
-                    error=f"Unknown operation: {operation}"
+                    success=False, content="", error=f"Unknown operation: {operation}"
                 )
             return result
         except LSPError as e:
@@ -210,8 +217,7 @@ class LSPTool(BaseTool):
             text = contents.get("value", str(contents))
         elif isinstance(contents, list):
             text = "\n".join(
-                c.get("value", str(c)) if isinstance(c, dict) else str(c)
-                for c in contents
+                c.get("value", str(c)) if isinstance(c, dict) else str(c) for c in contents
             )
         else:
             text = str(contents)
@@ -248,8 +254,7 @@ class LSPTool(BaseTool):
 
     async def _workspace_symbol(self, client, query) -> ToolResult:
         if not query:
-            return ToolResult(
-                success=False, content="", error="query required for workspaceSymbol")
+            return ToolResult(success=False, content="", error="query required for workspaceSymbol")
         params = {"query": query}
         result = await client.request("workspace/symbol", params)
         if not result:
@@ -280,7 +285,11 @@ class LSPTool(BaseTool):
             return ToolResult(success=False, content="", error="No call hierarchy available")
 
         item = items[0]
-        method = "callHierarchy/incomingCalls" if direction == "incoming" else "callHierarchy/outgoingCalls"
+        method = (
+            "callHierarchy/incomingCalls"
+            if direction == "incoming"
+            else "callHierarchy/outgoingCalls"
+        )
         calls = await client.request(method, {"item": item})
         if not calls:
             return ToolResult(success=False, content="", error="No calls found")
@@ -303,12 +312,14 @@ class LSPTool(BaseTool):
 
 # ── Helpers ────────────────────────────────────────────────────────
 
+
 def _to_uri(path: str) -> str:
     return Path(path).resolve().as_uri()
 
 
 def _from_uri(uri: str) -> str:
-    from urllib.parse import urlparse, unquote
+    from urllib.parse import unquote, urlparse
+
     parsed = urlparse(uri)
     return unquote(parsed.path)
 
@@ -339,16 +350,16 @@ def _kind_icon(kind) -> str:
     """Map LSP SymbolKind (1-27) to icon."""
     if isinstance(kind, int):
         return {
-            5: "⬛",   # Class
-            6: "⬛",   # Method
-            9: "⬛",   # Constructor
+            5: "⬛",  # Class
+            6: "⬛",  # Method
+            9: "⬛",  # Constructor
             12: "▸",  # Function
             11: "⬛",  # Interface
             13: "▾",  # Variable
             14: "▾",  # Constant
-            7: "◈",   # Property
-            2: "▣",   # Module
-            3: "▣",   # Namespace
+            7: "◈",  # Property
+            2: "▣",  # Module
+            3: "▣",  # Namespace
         }.get(kind, "○")
     return "○"
 

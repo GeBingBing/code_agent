@@ -2,9 +2,7 @@
 
 import asyncio
 
-import pytest
-
-from agent.tools.file_ops import WriteFileTool, ListFilesTool
+from agent.tools.file_ops import ListFilesTool, WriteFileTool
 
 
 def _run(async_fn):
@@ -14,29 +12,35 @@ def _run(async_fn):
 class TestWriteFile:
     def test_creates_file(self, tmp_path):
         tool = WriteFileTool()
-        result = _run(tool.execute(
-            path=str(tmp_path / "new.txt"),
-            content="hello world",
-        ))
+        result = _run(
+            tool.execute(
+                path=str(tmp_path / "new.txt"),
+                content="hello world",
+            )
+        )
         assert result.success is True
         assert (tmp_path / "new.txt").read_text() == "hello world"
 
     def test_creates_parent_dirs(self, tmp_path):
         tool = WriteFileTool()
-        result = _run(tool.execute(
-            path=str(tmp_path / "a" / "b" / "c.txt"),
-            content="nested",
-        ))
+        result = _run(
+            tool.execute(
+                path=str(tmp_path / "a" / "b" / "c.txt"),
+                content="nested",
+            )
+        )
         assert result.success is True
         assert (tmp_path / "a" / "b" / "c.txt").read_text() == "nested"
 
     def test_overwrites_existing(self, tmp_path):
         (tmp_path / "existing.txt").write_text("old")
         tool = WriteFileTool()
-        result = _run(tool.execute(
-            path=str(tmp_path / "existing.txt"),
-            content="new",
-        ))
+        result = _run(
+            tool.execute(
+                path=str(tmp_path / "existing.txt"),
+                content="new",
+            )
+        )
         assert result.success is True
         assert (tmp_path / "existing.txt").read_text() == "new"
 

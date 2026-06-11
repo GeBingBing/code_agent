@@ -10,12 +10,11 @@ Covers:
   - Session accumulator increments correctly across turns
 """
 
-import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 
 from agent.core.engine import AgentEngine
-
 
 # ── Estimator helper ─────────────────────────────────────────
 
@@ -148,7 +147,7 @@ class TestFinalEventPayload:
         engine = AgentEngine()
 
         # Mock the LLM to return a stream with usage
-        from agent.llm.client import LLMClient, Message
+        from agent.llm.client import LLMClient
 
         class _Delta:
             content = "ok"

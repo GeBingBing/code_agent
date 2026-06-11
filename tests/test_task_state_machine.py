@@ -1,14 +1,14 @@
 """Tests for the Task state machine (PR-03)."""
 
 import json
+
 import pytest
-from pathlib import Path
 
 from agent.core.task_state_machine import (
+    InvalidStateTransition,
     TaskState,
     TaskStateMachine,
     TaskStateRecord,
-    InvalidStateTransition,
 )
 
 
@@ -21,7 +21,8 @@ def tmp_state_file(tmp_path):
 class TestTaskStateRecord:
     def test_round_trip_dict(self):
         rec = TaskStateRecord(
-            task="test", state="init",
+            task="test",
+            state="init",
             created_at="2026-06-06T10:00:00",
             updated_at="2026-06-06T10:00:00",
         )
@@ -33,7 +34,8 @@ class TestTaskStateRecord:
 
     def test_from_dict_ignores_unknown_fields(self):
         d = {
-            "task": "x", "state": "init",
+            "task": "x",
+            "state": "init",
             "created_at": "2026-01-01T00:00:00",
             "updated_at": "2026-01-01T00:00:00",
             "unknown_field": "ignored",
@@ -55,7 +57,8 @@ class TestTaskStateMachineInit:
     def test_loads_existing_state(self, tmp_state_file):
         # Pre-populate file
         existing = {
-            "task": "old", "state": "exec",
+            "task": "old",
+            "state": "exec",
             "created_at": "2026-01-01T00:00:00",
             "updated_at": "2026-01-01T01:00:00",
             "completed_steps": [{"tool": "read_file"}],
@@ -103,7 +106,13 @@ class TestTaskStateTransitions:
         assert sm.state == TaskState.INIT
 
     def test_can_fail_from_any_state(self, tmp_state_file):
-        for from_state in [TaskState.INIT, TaskState.PLAN, TaskState.EXEC, TaskState.TEST, TaskState.REVIEW]:
+        for from_state in [
+            TaskState.INIT,
+            TaskState.PLAN,
+            TaskState.EXEC,
+            TaskState.TEST,
+            TaskState.REVIEW,
+        ]:
             sm = TaskStateMachine(state_file=tmp_state_file)
             # Force to from_state
             sm.record.state = from_state.value
@@ -201,8 +210,16 @@ class TestSummary:
     def test_summary_keys(self, tmp_state_file):
         sm = TaskStateMachine(state_file=tmp_state_file)
         s = sm.summary()
-        for key in ("state", "task", "completed_steps", "current_step",
-                    "next_step", "known_issues", "updated_at", "session_id"):
+        for key in (
+            "state",
+            "task",
+            "completed_steps",
+            "current_step",
+            "next_step",
+            "known_issues",
+            "updated_at",
+            "session_id",
+        ):
             assert key in s
 
     def test_summary_empty(self, tmp_state_file):

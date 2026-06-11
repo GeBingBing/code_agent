@@ -1,10 +1,10 @@
 """Tests for the engine's orchestrator integration (PR-07)."""
 
 import json
+
 import pytest
 
-from agent.core.engine import AgentEngine, AgentConfig
-from agent.agents import OrchestratorAgent
+from agent.core.engine import AgentConfig, AgentEngine
 
 
 class TestEngineRunWithOrchestrator:
@@ -35,10 +35,25 @@ class TestEngineRunWithOrchestrator:
                 # (which itself calls self.llm.chat).
                 content = messages[-1].content
                 if "Decompose" in content:
-                    return json.dumps([
-                        {"id": "st-a", "role": "code", "description": "impl", "depends_on": []},
-                        {"id": "st-b", "role": "test", "description": "test", "depends_on": ["st-a"]},
-                    ]), {}
+                    return (
+                        json.dumps(
+                            [
+                                {
+                                    "id": "st-a",
+                                    "role": "code",
+                                    "description": "impl",
+                                    "depends_on": [],
+                                },
+                                {
+                                    "id": "st-b",
+                                    "role": "test",
+                                    "description": "test",
+                                    "depends_on": ["st-a"],
+                                },
+                            ]
+                        ),
+                        {},
+                    )
                 if "Synthesize" in content:
                     return "FINAL: did 2 subtasks", {}
                 # dispatch_fn path
@@ -59,9 +74,19 @@ class TestEngineRunWithOrchestrator:
             async def chat(self, messages, **kw):
                 content = messages[-1].content
                 if "Decompose" in content:
-                    return json.dumps([
-                        {"id": "st-a", "role": "code", "description": "impl", "depends_on": []},
-                    ]), {}
+                    return (
+                        json.dumps(
+                            [
+                                {
+                                    "id": "st-a",
+                                    "role": "code",
+                                    "description": "impl",
+                                    "depends_on": [],
+                                },
+                            ]
+                        ),
+                        {},
+                    )
                 if "Synthesize" in content:
                     return "MERGED", {}
                 # Simulate dispatch failure
@@ -79,9 +104,14 @@ class TestEngineRunWithOrchestrator:
             async def chat(self, messages, **kw):
                 content = messages[-1].content
                 if "Decompose" in content:
-                    return json.dumps([
-                        {"id": "a", "role": "code", "description": "x", "depends_on": []},
-                    ]), {}
+                    return (
+                        json.dumps(
+                            [
+                                {"id": "a", "role": "code", "description": "x", "depends_on": []},
+                            ]
+                        ),
+                        {},
+                    )
                 if "Synthesize" in content:
                     return "ok", {}
                 return "ok", {}
@@ -97,20 +127,22 @@ class TestOrchestratorCommand:
     @pytest.mark.asyncio
     async def test_no_args_returns_usage(self):
         from agent.commands.builtin import _handle_orchestrate
+
         result = await _handle_orchestrate("", {"engine": None})
         assert "Usage" in result
 
     @pytest.mark.asyncio
     async def test_no_engine_returns_warning(self):
         from agent.commands.builtin import _handle_orchestrate
+
         result = await _handle_orchestrate("do thing", {"engine": None})
         assert "No engine" in result
 
     @pytest.mark.asyncio
     async def test_no_llm_returns_warning(self):
         from agent.commands.builtin import _handle_orchestrate
+
         e = AgentEngine(AgentConfig(model="mock", provider="mock"))
-        from agent.commands.builtin import _handle_orchestrate
         result = await _handle_orchestrate("do thing", {"engine": e})
         # Case-insensitive
         assert "llm" in result.lower()
@@ -118,6 +150,7 @@ class TestOrchestratorCommand:
     @pytest.mark.asyncio
     async def test_registered_in_command_registry(self):
         from agent.commands.base import registry
+
         cmd = registry.get("orchestrate")
         assert cmd is not None
         assert "Orchestrator" in cmd.description

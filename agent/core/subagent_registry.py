@@ -9,11 +9,10 @@
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Dict, List, Optional, Callable
-from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 # Note: ToolResult is imported in sub_agent.py, not here
 # Avoid circular imports by not importing ToolResult here
@@ -29,6 +28,7 @@ class SubAgentStatus(Enum):
 @dataclass
 class SubAgentRecord:
     """单条subagent记录"""
+
     id: str
     parent_id: Optional[str]
     label: str
@@ -206,10 +206,7 @@ class SubAgentRegistry:
         Returns:
             活跃subagent列表
         """
-        return [
-            r for r in self._records.values()
-            if r.status == SubAgentStatus.RUNNING
-        ]
+        return [r for r in self._records.values() if r.status == SubAgentStatus.RUNNING]
 
     def list_all(self) -> List[SubAgentRecord]:
         """列出所有subagent记录。
@@ -270,7 +267,7 @@ class SubAgentRegistry:
                 "label": r.label,
                 "status": r.status.value,
                 "depth": r.depth,
-                "children": [build_node(c) for c in children]
+                "children": [build_node(c) for c in children],
             }
 
         return build_node(record)
@@ -289,7 +286,6 @@ class SubAgentRegistry:
         """Mark sub-agent as background task."""
         if run_id in self._records:
             self._records[run_id].metadata["background"] = is_bg
-        self._running_tasks[run_id] = task
 
     def cleanup_completed(self, max_age_seconds: int = 3600):
         """清理超过指定时间的已完成记录。

@@ -1,13 +1,9 @@
 """Tests for the ON_SESSION_START hook (PR-14)."""
 
-import asyncio
-import json
 import pytest
-from pathlib import Path
 
-from agent.core.hooks import HookRegistry, ON_SESSION_START
+from agent.core.hooks import ON_SESSION_START, HookRegistry
 from agent.core.hooks_session import load_user_profile_on_start
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -35,6 +31,7 @@ class TestLoadUserProfileOnStart:
     async def test_loads_existing_profile(self, tmp_profile_path):
         """If profile exists, it should be loaded into payload."""
         from agent.core.user_profile import UserProfile
+
         p = UserProfile(name="hay", language="chinese")
         p.save()
 
@@ -50,6 +47,7 @@ class TestLoadUserProfileOnStart:
     async def test_does_not_overwrite_existing(self, tmp_profile_path):
         """If payload already has user_profile, don't overwrite it."""
         from agent.core.user_profile import UserProfile
+
         UserProfile(name="hay").save()
 
         payload = {
@@ -83,6 +81,7 @@ class TestHookIntegration:
     async def test_register_and_execute(self, tmp_profile_path):
         """Hook should fire when registered and executed."""
         from agent.core.user_profile import UserProfile
+
         UserProfile(name="hay").save()
 
         reg = HookRegistry()
@@ -95,6 +94,7 @@ class TestHookIntegration:
     async def test_hook_chains(self, tmp_profile_path):
         """Multiple ON_SESSION_START hooks should fire in order."""
         from agent.core.user_profile import UserProfile
+
         UserProfile(name="hay").save()
 
         reg = HookRegistry()
@@ -125,17 +125,22 @@ class TestEngineSessionStart:
     @pytest.fixture
     def _config(self):
         from agent.core.engine import AgentConfig
+
         return AgentConfig(
-            model="mock", provider="mock", mode="bypass",
-            tdd_mode="off", audit_enabled=False, otel_enabled=False,
-            enable_dual_review=False, ab_test_enabled=False,
+            model="mock",
+            provider="mock",
+            mode="bypass",
+            tdd_mode="off",
+            audit_enabled=False,
+            otel_enabled=False,
+            enable_dual_review=False,
+            ab_test_enabled=False,
             progress_anchor_enabled=False,
         )
 
     def test_engine_registers_default_handler(self, _config, tmp_profile_path):
         """Engine should auto-register load_user_profile_on_start."""
         from agent.core.engine import AgentEngine
-        from agent.core.hooks_session import load_user_profile_on_start
 
         e = AgentEngine(_config)
         # The handler should be registered
@@ -158,8 +163,12 @@ class TestEngineSessionStart:
 
         UserProfile(name="hay").save()
         cfg = AgentConfig(
-            model="mock", provider="mock", mode="bypass",
-            tdd_mode="off", audit_enabled=False, otel_enabled=False,
+            model="mock",
+            provider="mock",
+            mode="bypass",
+            tdd_mode="off",
+            audit_enabled=False,
+            otel_enabled=False,
             user_profile_enabled=False,
         )
         e = AgentEngine(cfg)
@@ -196,24 +205,30 @@ class TestEngineSessionStart:
 class TestConfigFlags:
     def test_user_profile_enabled_default_true(self):
         from agent.core.engine import AgentConfig
+
         c = AgentConfig(model="mock", provider="mock", mode="bypass")
         # Should default to True via global config
         assert c.user_profile_enabled is True
 
     def test_auto_remember_default_true(self):
         from agent.core.engine import AgentConfig
+
         c = AgentConfig(model="mock", provider="mock", mode="bypass")
         assert c.auto_remember_user_facts is True
 
     def test_memory_pinned_max_default_200(self):
         from agent.core.engine import AgentConfig
+
         c = AgentConfig(model="mock", provider="mock", mode="bypass")
         assert c.memory_pinned_max == 200
 
     def test_explicit_disable(self):
         from agent.core.engine import AgentConfig
+
         c = AgentConfig(
-            model="mock", provider="mock", mode="bypass",
+            model="mock",
+            provider="mock",
+            mode="bypass",
             user_profile_enabled=False,
             auto_remember_user_facts=False,
         )
@@ -232,10 +247,16 @@ class TestAutoExtractOnCurrentTaskOnly:
     @pytest.fixture
     def _config(self):
         from agent.core.engine import AgentConfig
+
         return AgentConfig(
-            model="mock", provider="mock", mode="bypass",
-            tdd_mode="off", audit_enabled=False, otel_enabled=False,
-            enable_dual_review=False, ab_test_enabled=False,
+            model="mock",
+            provider="mock",
+            mode="bypass",
+            tdd_mode="off",
+            audit_enabled=False,
+            otel_enabled=False,
+            enable_dual_review=False,
+            ab_test_enabled=False,
             progress_anchor_enabled=False,
         )
 
@@ -244,6 +265,7 @@ class TestAutoExtractOnCurrentTaskOnly:
         a preference, the extractor should ignore it because it's not
         in the [Current task] section."""
         from agent.core.fact_extractor import _regex_extract
+
         # Simulate CLI's wrapped task
         cli_task = (
             "[Previous conversation]\n"
@@ -254,8 +276,11 @@ class TestAutoExtractOnCurrentTaskOnly:
             "I am hay, please help me"
         )
         # Mimic the engine's stripping logic
-        target = (cli_task.split("[Current task]", 1)[1].strip()
-                  if "[Current task]" in cli_task else cli_task)
+        target = (
+            cli_task.split("[Current task]", 1)[1].strip()
+            if "[Current task]" in cli_task
+            else cli_task
+        )
         facts = _regex_extract(target)
         assert ("name", "hay") in facts
         # And no false positives from history
@@ -266,8 +291,8 @@ class TestAutoExtractOnCurrentTaskOnly:
         """If there's no [Current task] marker, fall back to full task
         (preserves behavior for non-CLI callers)."""
         from agent.core.fact_extractor import _regex_extract
+
         task = "I am hay"
-        target = (task.split("[Current task]", 1)[1].strip()
-                  if "[Current task]" in task else task)
+        target = task.split("[Current task]", 1)[1].strip() if "[Current task]" in task else task
         facts = _regex_extract(target)
         assert ("name", "hay") in facts

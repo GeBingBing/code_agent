@@ -3,10 +3,10 @@
 import pytest
 
 from agent.core.tdd_state_machine import (
+    InvalidTDDTransition,
+    TDDCycle,
     TDDState,
     TDDStateMachine,
-    TDDCycle,
-    InvalidTDDTransition,
 )
 
 
@@ -75,7 +75,7 @@ class TestTDDStateMachineTransitions:
         sm = TDDStateMachine(mode="off")
         sm.start_cycle("feature")
         sm.transition(TDDState.REFACTOR)  # Skip allowed
-        sm.transition(TDDState.DONE)      # Skip allowed
+        sm.transition(TDDState.DONE)  # Skip allowed
         assert sm.current_state == TDDState.DONE
         # No violations recorded in off mode
         assert len(sm.cycle.violations) == 0

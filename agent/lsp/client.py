@@ -11,7 +11,6 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-
 # ── Language server detection ──────────────────────────────────────
 
 # Priority: which executable to try first for each language
@@ -44,6 +43,7 @@ def detect_server(file_path: str) -> Optional[tuple[str, list[str]]]:
 
 
 # ── LSP JSON-RPC client ────────────────────────────────────────────
+
 
 class LSPClient:
     """Async LSP client over stdio.
@@ -86,22 +86,26 @@ class LSPClient:
     async def initialize(self, root_path: str) -> dict:
         """Send initialize request and didOpen for workspace."""
         root_uri = Path(root_path).resolve().as_uri()
-        result = await self.request("initialize", {
-            "processId": os.getpid(),
-            "rootUri": root_uri,
-            "capabilities": {
-                "textDocument": {
-                    "hover": {"contentFormat": ["markdown", "plaintext"]},
-                    "definition": {"linkSupport": False},
-                    "references": {},
-                    "documentSymbol": {
-                        "hierarchicalDocumentSymbolSupport": True,
+        result = await self.request(
+            "initialize",
+            {
+                "processId": os.getpid(),
+                "rootUri": root_uri,
+                "capabilities": {
+                    "textDocument": {
+                        "hover": {"contentFormat": ["markdown", "plaintext"]},
+                        "definition": {"linkSupport": False},
+                        "references": {},
+                        "documentSymbol": {
+                            "hierarchicalDocumentSymbolSupport": True,
+                        },
+                        "callHierarchy": {},
                     },
-                    "callHierarchy": {},
+                    "workspace": {"symbol": {}},
                 },
-                "workspace": {"symbol": {}},
             },
-        }, timeout=30)
+            timeout=30,
+        )
         if result:
             self._initialized = True
             # Send initialized notification
@@ -147,8 +151,7 @@ class LSPClient:
                 if msg_id is not None and msg_id in self._pending:
                     future = self._pending.pop(msg_id)
                     if "error" in message:
-                        future.set_exception(
-                            LSPError(message["error"].get("message", "LSP error")))
+                        future.set_exception(LSPError(message["error"].get("message", "LSP error")))
                     else:
                         future.set_result(message.get("result"))
         except asyncio.CancelledError:
@@ -164,12 +167,14 @@ class LSPClient:
         req_id = self._next_id
         self._next_id += 1
 
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "method": method,
-            "params": params,
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "method": method,
+                "params": params,
+            }
+        )
 
         # Send with Content-Length header (LSP spec)
         body = request.encode("utf-8")
@@ -190,11 +195,13 @@ class LSPClient:
         """Send a JSON-RPC notification (no response expected)."""
         if not self.process or self.process.returncode is not None:
             return
-        notification = json.dumps({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-        })
+        notification = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": params,
+            }
+        )
         body = notification.encode("utf-8")
         header = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii")
         self.process.stdin.write(header + body)
@@ -206,14 +213,17 @@ class LSPClient:
             content = Path(file_path).read_text("utf-8")
         except Exception:
             return
-        self._send_notification("textDocument/didOpen", {
-            "textDocument": {
-                "uri": uri,
-                "languageId": _guess_language(file_path),
-                "version": 1,
-                "text": content,
+        self._send_notification(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": _guess_language(file_path),
+                    "version": 1,
+                    "text": content,
+                },
             },
-        })
+        )
 
     async def shutdown(self):
         """Shut down the language server gracefully."""
@@ -243,6 +253,7 @@ class LSPClient:
 
 class LSPError(Exception):
     """Error from LSP server."""
+
     pass
 
 
@@ -296,8 +307,7 @@ async def get_lsp_client(file_path: str) -> Optional[LSPClient]:
 
 def _find_workspace_root(file_path: str) -> str:
     """Find project root by looking for .git, pyproject.toml, go.mod, etc."""
-    markers = [".git", "pyproject.toml", "go.mod", "package.json",
-               "Cargo.toml", "pom.xml"]
+    markers = [".git", "pyproject.toml", "go.mod", "package.json", "Cargo.toml", "pom.xml"]
     current = Path(file_path).resolve().parent
     while current != current.parent:
         for marker in markers:

@@ -2,7 +2,6 @@
 
 import asyncio
 import shlex
-import subprocess
 from typing import Optional
 
 from .base import BaseTool, ToolResult, registry
@@ -22,16 +21,34 @@ class GitTool(BaseTool):
             cwd: Working directory for the git command
         """
         allowed_subcommands = {
-            "status", "diff", "log", "show", "branch", "remote", "config",
-            "add", "commit", "push", "pull", "fetch", "merge", "rebase",
-            "checkout", "switch", "stash", "tag", "clone", "init",
+            "status",
+            "diff",
+            "log",
+            "show",
+            "branch",
+            "remote",
+            "config",
+            "add",
+            "commit",
+            "push",
+            "pull",
+            "fetch",
+            "merge",
+            "rebase",
+            "checkout",
+            "switch",
+            "stash",
+            "tag",
+            "clone",
+            "init",
         }
 
         # Block shell metacharacters that enable command chaining
         for mc in ("&&", "||", ";", "|", "`", "$("):
             if mc in command:
                 return ToolResult(
-                    success=False, content="",
+                    success=False,
+                    content="",
                     error=f"Shell metacharacter '{mc}' not allowed in git command",
                 )
 
@@ -66,10 +83,7 @@ class GitTool(BaseTool):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(),
-                timeout=120
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
 
             output = stdout.decode("utf-8", errors="replace")
             error_output = stderr.decode("utf-8", errors="replace")

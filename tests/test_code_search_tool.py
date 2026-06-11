@@ -1,9 +1,6 @@
 """Tests for Phase 6: Code search tool."""
 
 import asyncio
-import tempfile
-
-import pytest
 
 from agent.tools.code_search import CodeSearchTool
 

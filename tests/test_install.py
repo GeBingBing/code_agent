@@ -1,18 +1,15 @@
 """Tests for package installation tool (install.py)."""
 
-import os
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+from agent.tools.base import registry
 from agent.tools.install import (
     InstallPackageTool,
     _detect_package_manager,
     _run_install,
 )
-from agent.tools.base import registry
-
 
 # ── Package Manager Detection ───────────────────────────────────────
 
@@ -102,9 +99,7 @@ class TestRunInstall:
 
     @pytest.mark.asyncio
     async def test_successful_install(self):
-        stdout, stderr, rc = await _run_install(
-            ["echo", "installed"], "/tmp", timeout=5
-        )
+        stdout, stderr, rc = await _run_install(["echo", "installed"], "/tmp", timeout=5)
         assert rc == 0
         assert "installed" in stdout
 
@@ -152,9 +147,7 @@ class TestInstallPackageTool:
         tool = InstallPackageTool()
         with patch("agent.tools.install._run_install") as mock_run:
             mock_run.return_value = ("done", "", 0)
-            result = await tool.execute(
-                package="requests", manager="pip install", args="--upgrade"
-            )
+            result = await tool.execute(package="requests", manager="pip install", args="--upgrade")
             assert result.success is True
             # Verify extra args were appended
             call_args = mock_run.call_args[0][0]

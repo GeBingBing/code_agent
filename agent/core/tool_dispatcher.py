@@ -133,7 +133,8 @@ class ToolDispatcher:
         tool_payload = {"tool": func_name, "args": args, "tc_id": tc_id}
         try:
             tool_payload = await self._hooks.execute(
-                "before_tool_execution", tool_payload,
+                "before_tool_execution",
+                tool_payload,
             )
             args = tool_payload.get("args", args)
         except Exception as hook_exc:
@@ -141,23 +142,23 @@ class ToolDispatcher:
             # etc.) — surface as a tool error so the LLM sees it.
             if isinstance(hook_exc, InvalidTDDTransition):
                 return ToolResult(
-                    success=False, content="",
+                    success=False,
+                    content="",
                     error=f"TDD violation: {hook_exc}",
                     metadata={"tdd_blocked": True},
                 )
             if isinstance(hook_exc, PermissionDenied):
                 return ToolResult(
-                    success=False, content="",
+                    success=False,
+                    content="",
                     error=f"Dual-agent review rejected: {hook_exc}",
                     metadata={"dual_review_blocked": True},
                 )
             if isinstance(hook_exc, ReviewRequiresUser):
                 return ToolResult(
-                    success=False, content="",
-                    error=(
-                        f"Dual-agent review split — user adjudication "
-                        f"required: {hook_exc}"
-                    ),
+                    success=False,
+                    content="",
+                    error=(f"Dual-agent review split — user adjudication " f"required: {hook_exc}"),
                     metadata={"dual_review_user_required": True},
                 )
             raise
@@ -177,11 +178,15 @@ class ToolDispatcher:
             args["parent_run_id"] = self._trace_id
 
         # ── Assistant tool_calls record (must come BEFORE tool result) ──
-        tc_json = json.dumps([{
-            "id": tc_id,
-            "type": "function",
-            "function": {"name": func_name, "arguments": func_args_raw},
-        }])
+        tc_json = json.dumps(
+            [
+                {
+                    "id": tc_id,
+                    "type": "function",
+                    "function": {"name": func_name, "arguments": func_args_raw},
+                }
+            ]
+        )
 
         # Stage 3: top-level permission check
         allowed, reason = self._permissions.check(func_name, args)
@@ -200,7 +205,9 @@ class ToolDispatcher:
                     self._memory.add("assistant", "", tool_calls=tc_json)
                     self._memory.add("tool", "User denied", tool_call_id=tc_id)
                     return ToolResult(
-                        success=False, content="", error="User denied",
+                        success=False,
+                        content="",
+                        error="User denied",
                     )
                 if choice == "a":
                     self._permissions.approve_for_session(func_name, args)
@@ -210,7 +217,9 @@ class ToolDispatcher:
                     self._memory.add("assistant", "", tool_calls=tc_json)
                     self._memory.add("tool", "User denied", tool_call_id=tc_id)
                     return ToolResult(
-                        success=False, content="", error="User denied",
+                        success=False,
+                        content="",
+                        error="User denied",
                     )
 
         # Stage 5: tool-level permission check
@@ -219,16 +228,21 @@ class ToolDispatcher:
             allowed, reason = tool.check_permissions(args)
             if not allowed:
                 self._memory.add(
-                    "tool", f"Blocked by tool: {reason}", tool_call_id=tc_id,
+                    "tool",
+                    f"Blocked by tool: {reason}",
+                    tool_call_id=tc_id,
                 )
                 return ToolResult(
-                    success=False, content="", error=f"Blocked: {reason}",
+                    success=False,
+                    content="",
+                    error=f"Blocked: {reason}",
                 )
 
         # Stage 6: execute + auto-recovery
         if not tool:
             result = ToolResult(
-                success=False, content="",
+                success=False,
+                content="",
                 error=f"Unknown tool: {func_name}",
             )
         else:
@@ -236,14 +250,15 @@ class ToolDispatcher:
                 result = await tool.execute(**args)
             except TypeError as e:
                 result = ToolResult(
-                    success=False, content="",
+                    success=False,
+                    content="",
                     error=(
-                        f"Tool argument error: {e}. "
-                        f"Required params: check the tool schema."
+                        f"Tool argument error: {e}. " f"Required params: check the tool schema."
                     ),
                 )
             if not result.success:
                 from .error_recovery import recover
+
                 corrected = recover(func_name, args, result.error or "")
                 if corrected:
                     result = await tool.execute(**corrected)
@@ -256,7 +271,8 @@ class ToolDispatcher:
 
         # Stage 7: append-only log event
         self._log_event(
-            self._trace_id, "tool_call",
+            self._trace_id,
+            "tool_call",
             tool=func_name,
             path=args.get("path", ""),
             command=args.get("command", "")[:60],
@@ -279,11 +295,7 @@ class ToolDispatcher:
                 self._memory.remember("last_written_file", path)
                 if "/" in path and not self._get_current_project_dir():
                     first_seg = path.split("/")[0]
-                    if (
-                        first_seg
-                        and first_seg not in (".", "..")
-                        and ".." not in first_seg
-                    ):
+                    if first_seg and first_seg not in (".", "..") and ".." not in first_seg:
                         self._set_current_project_dir(first_seg)
             elif func_name == "read_file":
                 self._memory.remember("last_read_file", args.get("path", ""))

@@ -2,8 +2,6 @@
 
 import asyncio
 
-import pytest
-
 from agent.tools.web_fetch import WebFetchTool
 
 

@@ -2,7 +2,6 @@
 
 import json
 import re
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,7 +13,6 @@ from agent.agents.evaluator import (
     EvaluatorAgent,
     _parse_score_response,
 )
-
 
 # ── Dataclasses ──────────────────────────────────────────────────
 
@@ -42,7 +40,8 @@ class TestEvaluationScore:
 class TestEvaluationReport:
     def test_overall_score_auto_computed(self):
         r = EvaluationReport(
-            task="t", agent_id="main",
+            task="t",
+            agent_id="main",
             scores=[
                 EvaluationScore("a", 8),
                 EvaluationScore("b", 6),
@@ -54,7 +53,8 @@ class TestEvaluationReport:
 
     def test_overall_score_explicit_preserved(self):
         r = EvaluationReport(
-            task="t", agent_id="main",
+            task="t",
+            agent_id="main",
             scores=[EvaluationScore("a", 8)],
             overall_score=5.5,
         )
@@ -67,7 +67,8 @@ class TestEvaluationReport:
 
     def test_to_dict_roundtrip(self):
         r = EvaluationReport(
-            task="t", agent_id="main",
+            task="t",
+            agent_id="main",
             scores=[EvaluationScore("completion", 9, "ok")],
             findings=["finding 1"],
             suggestions=["suggest 1"],
@@ -80,7 +81,8 @@ class TestEvaluationReport:
 
     def test_to_json_parses(self):
         r = EvaluationReport(
-            task="t", agent_id="main",
+            task="t",
+            agent_id="main",
             scores=[EvaluationScore("completion", 9)],
         )
         j = r.to_json()
@@ -89,7 +91,8 @@ class TestEvaluationReport:
 
     def test_to_markdown_structure(self):
         r = EvaluationReport(
-            task="impl X", agent_id="main",
+            task="impl X",
+            agent_id="main",
             scores=[
                 EvaluationScore("completion", 9, "all AC met"),
                 EvaluationScore("code_quality", 7, "clean code"),
@@ -109,7 +112,8 @@ class TestEvaluationReport:
 
     def test_to_markdown_omits_empty_sections(self):
         r = EvaluationReport(
-            task="t", agent_id="main",
+            task="t",
+            agent_id="main",
             scores=[EvaluationScore("completion", 9)],
         )
         md = r.to_markdown()
@@ -243,7 +247,9 @@ class TestHeuristicScoring:
         assert any("error" in s.lower() for s in suggestions)
 
     def test_all_four_dimensions_returned(self):
-        scores, _, _ = self.ev._score_heuristic({"tool_calls": 1, "errors": [], "permission_decisions": {}})
+        scores, _, _ = self.ev._score_heuristic(
+            {"tool_calls": 1, "errors": [], "permission_decisions": {}}
+        )
         dims = {s.dimension for s in scores}
         assert dims == set(DIMENSIONS)
 
@@ -266,16 +272,18 @@ class TestEvaluateLLM:
         eng = MagicMock()
         eng.config.model = "gpt-4o"
         eng.llm = MagicMock()
-        canned = json.dumps({
-            "scores": [
-                {"dimension": "completion", "score": 9, "rationale": "AC met"},
-                {"dimension": "code_quality", "score": 8, "rationale": "clean"},
-                {"dimension": "security", "score": 7, "rationale": "good"},
-                {"dimension": "performance", "score": 9, "rationale": "fast"},
-            ],
-            "findings": ["✅ tests pass"],
-            "suggestions": ["Add docs"],
-        })
+        canned = json.dumps(
+            {
+                "scores": [
+                    {"dimension": "completion", "score": 9, "rationale": "AC met"},
+                    {"dimension": "code_quality", "score": 8, "rationale": "clean"},
+                    {"dimension": "security", "score": 7, "rationale": "good"},
+                    {"dimension": "performance", "score": 9, "rationale": "fast"},
+                ],
+                "findings": ["✅ tests pass"],
+                "suggestions": ["Add docs"],
+            }
+        )
         eng.llm.chat = AsyncMock(return_value=(canned, {}))
         ev = EvaluatorAgent(eng)
         report = await ev.evaluate(task="t", agent_id="main", audit_records=[])
@@ -300,12 +308,14 @@ class TestEvaluateLLM:
         eng.config.model = "gpt-4o"
         eng.llm = MagicMock()
         # LLM only returned 2 dimensions
-        canned = json.dumps({
-            "scores": [
-                {"dimension": "completion", "score": 9, "rationale": "ok"},
-                {"dimension": "code_quality", "score": 8, "rationale": "ok"},
-            ],
-        })
+        canned = json.dumps(
+            {
+                "scores": [
+                    {"dimension": "completion", "score": 9, "rationale": "ok"},
+                    {"dimension": "code_quality", "score": 8, "rationale": "ok"},
+                ],
+            }
+        )
         eng.llm.chat = AsyncMock(return_value=(canned, {}))
         ev = EvaluatorAgent(eng)
         report = await ev.evaluate(task="t", agent_id="main", audit_records=[])
@@ -319,7 +329,8 @@ class TestEvaluateLLM:
 class TestWriteReport:
     def test_writes_both_files(self, tmp_path):
         r = EvaluationReport(
-            task="t", agent_id="main",
+            task="t",
+            agent_id="main",
             scores=[EvaluationScore("completion", 9)],
         )
         md_path, json_path = EvaluatorAgent.write_report(r, workspace=tmp_path)
@@ -330,7 +341,8 @@ class TestWriteReport:
 
     def test_files_have_correct_content(self, tmp_path):
         r = EvaluationReport(
-            task="impl X", agent_id="main",
+            task="impl X",
+            agent_id="main",
             scores=[EvaluationScore("completion", 9, "AC met")],
         )
         md_path, json_path = EvaluatorAgent.write_report(r, workspace=tmp_path)

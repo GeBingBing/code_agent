@@ -11,8 +11,8 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from .base import BaseTool, ToolResult, registry
 from ..core.audit_log import get_audit_logger
+from .base import BaseTool, ToolResult, registry
 
 
 class AuditQueryTool(BaseTool):

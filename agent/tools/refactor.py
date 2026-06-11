@@ -8,9 +8,10 @@ import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .base import BaseTool, ToolResult, registry
 from index.code_indexer import CodeIndexer
+
 from ..core.workspace import get_workspace_root
+from .base import BaseTool, ToolResult, registry
 
 
 def _workspace() -> Path:
@@ -62,7 +63,9 @@ class SafeRenameTool(BaseTool):
             path: Optional subdirectory to limit search scope
         """
         if not symbol or not new_name:
-            return ToolResult(success=False, content="", error="Both 'symbol' and 'new_name' are required")
+            return ToolResult(
+                success=False, content="", error="Both 'symbol' and 'new_name' are required"
+            )
 
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", new_name):
             return ToolResult(success=False, content="", error=f"Invalid identifier: '{new_name}'")
@@ -93,7 +96,7 @@ class SafeRenameTool(BaseTool):
             return ToolResult(
                 success=False,
                 content="",
-                error=f"Symbol '{symbol}' not found in codebase. Try indexing first with code_search."
+                error=f"Symbol '{symbol}' not found in codebase. Try indexing first with code_search.",
             )
 
         # Build changes: group by file
@@ -103,21 +106,25 @@ class SafeRenameTool(BaseTool):
         for fpath, line_no in definition_locations:
             if fpath not in changes_by_file:
                 changes_by_file[fpath] = []
-            changes_by_file[fpath].append({
-                "line": line_no,
-                "type": "definition",
-            })
+            changes_by_file[fpath].append(
+                {
+                    "line": line_no,
+                    "type": "definition",
+                }
+            )
 
         # Add references
         for ref in refs:
             fpath = ref["path"]
             if fpath not in changes_by_file:
                 changes_by_file[fpath] = []
-            changes_by_file[fpath].append({
-                "line": ref["line"],
-                "context": ref["context"],
-                "type": "reference",
-            })
+            changes_by_file[fpath].append(
+                {
+                    "line": ref["line"],
+                    "context": ref["context"],
+                    "type": "reference",
+                }
+            )
 
         # Sort by line descending so we can edit from bottom to top without offset shifts
         for fpath in changes_by_file:
@@ -157,16 +164,14 @@ class SafeRenameTool(BaseTool):
 
                 original_line = lines[line_no - 1]
                 # Use word-boundary replacement to avoid partial matches
-                new_line = re.sub(
-                    rf'\b{re.escape(base_symbol)}\b',
-                    new_name,
-                    original_line
-                )
+                new_line = re.sub(rf"\b{re.escape(base_symbol)}\b", new_name, original_line)
                 if new_line != original_line:
                     lines[line_no - 1] = new_line
                     modified = True
                     marker = "[def]" if change.get("type") == "definition" else "[ref]"
-                    file_preview.append(f"    L{line_no:4d} {marker}  - {original_line.strip()[:60]}")
+                    file_preview.append(
+                        f"    L{line_no:4d} {marker}  - {original_line.strip()[:60]}"
+                    )
                     file_preview.append(f"    L{line_no:4d} {marker}  + {new_line.strip()[:60]}")
 
             if not modified:
@@ -176,7 +181,10 @@ class SafeRenameTool(BaseTool):
 
             if not dry_run:
                 try:
-                    file_path.write_text("\n".join(lines) + ("\n" if content.endswith("\n") else ""), encoding="utf-8")
+                    file_path.write_text(
+                        "\n".join(lines) + ("\n" if content.endswith("\n") else ""),
+                        encoding="utf-8",
+                    )
                     applied_files.append(fpath)
 
                     # Validate Python syntax
@@ -247,7 +255,9 @@ class GetRefactorPreviewTool(BaseTool):
     """Show a preview of what safe_rename would change without applying."""
 
     name = "get_refactor_preview"
-    description = "Preview all changes that would be made by safe_rename without modifying any files"
+    description = (
+        "Preview all changes that would be made by safe_rename without modifying any files"
+    )
 
     async def execute(self, symbol: str, new_name: str, path: str = "", **kwargs) -> ToolResult:
         """Delegate to SafeRenameTool with dry_run=True."""
@@ -266,7 +276,11 @@ class GetRefactorPreviewTool(BaseTool):
                     "properties": {
                         "symbol": {"type": "string", "description": "Symbol to rename"},
                         "new_name": {"type": "string", "description": "Proposed new name"},
-                        "path": {"type": "string", "default": "", "description": "Subdirectory scope"},
+                        "path": {
+                            "type": "string",
+                            "default": "",
+                            "description": "Subdirectory scope",
+                        },
                     },
                     "required": ["symbol", "new_name"],
                 },

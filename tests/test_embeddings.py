@@ -1,6 +1,7 @@
 """Tests for the EmbeddingProvider abstraction (PR-04)."""
 
 import math
+
 import numpy as np
 import pytest
 
@@ -9,10 +10,9 @@ from agent.core.embeddings import (
     HashingEmbeddingProvider,
     SentenceTransformerProvider,
     TfidfEmbeddingProvider,
-    get_default_provider,
     _sentence_transformers_available,
+    get_default_provider,
 )
-
 
 # ── Hashing provider ───────────────────────────────────────────────
 
@@ -88,10 +88,12 @@ class TestSentenceTransformerProvider:
     def test_raises_if_not_installed(self, monkeypatch):
         """Simulate missing package → ImportError."""
         import sys
+
         # Force ImportError on sentence_transformers
         monkeypatch.setitem(sys.modules, "sentence_transformers", None)
         # Make __import__ raise ImportError for sentence_transformers
         import builtins
+
         original = builtins.__import__
 
         def fake_import(name, *args, **kwargs):
@@ -126,11 +128,17 @@ class TestSentenceTransformerProvider:
         v_concurrency = np.asarray(p.encode("how to handle concurrency"), dtype=np.float64)
         v_async = np.asarray(p.encode("async/await asyncio.gather"), dtype=np.float64)
         v_cooking = np.asarray(p.encode("how to bake bread"), dtype=np.float64)
-        sim_related = float(np.dot(v_concurrency, v_async) / (np.linalg.norm(v_concurrency) * np.linalg.norm(v_async)))
-        sim_unrelated = float(np.dot(v_concurrency, v_cooking) / (np.linalg.norm(v_concurrency) * np.linalg.norm(v_cooking)))
-        assert sim_related > sim_unrelated, (
-            f"expected related > unrelated, got {sim_related} vs {sim_unrelated}"
+        sim_related = float(
+            np.dot(v_concurrency, v_async)
+            / (np.linalg.norm(v_concurrency) * np.linalg.norm(v_async))
         )
+        sim_unrelated = float(
+            np.dot(v_concurrency, v_cooking)
+            / (np.linalg.norm(v_concurrency) * np.linalg.norm(v_cooking))
+        )
+        assert (
+            sim_related > sim_unrelated
+        ), f"expected related > unrelated, got {sim_related} vs {sim_unrelated}"
 
 
 # ── TF-IDF provider ────────────────────────────────────────────────

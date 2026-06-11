@@ -16,24 +16,27 @@ Auto-register: import this module from the command registry
 (see agent/commands/__init__.py) to make these commands available.
 """
 
-import os
-from .base import SlashCommand, registry
 from ..core.user_profile import UserProfile
-
+from .base import SlashCommand, registry
 
 # ── Helpers ─────────────────────────────────────────────────────────
+
 
 def _bold(text: str) -> str:
     return f"\033[1m{text}\033[0m"
 
+
 def _cyan(text: str) -> str:
     return f"\033[36m{text}\033[0m"
+
 
 def _green(text: str) -> str:
     return f"\033[32m{text}\033[0m"
 
+
 def _yellow(text: str) -> str:
     return f"\033[33m{text}\033[0m"
+
 
 def _dim(text: str) -> str:
     return f"\033[2m{text}\033[0m"
@@ -58,7 +61,7 @@ async def _handle_whoami(args: str, ctx: dict) -> str:
     if profile.is_empty():
         return (
             f"{_yellow('No profile data yet.')}\n"
-            f"  Tell me about yourself — e.g. {_cyan('\"I am hay, prefer Chinese\"')}\n"
+            f'  Tell me about yourself — e.g. {_cyan(chr(34) + "I am hay, prefer Chinese" + chr(34))}\n'
             f"  Or use {_cyan('/remember <key> <value>')} to save a fact explicitly."
         )
 
@@ -182,30 +185,38 @@ async def _handle_profile(args: str, ctx: dict) -> str:
 
 # ── Registration ───────────────────────────────────────────────────
 
-registry.register(SlashCommand(
-    name="whoami",
-    handler=_handle_whoami,
-    description="Show what the agent knows about you",
-    usage="/whoami",
-))
+registry.register(
+    SlashCommand(
+        name="whoami",
+        handler=_handle_whoami,
+        description="Show what the agent knows about you",
+        usage="/whoami",
+    )
+)
 
-registry.register(SlashCommand(
-    name="remember",
-    handler=_handle_remember,
-    description="Remember a fact about yourself (e.g. /remember name hay)",
-    usage="/remember <key> <value>",
-))
+registry.register(
+    SlashCommand(
+        name="remember",
+        handler=_handle_remember,
+        description="Remember a fact about yourself (e.g. /remember name hay)",
+        usage="/remember <key> <value>",
+    )
+)
 
-registry.register(SlashCommand(
-    name="forget",
-    handler=_handle_forget,
-    description="Forget a fact about yourself (e.g. /forget name)",
-    usage="/forget <key>",
-))
+registry.register(
+    SlashCommand(
+        name="forget",
+        handler=_handle_forget,
+        description="Forget a fact about yourself (e.g. /forget name)",
+        usage="/forget <key>",
+    )
+)
 
-registry.register(SlashCommand(
-    name="profile",
-    handler=_handle_profile,
-    description="Show or clear the user profile (alias of /whoami)",
-    usage="/profile [clear]",
-))
+registry.register(
+    SlashCommand(
+        name="profile",
+        handler=_handle_profile,
+        description="Show or clear the user profile (alias of /whoami)",
+        usage="/profile [clear]",
+    )
+)

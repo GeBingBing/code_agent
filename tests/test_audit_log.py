@@ -1,21 +1,17 @@
 """Tests for the append-only audit log (PR-08)."""
 
 import json
-import os
 import re
-import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
 
 from agent.core.audit_log import (
-    AuditLogger,
     AuditEntry,
+    AuditLogger,
     get_audit_logger,
     reset_audit_logger,
 )
-
 
 # ── Basic write / read ─────────────────────────────────────────────
 
@@ -35,7 +31,9 @@ class TestBasicLogging:
     def test_log_writes_jsonl(self, log_dir):
         al = AuditLogger(log_dir=log_dir)
         al.log({"session_id": "s1", "agent_id": "main", "action": "tool_call", "tool": "read_file"})
-        al.log({"session_id": "s1", "agent_id": "main", "action": "tool_result", "tool": "read_file"})
+        al.log(
+            {"session_id": "s1", "agent_id": "main", "action": "tool_result", "tool": "read_file"}
+        )
         content = list(log_dir.glob("*.jsonl"))[0].read_text()
         lines = [l for l in content.strip().split("\n") if l]
         assert len(lines) == 2
@@ -65,10 +63,14 @@ class TestPrivacy:
 
     def test_args_replaced_with_hash(self, log_dir):
         al = AuditLogger(log_dir=log_dir)
-        al.log({
-            "session_id": "s1", "agent_id": "main", "action": "tool_call",
-            "args": {"path": "/secret/file.txt", "password": "hunter2"},
-        })
+        al.log(
+            {
+                "session_id": "s1",
+                "agent_id": "main",
+                "action": "tool_call",
+                "args": {"path": "/secret/file.txt", "password": "hunter2"},
+            }
+        )
         rec = json.loads(list(log_dir.glob("*.jsonl"))[0].read_text().strip())
         assert "args" not in rec
         assert rec["args_hash"].startswith("sha256:")
@@ -79,10 +81,14 @@ class TestPrivacy:
 
     def test_result_replaced_with_hash(self, log_dir):
         al = AuditLogger(log_dir=log_dir)
-        al.log({
-            "session_id": "s1", "agent_id": "main", "action": "tool_result",
-            "result": {"data": "top secret content"},
-        })
+        al.log(
+            {
+                "session_id": "s1",
+                "agent_id": "main",
+                "action": "tool_result",
+                "result": {"data": "top secret content"},
+            }
+        )
         rec = json.loads(list(log_dir.glob("*.jsonl"))[0].read_text().strip())
         assert "result" not in rec
         assert rec["result_hash"].startswith("sha256:")
@@ -115,8 +121,12 @@ class TestQuery:
         log_dir = tmp_path / "audit"
         al = AuditLogger(log_dir=log_dir)
         al.log({"session_id": "s1", "agent_id": "main", "action": "tool_call", "tool": "read_file"})
-        al.log({"session_id": "s1", "agent_id": "main", "action": "tool_result", "tool": "read_file"})
-        al.log({"session_id": "s1", "agent_id": "sub-1", "action": "tool_call", "tool": "write_file"})
+        al.log(
+            {"session_id": "s1", "agent_id": "main", "action": "tool_result", "tool": "read_file"}
+        )
+        al.log(
+            {"session_id": "s1", "agent_id": "sub-1", "action": "tool_call", "tool": "write_file"}
+        )
         al.log({"session_id": "s2", "agent_id": "main", "action": "permission_check"})
         return al, log_dir
 
@@ -244,8 +254,12 @@ class TestImmutability:
 class TestAuditEntry:
     def test_to_dict(self):
         e = AuditEntry(
-            session_id="s1", agent_id="main", action="tool_call",
-            tool="read_file", args={"path": "/x"}, permission_decision="allow",
+            session_id="s1",
+            agent_id="main",
+            action="tool_call",
+            tool="read_file",
+            args={"path": "/x"},
+            permission_decision="allow",
         )
         d = e.to_dict()
         assert d["session_id"] == "s1"

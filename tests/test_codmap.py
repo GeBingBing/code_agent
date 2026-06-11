@@ -1,18 +1,15 @@
 """Tests for the CodmapGenerator (PR-05)."""
 
-import os
 import time
-from pathlib import Path
 
 import pytest
 
 from index.codmap import (
     CodmapGenerator,
     FileEntry,
-    extract_python_symbols,
     extract_js_symbols,
+    extract_python_symbols,
 )
-
 
 # ── FileEntry ──────────────────────────────────────────────────────
 
@@ -47,7 +44,9 @@ class TestFileEntry:
 
     def test_render_includes_symbols(self):
         e = FileEntry(
-            path="x.py", line_count=100, mtime=time.time(),
+            path="x.py",
+            line_count=100,
+            mtime=time.time(),
             symbols=["class Foo:", "def bar()", "baz = …"],
         )
         lines = e.render()
@@ -57,7 +56,9 @@ class TestFileEntry:
 
     def test_render_caps_symbols(self):
         e = FileEntry(
-            path="x.py", line_count=10, mtime=time.time(),
+            path="x.py",
+            line_count=10,
+            mtime=time.time(),
             symbols=[f"def fn{i}()" for i in range(20)],
         )
         lines = e.render(max_symbols=3)
@@ -159,15 +160,11 @@ class TestCodmapGenerator:
         """Create a small workspace with Python and JS files."""
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "a.py").write_text(
-            "def alpha():\n    pass\n\n"
-            "def beta(x: int) -> bool:\n    return True\n"
+            "def alpha():\n    pass\n\n" "def beta(x: int) -> bool:\n    return True\n"
         )
-        (tmp_path / "src" / "b.py").write_text(
-            "class Foo:\n    def bar(self):\n        pass\n"
-        )
+        (tmp_path / "src" / "b.py").write_text("class Foo:\n    def bar(self):\n        pass\n")
         (tmp_path / "src" / "app.js").write_text(
-            "function hello() { return 1; }\n"
-            "class App {}\n"
+            "function hello() { return 1; }\n" "class App {}\n"
         )
         # File in skip dir — should be ignored
         (tmp_path / "src" / "__pycache__").mkdir()
@@ -190,7 +187,7 @@ class TestCodmapGenerator:
         gen = CodmapGenerator(workspace=sample_workspace)
         text = gen.generate()
         assert "alpha" in text  # function name from a.py
-        assert "Foo" in text    # class name from b.py
+        assert "Foo" in text  # class name from b.py
 
     def test_skips_pycache(self, sample_workspace):
         gen = CodmapGenerator(workspace=sample_workspace)

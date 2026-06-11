@@ -1,6 +1,7 @@
 """Glob tool — pattern-based file search."""
 
 from pathlib import Path
+
 from .base import BaseTool, ToolResult, registry
 
 
@@ -59,13 +60,26 @@ class GlobTool(BaseTool):
 
             matches = sorted(base.glob(pattern))
             # Filter out common ignore patterns
-            ignored = {".git", "__pycache__", "node_modules", ".venv", "venv",
-                       ".tox", ".mypy_cache", ".pytest_cache", "dist", "build",
-                       ".DS_Store", "*.pyc"}
+            ignored = {
+                ".git",
+                "__pycache__",
+                "node_modules",
+                ".venv",
+                "venv",
+                ".tox",
+                ".mypy_cache",
+                ".pytest_cache",
+                "dist",
+                "build",
+                ".DS_Store",
+                "*.pyc",
+            }
             filtered = []
             for m in matches:
                 parts = set(m.parts)
-                if not parts & ignored and not any(p.startswith(".") and p != "." for p in m.parts if p != base.name):
+                if not parts & ignored and not any(
+                    p.startswith(".") and p != "." for p in m.parts if p != base.name
+                ):
                     filtered.append(m)
 
             # Limit output
@@ -80,7 +94,8 @@ class GlobTool(BaseTool):
                 lines.append(f"... and {len(filtered) - max_results} more")
             if not lines:
                 return ToolResult(
-                    success=True, content="No files matched",
+                    success=True,
+                    content="No files matched",
                     metadata={"count": 0},
                 )
 

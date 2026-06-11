@@ -1,6 +1,7 @@
 """Tests for the EventBus pub/sub primitive."""
 
 import asyncio
+
 import pytest
 
 from agent.core.event_bus import Event, EventBus

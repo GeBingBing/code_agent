@@ -1,20 +1,14 @@
 """Tests for the UserProfile class — root-cause fix for session amnesia."""
 
 import json
-import os
+
 import pytest
-from pathlib import Path
-from unittest.mock import patch
 
 from agent.core.user_profile import (
-    UserProfile,
-    reset_user_profile_for_tests,
-    _default_path,
-    _validate_value,
-    ChangeRecord,
     _CHANGE_LOG_MAX,
+    UserProfile,
+    _validate_value,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────
 
@@ -78,8 +72,11 @@ class TestSaveAndLoad:
 
     def test_load_round_trip(self, tmp_profile_path):
         p = UserProfile(
-            name="hay", preferred_name="H", pronouns="he/him",
-            language="chinese", timezone="Asia/Shanghai",
+            name="hay",
+            preferred_name="H",
+            pronouns="he/him",
+            language="chinese",
+            timezone="Asia/Shanghai",
             expertise_level="expert",
             important_facts=["name is hay", "likes PEP 8"],
             preferences={"editor": "vim"},
@@ -254,18 +251,28 @@ class TestToPrompt:
 
     def test_all_fields(self, tmp_profile_path):
         p = UserProfile(
-            name="hay", preferred_name="H", pronouns="he/him",
-            language="chinese", timezone="Asia/Shanghai",
+            name="hay",
+            preferred_name="H",
+            pronouns="he/him",
+            language="chinese",
+            timezone="Asia/Shanghai",
             expertise_level="expert",
             important_facts=["likes vim"],
             preferences={"editor": "vim"},
             custom_instructions="use type hints",
         )
         text = p.to_prompt()
-        for token in ["Name: hay", "Preferred name: H", "Pronouns: he/him",
-                      "Language: chinese", "Timezone: Asia/Shanghai",
-                      "Expertise: expert", "editor: vim", "likes vim",
-                      "use type hints"]:
+        for token in [
+            "Name: hay",
+            "Preferred name: H",
+            "Pronouns: he/him",
+            "Language: chinese",
+            "Timezone: Asia/Shanghai",
+            "Expertise: expert",
+            "editor: vim",
+            "likes vim",
+            "use type hints",
+        ]:
             assert token in text, f"Missing {token!r} in: {text}"
 
     def test_truncates_long_values(self, tmp_profile_path):
@@ -325,7 +332,8 @@ class TestClear:
 class TestToDictAndFromDict:
     def test_round_trip(self, tmp_profile_path):
         original = UserProfile(
-            name="hay", language="chinese",
+            name="hay",
+            language="chinese",
             important_facts=["a", "b"],
             preferences={"x": "y"},
         )

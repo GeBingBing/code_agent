@@ -2,12 +2,13 @@
 
 import numpy as np
 import pytest
-from pathlib import Path
-import tempfile
 
 from agent.core.vector_memory import (
-    VectorMemory, simple_text_hash, cosine_similarity,
-    get_vector_memory, reset_vector_memory
+    VectorMemory,
+    cosine_similarity,
+    get_vector_memory,
+    reset_vector_memory,
+    simple_text_hash,
 )
 
 

@@ -26,8 +26,8 @@ def _recover_read_file(args: dict, error: str) -> Optional[dict]:
     """File not found → try fuzzy name matching in same directory."""
     if "not found" not in error.lower():
         return None
-    import os
     from pathlib import Path
+
     path = Path(args.get("path", ""))
     if not path.parent.exists():
         return None
@@ -82,10 +82,12 @@ def _levenshtein(a: str, b: str) -> int:
     for i, ca in enumerate(a):
         curr = [i + 1]
         for j, cb in enumerate(b):
-            curr.append(min(
-                prev[j + 1] + 1,      # deletion
-                curr[j] + 1,           # insertion
-                prev[j] + (ca != cb),  # substitution
-            ))
+            curr.append(
+                min(
+                    prev[j + 1] + 1,  # deletion
+                    curr[j] + 1,  # insertion
+                    prev[j] + (ca != cb),  # substitution
+                )
+            )
         prev = curr
     return prev[-1]

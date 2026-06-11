@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Optional
+from typing import Any
 
 from ..governance.ab_test import ExperimentObservation
 
@@ -75,11 +75,13 @@ class ABTestApplyHook:
                 if marker in system_prompt and replacement:
                     system_prompt = system_prompt.replace(marker, replacement, 1)
                 if not any(e.get("experiment_id") == exp.id for e in in_flight):
-                    in_flight.append({
-                        "experiment_id": exp.id,
-                        "variant_id": variant.id,
-                        "variant_name": variant.name,
-                    })
+                    in_flight.append(
+                        {
+                            "experiment_id": exp.id,
+                            "variant_id": variant.id,
+                            "variant_name": variant.name,
+                        }
+                    )
             payload["system"] = system_prompt
         except Exception:
             pass
@@ -89,8 +91,15 @@ class ABTestApplyHook:
 class ABTestRecordObservationHook:
     """Write one observation per in-flight experiment at session end."""
 
-    def __init__(self, ab_test, user_id: str, get_task_start_ts, get_last_task,
-                 get_total_input_tokens, get_total_output_tokens):
+    def __init__(
+        self,
+        ab_test,
+        user_id: str,
+        get_task_start_ts,
+        get_last_task,
+        get_total_input_tokens,
+        get_total_output_tokens,
+    ):
         self._ab_test = ab_test
         self._user_id = user_id
         self._get_task_start_ts = get_task_start_ts

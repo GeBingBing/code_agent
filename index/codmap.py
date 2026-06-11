@@ -28,11 +28,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-
 CODE_EXTS = {".py", ".js", ".ts", ".tsx", ".go", ".rs", ".java"}
 SKIP_DIRS = {
-    "__pycache__", ".git", "node_modules", "venv", ".venv",
-    "dist", "build", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+    "__pycache__",
+    ".git",
+    "node_modules",
+    "venv",
+    ".venv",
+    "dist",
+    "build",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
     "workspace",  # not the user's source tree
 }
 
@@ -40,6 +47,7 @@ SKIP_DIRS = {
 @dataclass
 class FileEntry:
     """One file's contribution to the codmap."""
+
     path: str
     line_count: int
     mtime: float
@@ -177,9 +185,13 @@ class CodmapGenerator:
     DEFAULT_MAX_TOTAL_KB = 5
     DEFAULT_MAX_SYMBOLS_PER_FILE = 5
 
-    def __init__(self, workspace: Path, max_files: int = DEFAULT_MAX_FILES,
-                 max_total_kb: int = DEFAULT_MAX_TOTAL_KB,
-                 max_symbols_per_file: int = DEFAULT_MAX_SYMBOLS_PER_FILE):
+    def __init__(
+        self,
+        workspace: Path,
+        max_files: int = DEFAULT_MAX_FILES,
+        max_total_kb: int = DEFAULT_MAX_TOTAL_KB,
+        max_symbols_per_file: int = DEFAULT_MAX_SYMBOLS_PER_FILE,
+    ):
         self.workspace = Path(workspace).resolve()
         self.max_files = max_files
         self.max_total_kb = max_total_kb
@@ -187,8 +199,7 @@ class CodmapGenerator:
         self._cache: Dict[str, FileEntry] = {}
         self._cache_mtime: Dict[str, float] = {}
 
-    def generate(self, max_files: Optional[int] = None,
-                 max_total_kb: Optional[int] = None) -> str:
+    def generate(self, max_files: Optional[int] = None, max_total_kb: Optional[int] = None) -> str:
         """Build the codmap text. Returns empty string for empty workspaces."""
         max_files = max_files if max_files is not None else self.max_files
         max_total_kb = max_total_kb if max_total_kb is not None else self.max_total_kb

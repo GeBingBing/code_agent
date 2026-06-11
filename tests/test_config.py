@@ -1,11 +1,6 @@
 """Tests for config file support and structured logging."""
 
 import json
-import os
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from agent.core.engine import AgentConfig, _load_config_file
 
@@ -32,6 +27,7 @@ class TestStructuredLogging:
     def test_log_entry_contains_trace_id(self):
         """Log entries should include trace_id."""
         import uuid
+
         trace_id = str(uuid.uuid4())[:8]
 
         log_entry = {
@@ -47,7 +43,6 @@ class TestStructuredLogging:
 
     def test_json_log_format(self):
         """Logs should be parseable JSON."""
-        import json
 
         log = {
             "timestamp": "2026-05-17T12:00:00",
@@ -66,8 +61,10 @@ class TestStructuredLogging:
         """AgentEngine should have a trace_id attribute."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         config = AgentConfig(model="mock", provider="openai", mode="bypass")
-        from agent.core.engine import AgentEngine
         from unittest.mock import AsyncMock
+
+        from agent.core.engine import AgentEngine
+
         eng = AgentEngine(config)
         eng.llm = type("StubLLM", (), {"chat": AsyncMock()})()
 

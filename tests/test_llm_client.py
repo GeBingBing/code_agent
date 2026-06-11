@@ -1,9 +1,5 @@
 """Tests for Phase 0: LLM client multi-provider detection."""
 
-import os
-
-import pytest
-
 from agent.llm.client import LLMClient
 
 

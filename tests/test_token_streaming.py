@@ -1,13 +1,13 @@
 """Tests for token-level streaming output."""
 
 import asyncio
-import pytest
 
-from agent.llm.client import LLMClient, Message
+import pytest
 
 
 class MockDelta:
     """Mock a single token delta."""
+
     def __init__(self, content: str = "", tool_calls=None):
         self.content = content
         self.tool_calls = tool_calls or []
@@ -15,18 +15,21 @@ class MockDelta:
 
 class MockChoice:
     """Mock a streaming choice."""
+
     def __init__(self, delta):
         self.delta = delta
 
 
 class MockChunk:
     """Mock a streaming chunk."""
+
     def __init__(self, content: str = "", tool_calls=None):
         self.choices = [MockChoice(MockDelta(content, tool_calls))]
 
 
 class MockStreamResponse:
     """Mock OpenAI streaming response - yields tokens one by one."""
+
     def __init__(self, tokens: list):
         self.tokens = tokens
 
@@ -40,6 +43,7 @@ class TestTokenLevelStreaming:
     @pytest.fixture
     def mock_streaming_llm(self, monkeypatch):
         """Mock LLM that returns tokens one at a time."""
+
         async def mock_chat(*args, **kwargs):
             tokens = [
                 MockChunk("Hello"),
@@ -67,7 +71,7 @@ class TestTokenLevelStreaming:
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -98,7 +102,7 @@ class TestTokenLevelStreaming:
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -131,7 +135,7 @@ class TestTokenLevelStreaming:
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             async for event in engine.run_stream("test"):
@@ -153,7 +157,7 @@ class TestTokenLevelStreaming:
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -182,7 +186,7 @@ class TestStreamingEventTypes:
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -206,7 +210,7 @@ class TestStreamingEventTypes:
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -229,7 +233,7 @@ class TestStreamingEventTypes:
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -251,7 +255,7 @@ class TestStreamingEventTypes:
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []

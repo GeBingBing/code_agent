@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional
 
 
 class JSONFormatter(logging.Formatter):
@@ -23,16 +22,35 @@ class JSONFormatter(logging.Formatter):
     """
 
     RESERVED = {
-        "name", "msg", "args", "levelname", "levelno", "pathname",
-        "filename", "module", "exc_info", "exc_text", "stack_info",
-        "lineno", "funcName", "created", "msecs", "relativeCreated",
-        "thread", "threadName", "processName", "process", "message",
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "message",
         "taskName",
     }
 
     def format(self, record: logging.LogRecord) -> str:
         out = {
-            "ts": datetime.fromtimestamp(record.created, timezone.utc).isoformat().replace("+00:00", "Z"),
+            "ts": datetime.fromtimestamp(record.created, timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -67,8 +85,7 @@ def setup_logging(level: str = "INFO", stream=None) -> logging.Handler:
     root = logging.getLogger()
     # Don't blow away every handler — only replace the ones we own.
     root.handlers = [
-        h for h in root.handlers
-        if not isinstance(getattr(h, "formatter", None), JSONFormatter)
+        h for h in root.handlers if not isinstance(getattr(h, "formatter", None), JSONFormatter)
     ] + [handler]
     root.setLevel(level)
     return handler

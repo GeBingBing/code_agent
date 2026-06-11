@@ -1,6 +1,7 @@
 """StructuredOutput tool — enforce JSON output format for the next response."""
 
 import json
+
 from .base import BaseTool, ToolResult, registry
 
 
@@ -39,7 +40,7 @@ class StructuredOutputTool(BaseTool):
                             "type": "string",
                             "description": (
                                 "JSON schema describing the expected output. "
-                                "Example: '{\"type\": \"array\", \"items\": {\"name\": \"string\", \"version\": \"string\"}}'"
+                                'Example: \'{"type": "array", "items": {"name": "string", "version": "string"}}\''
                             ),
                         },
                         "description": {

@@ -23,19 +23,17 @@ Injection: UserProfile.to_prompt() — rendered as <user_profile> XML
 import json
 import os
 import tempfile
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
-
 
 # Default path — overridable via env CODING_AGENT_USER_PROFILE
 _DEFAULT_PATH = Path("~/.coding-agent/user_profile.json").expanduser()
 
 # ── L2 schema check constants ──────────────────────────────────────
 # Reuse NAME_BLACKLIST from fact_extractor — single source of truth.
-from .fact_extractor import NAME_BLACKLIST, _QUESTION_END_MARKERS  # noqa: E402
-
+from .fact_extractor import _QUESTION_END_MARKERS, NAME_BLACKLIST  # noqa: E402
 
 # Per-key max length (chars). Strict defaults; anything longer is rejected
 # by the L2 schema check. These are upper bounds, not recommendations.
@@ -88,12 +86,13 @@ class ChangeRecord:
     Captures `before`/`after` so undo_last() can revert. `source`
     distinguishes extractor writes from manual /remember calls.
     """
+
     timestamp: str
-    action: str          # "remember_fact" | "remember_preference" | "forget" | "clear"
-    key: str             # Field name (e.g. "name") or fact/pref key
+    action: str  # "remember_fact" | "remember_preference" | "forget" | "clear"
+    key: str  # Field name (e.g. "name") or fact/pref key
     before: Optional[str]
     after: Optional[str]
-    source: str          # "extractor" | "command" | "manual"
+    source: str  # "extractor" | "command" | "manual"
 
 
 def _default_path() -> Path:
@@ -182,7 +181,8 @@ class UserProfile:
         # Atomic write via tmp file in the same directory
         try:
             fd, tmp_path = tempfile.mkstemp(
-                prefix=".user_profile.", suffix=".json.tmp",
+                prefix=".user_profile.",
+                suffix=".json.tmp",
                 dir=str(p.parent),
             )
             try:
@@ -200,22 +200,30 @@ class UserProfile:
 
     # ── Mutation API ──
 
-    def _log_change(self, key: str, before: Optional[str], after: Optional[str],
-                    action: str, source: str = "extractor") -> None:
+    def _log_change(
+        self,
+        key: str,
+        before: Optional[str],
+        after: Optional[str],
+        action: str,
+        source: str = "extractor",
+    ) -> None:
         """L4: append a ChangeRecord and trim the log to its cap.
 
         Called by remember_fact / remember_preference / forget / clear
         just before save(). Keeps at most _CHANGE_LOG_MAX entries — the
         most recent — to bound disk usage.
         """
-        self.change_log.append(ChangeRecord(
-            timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            action=action,
-            key=key,
-            before=before,
-            after=after,
-            source=source,
-        ))
+        self.change_log.append(
+            ChangeRecord(
+                timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                action=action,
+                key=key,
+                before=before,
+                after=after,
+                source=source,
+            )
+        )
         if len(self.change_log) > _CHANGE_LOG_MAX:
             # Keep only the most recent _CHANGE_LOG_MAX entries.
             self.change_log = self.change_log[-_CHANGE_LOG_MAX:]
@@ -249,13 +257,16 @@ class UserProfile:
             except ValueError as exc:
                 try:
                     from .audit_log import get_audit_logger
-                    get_audit_logger().log({
-                        "action": "profile_reject",
-                        "key": attr,
-                        "value": target_value,
-                        "reason": "schema_check_failed",
-                        "error": str(exc),
-                    })
+
+                    get_audit_logger().log(
+                        {
+                            "action": "profile_reject",
+                            "key": attr,
+                            "value": target_value,
+                            "reason": "schema_check_failed",
+                            "error": str(exc),
+                        }
+                    )
                 except Exception:
                     pass  # Audit log failure must never break the write path
                 return  # Reject — no write, no change_log entry.
@@ -283,8 +294,9 @@ class UserProfile:
         self.preferences[norm_key] = str(value).strip()
         # L4: log if value actually changed
         if prev != self.preferences[norm_key]:
-            self._log_change(norm_key, prev, self.preferences[norm_key],
-                             "remember_preference", source)
+            self._log_change(
+                norm_key, prev, self.preferences[norm_key], "remember_preference", source
+            )
         self.save()
 
     def forget(self, key: str, source: str = "command") -> bool:
@@ -303,8 +315,14 @@ class UserProfile:
 
         # 1. Try known fields
         attr = self.FIELD_ALIASES.get(norm_key)
-        if attr and attr in ("name", "preferred_name", "pronouns", "language",
-                             "timezone", "expertise_level"):
+        if attr and attr in (
+            "name",
+            "preferred_name",
+            "pronouns",
+            "language",
+            "timezone",
+            "expertise_level",
+        ):
             prev = getattr(self, attr, None)
             if prev is not None:
                 setattr(self, attr, None)
@@ -376,6 +394,7 @@ class UserProfile:
             if record.action == "clear":
                 # Reconstruct from the opaque before-snapshot
                 import ast
+
                 try:
                     snapshot = ast.literal_eval(record.before) if record.before else {}
                 except (ValueError, SyntaxError):
@@ -427,11 +446,19 @@ class UserProfile:
     # ── Inspection ──
 
     def is_empty(self) -> bool:
-        return not any([
-            self.name, self.preferred_name, self.pronouns, self.language,
-            self.timezone, self.expertise_level, self.preferences,
-            self.important_facts, self.custom_instructions,
-        ])
+        return not any(
+            [
+                self.name,
+                self.preferred_name,
+                self.pronouns,
+                self.language,
+                self.timezone,
+                self.expertise_level,
+                self.preferences,
+                self.important_facts,
+                self.custom_instructions,
+            ]
+        )
 
     def summary(self) -> str:
         """One-line human-readable summary. For /whoami quick view."""
@@ -490,8 +517,11 @@ class UserProfile:
                 fact_display = fact if len(fact) <= 200 else fact[:197] + "..."
                 lines.append(f"    - {fact_display}")
         if self.custom_instructions:
-            ci = self.custom_instructions if len(self.custom_instructions) <= 500 \
+            ci = (
+                self.custom_instructions
+                if len(self.custom_instructions) <= 500
                 else self.custom_instructions[:497] + "..."
+            )
             lines.append(f"  Custom instructions: {ci}")
         lines.append("</user_profile>")
         return "\n".join(lines)

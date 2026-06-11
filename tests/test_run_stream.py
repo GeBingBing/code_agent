@@ -1,22 +1,22 @@
 """Tests for AgentEngine.run_stream() method."""
 
 import asyncio
-import json
 
 import pytest
 
 from agent.core.engine import AgentConfig, AgentEngine
-from agent.llm.client import Message
 
 
 class MockChunk:
     """Simulate a streaming chunk."""
+
     def __init__(self, content: str):
-        self.choices = [type('Choice', (), {'delta': type('Delta', (), {'content': content})()})()]
+        self.choices = [type("Choice", (), {"delta": type("Delta", (), {"content": content})()})()]
 
 
 class MockStreamResponse:
     """Simulate OpenAI streaming response."""
+
     def __init__(self, chunks):
         self.chunks = chunks
 
@@ -26,13 +26,15 @@ class MockStreamResponse:
 
 class MockToolCall:
     """Simulate a tool call from streaming delta."""
+
     def __init__(self, name: str, arguments: str, call_id: str = "call_1"):
         self.id = call_id
-        self.function = type('Func', (), {'name': name, 'arguments': arguments})()
+        self.function = type("Func", (), {"name": name, "arguments": arguments})()
 
 
 class MockToolCallsDelta:
     """Simulate tool_calls delta in streaming."""
+
     def __init__(self, calls):
         self.tool_calls = calls
 
@@ -43,46 +45,83 @@ class TestRunStream:
     @pytest.fixture
     def mock_stream_llm(self, monkeypatch):
         """Mock LLM that returns streaming response with content."""
+
         async def mock_chat(*args, **kwargs):
-            return MockStreamResponse([
-                MockChunk("Hello "),
-                MockChunk("world!"),
-            ]), True
+            return (
+                MockStreamResponse(
+                    [
+                        MockChunk("Hello "),
+                        MockChunk("world!"),
+                    ]
+                ),
+                True,
+            )
+
         return mock_chat
 
     @pytest.fixture
     def mock_tool_call_llm(self, monkeypatch):
         """Mock LLM that returns streaming response with tool call."""
+
         async def mock_chat(*args, **kwargs):
-            return MockStreamResponse([
-                MockChunk("I will read the file."),
-                type('Chunk', (), {
-                    'choices': [type('Choice', (), {
-                        'delta': type('Delta', (), {
-                            'content': '',
-                            'tool_calls': [
-                                type('TC', (), {
-                                    'id': 'call_1',
-                                    'function': type('Func', (), {
-                                        'name': 'read_file',
-                                        'arguments': '{"path": "test.py"}'
-                                    })()
-                                })()
-                            ]
-                        })()
-                    })()]
-                })(),
-            ]), True
+            return (
+                MockStreamResponse(
+                    [
+                        MockChunk("I will read the file."),
+                        type(
+                            "Chunk",
+                            (),
+                            {
+                                "choices": [
+                                    type(
+                                        "Choice",
+                                        (),
+                                        {
+                                            "delta": type(
+                                                "Delta",
+                                                (),
+                                                {
+                                                    "content": "",
+                                                    "tool_calls": [
+                                                        type(
+                                                            "TC",
+                                                            (),
+                                                            {
+                                                                "id": "call_1",
+                                                                "function": type(
+                                                                    "Func",
+                                                                    (),
+                                                                    {
+                                                                        "name": "read_file",
+                                                                        "arguments": '{"path": "test.py"}',
+                                                                    },
+                                                                )(),
+                                                            },
+                                                        )()
+                                                    ],
+                                                },
+                                            )()
+                                        },
+                                    )()
+                                ]
+                            },
+                        )(),
+                    ]
+                ),
+                True,
+            )
+
         return mock_chat
 
     def test_run_stream_yields_step_start(self, monkeypatch):
         """run_stream should yield step_start events."""
+
         async def mock_chat(*args, **kwargs):
             return MockStreamResponse([MockChunk("Hello")]), True
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -99,15 +138,21 @@ class TestRunStream:
 
     def test_run_stream_yields_content_chunks(self, monkeypatch):
         """run_stream should yield content events for each chunk."""
+
         async def mock_chat(*args, **kwargs):
-            return MockStreamResponse([
-                MockChunk("Hello "),
-                MockChunk("world!"),
-            ]), True
+            return (
+                MockStreamResponse(
+                    [
+                        MockChunk("Hello "),
+                        MockChunk("world!"),
+                    ]
+                ),
+                True,
+            )
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -125,12 +170,13 @@ class TestRunStream:
 
     def test_run_stream_yields_final(self, monkeypatch):
         """run_stream should yield final event when complete."""
+
         async def mock_chat(*args, **kwargs):
             return MockStreamResponse([MockChunk("Final response")]), True
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -144,31 +190,54 @@ class TestRunStream:
 
     def test_run_stream_with_tool_call(self, monkeypatch):
         """run_stream should yield tool_call events."""
+
         async def mock_chat(*args, **kwargs):
             class MockResp:
                 def __iter__(self):
-                    yield type('Chunk', (), {
-                        'choices': [type('Choice', (), {
-                            'delta': type('Delta', (), {
-                                'content': 'Reading file...',
-                                'tool_calls': [
-                                    type('TC', (), {
-                                        'id': 'call_abc123',
-                                        'function': type('Func', (), {
-                                            'name': 'read_file',
-                                            'arguments': '{"path": "test.py"}'
-                                        })()
-                                    })()
-                                ]
-                            })()
-                        })()]
-                    })()
+                    yield type(
+                        "Chunk",
+                        (),
+                        {
+                            "choices": [
+                                type(
+                                    "Choice",
+                                    (),
+                                    {
+                                        "delta": type(
+                                            "Delta",
+                                            (),
+                                            {
+                                                "content": "Reading file...",
+                                                "tool_calls": [
+                                                    type(
+                                                        "TC",
+                                                        (),
+                                                        {
+                                                            "id": "call_abc123",
+                                                            "function": type(
+                                                                "Func",
+                                                                (),
+                                                                {
+                                                                    "name": "read_file",
+                                                                    "arguments": '{"path": "test.py"}',
+                                                                },
+                                                            )(),
+                                                        },
+                                                    )()
+                                                ],
+                                            },
+                                        )()
+                                    },
+                                )()
+                            ]
+                        },
+                    )()
 
             return MockResp(), True
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -180,18 +249,21 @@ class TestRunStream:
 
         events = asyncio.run(run())
         tool_calls = [e for e in events if e.get("type") == "tool_call"]
-        assert len(tool_calls) >= 1, f"Expected tool_call event, got {[e.get('type') for e in events]}"
+        assert (
+            len(tool_calls) >= 1
+        ), f"Expected tool_call event, got {[e.get('type') for e in events]}"
         assert tool_calls[0]["tool_name"] == "read_file"
         assert tool_calls[0]["tool_args"]["path"] == "test.py"
 
     def test_run_stream_content_end(self, monkeypatch):
         """run_stream should yield content_end when content is complete."""
+
         async def mock_chat(*args, **kwargs):
             return MockStreamResponse([MockChunk("Done")]), True
 
         config = AgentConfig(model="mock", provider="mock", verbose=False)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []
@@ -205,16 +277,22 @@ class TestRunStream:
 
     def test_run_stream_complete_after_max_steps(self, monkeypatch):
         """run_stream should yield 'complete' when max steps reached."""
+
         async def mock_chat(*args, **kwargs):
-            return MockStreamResponse([
-                MockChunk("thinking step 1"),
-                MockChunk("thinking step 2"),
-                MockChunk("thinking step 3"),
-            ]), True
+            return (
+                MockStreamResponse(
+                    [
+                        MockChunk("thinking step 1"),
+                        MockChunk("thinking step 2"),
+                        MockChunk("thinking step 3"),
+                    ]
+                ),
+                True,
+            )
 
         config = AgentConfig(model="mock", provider="mock", verbose=False, max_steps=2)
         engine = AgentEngine(config)
-        engine.llm = type('StubLLM', (), {'chat': mock_chat})()
+        engine.llm = type("StubLLM", (), {"chat": mock_chat})()
 
         async def run():
             events = []

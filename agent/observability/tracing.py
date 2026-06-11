@@ -17,13 +17,14 @@ logger = logging.getLogger(__name__)
 try:
     # Optional dependency. We only need the API surface in the engine.
     from opentelemetry import trace as _otel_trace
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import (
         BatchSpanProcessor,
         ConsoleSpanExporter,
         SimpleSpanProcessor,
     )
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+
     OTEL_AVAILABLE = True
 except ImportError:  # pragma: no cover - exercised only when otel isn't installed
     OTEL_AVAILABLE = False
@@ -120,6 +121,7 @@ def init_tracer(
         if otlp_endpoint:
             try:
                 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
                 exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
                 provider.add_span_processor(BatchSpanProcessor(exporter))
             except ImportError:

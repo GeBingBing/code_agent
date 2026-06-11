@@ -1,9 +1,8 @@
 """Tests for the engine's spec/AC injection (PR-06)."""
 
 import pytest
-from pathlib import Path
 
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.engine import AgentConfig, AgentEngine
 from agent.core.hooks import BEFORE_LLM_CALL
 
 
@@ -29,6 +28,7 @@ SAMPLE = """# Test Specs
 def workspace_with_spec(tmp_path, monkeypatch):
     (tmp_path / "SPECS.md").write_text(SAMPLE)
     import agent.core.engine as eng
+
     monkeypatch.setattr(eng, "WORKSPACE", tmp_path, raising=False)
     return tmp_path
 
@@ -41,6 +41,7 @@ class TestEngineSpecDocument:
 
     def test_no_spec_returns_none(self, tmp_path, monkeypatch):
         import agent.core.engine as eng
+
         monkeypatch.setattr(eng, "WORKSPACE", tmp_path, raising=False)
         e = AgentEngine(AgentConfig(codmap_enabled=False, spec_ac_inject=True))
         assert e.spec_document is not None  # Empty doc, not None
@@ -82,6 +83,7 @@ class TestSpecAcInjection:
 """
         (tmp_path / "SPECS.md").write_text(spec)
         import agent.core.engine as eng
+
         monkeypatch.setattr(eng, "WORKSPACE", tmp_path, raising=False)
         e = AgentEngine(AgentConfig(codmap_enabled=False, spec_ac_inject=True))
         msgs = [_Msg("user", "Hi")]
@@ -102,6 +104,7 @@ class TestSpecAcInjection:
     @pytest.mark.asyncio
     async def test_no_specs_file(self, tmp_path, monkeypatch):
         import agent.core.engine as eng
+
         monkeypatch.setattr(eng, "WORKSPACE", tmp_path, raising=False)
         e = AgentEngine(AgentConfig(codmap_enabled=False, spec_ac_inject=True))
         msgs = [_Msg("user", "Hi")]

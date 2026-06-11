@@ -1,11 +1,5 @@
 """Tests for persistent code indexer."""
 
-import json
-import tempfile
-from pathlib import Path
-
-import pytest
-
 from index.code_indexer import CodeIndexer
 
 

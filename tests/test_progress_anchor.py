@@ -1,16 +1,14 @@
 """Unit tests for the progress anchor (PR-13)."""
 
-import os
 import re
+
 import pytest
-from pathlib import Path
 
 from agent.core.progress_anchor import (
     ProgressAnchor,
     ProgressRecord,
     load_progress,
 )
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -183,9 +181,7 @@ class TestParsingVariants:
     def test_unknown_key_kept_in_extra(self, tmp_path):
         anchor = ProgressAnchor(workspace=tmp_path)
         anchor.path.write_text(
-            "[current_task]: x\n"
-            "[custom_key]: custom_value\n"
-            "[updated_at]: now\n",
+            "[current_task]: x\n" "[custom_key]: custom_value\n" "[updated_at]: now\n",
             encoding="utf-8",
         )
         r = anchor.read()
@@ -297,9 +293,7 @@ class TestComputeHash:
         h2 = ProgressAnchor.compute_hash(h1, "op2")
         h3 = ProgressAnchor.compute_hash(h2, "op3")
         h_chain = ProgressAnchor.compute_hash(
-            ProgressAnchor.compute_hash(
-                ProgressAnchor.compute_hash("", "op1"), "op2"
-            ),
+            ProgressAnchor.compute_hash(ProgressAnchor.compute_hash("", "op1"), "op2"),
             "op3",
         )
         assert h3 == h_chain
@@ -416,7 +410,7 @@ class TestUnicodeAndSpecialChars:
         assert "权限校验错误 ❌" in loaded.known_issues
 
     def test_chain_hash_with_unicode_op(self, tmp_path):
-        h = ProgressAnchor.compute_hash("prev", "write_file:{\"path\": \"测试.py\"}")
+        h = ProgressAnchor.compute_hash("prev", 'write_file:{"path": "测试.py"}')
         # Should still produce valid format
         assert h.startswith("sha256:")
         assert len(h) == len("sha256:") + 32
@@ -431,7 +425,7 @@ class TestUnicodeAndSpecialChars:
         anchor = ProgressAnchor(workspace=tmp_path)
         rec = ProgressRecord(
             current_task="x",
-            known_issues=["tool: error: \"unclosed quote\" & <html>"],
+            known_issues=['tool: error: "unclosed quote" & <html>'],
         )
         anchor.write(rec)
         loaded = anchor.read()
@@ -552,11 +546,13 @@ class TestFileAtomicityStress:
         """50 sequential writes should not leave .tmp files behind."""
         anchor = ProgressAnchor(workspace=tmp_path)
         for i in range(50):
-            anchor.write(ProgressRecord(
-                current_task=f"task {i}",
-                current_step=f"{i}/50",
-                op_hash=f"sha256:hash{i:032d}"[:39],
-            ))
+            anchor.write(
+                ProgressRecord(
+                    current_task=f"task {i}",
+                    current_step=f"{i}/50",
+                    op_hash=f"sha256:hash{i:032d}"[:39],
+                )
+            )
         tmp_files = list(anchor.path.parent.glob(".claude-progress.*.tmp"))
         assert tmp_files == []
         # Final write has task "task 49"
@@ -623,7 +619,7 @@ class TestChainHashProperties:
         # And the difference should be substantial (>50% of chars differ)
         hex1 = h1[7:]
         hex2 = h2[7:]
-        diff = sum(c1 != c2 for c1, c2 in zip(hex1, hex2))
+        diff = sum(c1 != c2 for c1, c2 in zip(hex1, hex2, strict=False))
         assert diff > 16  # More than half
 
     def test_empty_op_still_hashes(self):

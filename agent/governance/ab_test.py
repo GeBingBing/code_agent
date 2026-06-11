@@ -30,7 +30,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -38,7 +37,6 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Tuple
-
 
 # ── Enums ───────────────────────────────────────────────────────────
 
@@ -51,6 +49,7 @@ class ExperimentStatus(Enum):
 
 class ExperimentTarget(Enum):
     """What aspect of the system is being varied."""
+
     SYSTEM_PROMPT = "system_prompt"
     SKILL_PROMPT = "skill_prompt"
     TOOL_DEFAULT = "tool_default"
@@ -70,10 +69,11 @@ class ExperimentVariant:
       - {"tool_name": {"param": value}} for tool defaults
       - {"skill_id": "v2", "override": "..."} for skill swaps
     """
-    id: str                        # "A" or "B" (or "control" / "treatment")
-    name: str                      # human-readable
+
+    id: str  # "A" or "B" (or "control" / "treatment")
+    name: str  # human-readable
     config: dict
-    weight: float = 1.0            # traffic weight, default uniform
+    weight: float = 1.0  # traffic weight, default uniform
 
     def to_dict(self) -> dict:
         return {
@@ -98,15 +98,15 @@ class Experiment:
     id: str
     name: str
     description: str
-    target: str                    # one of ExperimentTarget values
-    target_key: str                # section name, skill id, or tool+param
+    target: str  # one of ExperimentTarget values
+    target_key: str  # section name, skill id, or tool+param
     variants: List[ExperimentVariant]
     status: str = ExperimentStatus.RUNNING.value
     created_at: str = ""
     started_at: str = ""
     ended_at: str = ""
-    winner: str = ""               # variant id of the winner
-    min_samples: int = 50          # per-variant floor
+    winner: str = ""  # variant id of the winner
+    min_samples: int = 50  # per-variant floor
     metadata: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -154,6 +154,7 @@ class Experiment:
 @dataclass
 class ExperimentObservation:
     """A single recorded outcome from a run that participated in an experiment."""
+
     experiment_id: str
     variant_id: str
     user_id: str
@@ -206,10 +207,11 @@ class ExperimentObservation:
 @dataclass
 class ExperimentAnalysis:
     """Result of analyzing an experiment."""
-    status: str                      # "no_data" | "insufficient_samples" | "analyzed"
-    results: dict = field(default_factory=dict)        # variant_id -> metrics dict
-    winner: str = ""                 # "A" | "B" | "tie" | ""
-    have: dict = field(default_factory=dict)           # variant_id -> sample count
+
+    status: str  # "no_data" | "insufficient_samples" | "analyzed"
+    results: dict = field(default_factory=dict)  # variant_id -> metrics dict
+    winner: str = ""  # "A" | "B" | "tie" | ""
+    have: dict = field(default_factory=dict)  # variant_id -> sample count
     details: str = ""
 
     def to_dict(self) -> dict:
@@ -316,10 +318,7 @@ class ABTestManager:
                 return exp.variant_by_id(exp.winner)
             return exp.variants[0]
         # Hash-based bucketing
-        h = int(
-            hashlib.sha256(f"{exp_id}:{user_id}".encode("utf-8")).hexdigest()[:8],
-            16
-        )
+        h = int(hashlib.sha256(f"{exp_id}:{user_id}".encode("utf-8")).hexdigest()[:8], 16)
         bucket = h % 100
         total_weight = sum(v.weight for v in exp.variants) or 1.0
         cumulative = 0.0
@@ -403,8 +402,7 @@ class ABTestManager:
                 return ExperimentAnalysis(
                     status="insufficient_samples",
                     have=have,
-                    details=f"Variant {vid!r} has {len(items)} samples, "
-                            f"need {min_n}",
+                    details=f"Variant {vid!r} has {len(items)} samples, " f"need {min_n}",
                 )
         # Compute metrics
         results: dict = {}
@@ -451,7 +449,9 @@ class ABTestManager:
 
     # ── Conclusion ─────────────────────────────────────────────
 
-    def conclude(self, exp_id: str, min_samples: Optional[int] = None) -> Tuple[Optional[Experiment], ExperimentAnalysis]:
+    def conclude(
+        self, exp_id: str, min_samples: Optional[int] = None
+    ) -> Tuple[Optional[Experiment], ExperimentAnalysis]:
         """Wrap up the experiment. Sets winner, status=COMPLETED.
 
         Promotes the winning variant by writing the promoted config
@@ -511,16 +511,13 @@ class ABTestManager:
             "exp_dir": str(self.exp_dir),
             "experiment_count": len(self._cache),
             "running": sum(
-                1 for e in self._cache.values()
-                if e.status == ExperimentStatus.RUNNING.value
+                1 for e in self._cache.values() if e.status == ExperimentStatus.RUNNING.value
             ),
             "completed": sum(
-                1 for e in self._cache.values()
-                if e.status == ExperimentStatus.COMPLETED.value
+                1 for e in self._cache.values() if e.status == ExperimentStatus.COMPLETED.value
             ),
             "abandoned": sum(
-                1 for e in self._cache.values()
-                if e.status == ExperimentStatus.ABANDONED.value
+                1 for e in self._cache.values() if e.status == ExperimentStatus.ABANDONED.value
             ),
         }
 

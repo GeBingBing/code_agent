@@ -3,13 +3,14 @@
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 
 class IdleTimeoutError(asyncio.TimeoutError):
     """Raised when a process is killed due to idle timeout.
     Carries partial output so callers can show what happened before the hang.
     """
+
     def __init__(self, message: str, stdout: str = "", stderr: str = ""):
         super().__init__(message)
         self.stdout = stdout
@@ -58,8 +59,9 @@ async def read_process(proc: asyncio.subprocess.Process, idle_timeout: int = 60)
         if not tasks:
             break
 
-        done, pending = await asyncio.wait(tasks.keys(), timeout=idle_timeout,
-                                           return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(
+            tasks.keys(), timeout=idle_timeout, return_when=asyncio.FIRST_COMPLETED
+        )
 
         if not done:
             proc.kill()
@@ -114,12 +116,12 @@ class BaseTool(ABC):
 
     # ── Metadata ────────────────────────────────────────────────
     is_concurrency_safe: bool = False  # Can run in parallel with other reads
-    is_read_only: bool = False         # Does not modify files or system state
-    is_destructive: bool = False       # Can cause irreversible damage (rm, format)
+    is_read_only: bool = False  # Does not modify files or system state
+    is_destructive: bool = False  # Can cause irreversible damage (rm, format)
 
     # ── UX ──────────────────────────────────────────────────────
-    user_facing_name: str = ""         # Short badge name, e.g. "Read", "Bash", "Write"
-    interrupt_behavior: str = "cancel" # "cancel" or "block" — how to handle Ctrl+C
+    user_facing_name: str = ""  # Short badge name, e.g. "Read", "Bash", "Write"
+    interrupt_behavior: str = "cancel"  # "cancel" or "block" — how to handle Ctrl+C
 
     @abstractmethod
     async def execute(self, **kwargs) -> ToolResult:
@@ -176,11 +178,12 @@ class BaseTool(ABC):
         return {
             "name": self.name,
             "description": self.description,
-            "parameters": {"type": "object", "properties": {}}
+            "parameters": {"type": "object", "properties": {}},
         }
 
 
 # ── build_tool factory ──────────────────────────────────────────
+
 
 def build_tool(
     name: str,
@@ -217,12 +220,14 @@ def build_tool(
         )
         registry.register(tool)
     """
+
     # Build a concrete tool class with execute bound at the class level
     async def _execute(self, **kwargs):
         return execute_fn(**kwargs)
 
     import re as _re
-    safe_name = _re.sub(r'[^a-zA-Z0-9_]', '_', name)
+
+    safe_name = _re.sub(r"[^a-zA-Z0-9_]", "_", name)
     _BuiltTool = type(f"_Built_{safe_name}", (BaseTool,), {"execute": _execute})
 
     tool = _BuiltTool()

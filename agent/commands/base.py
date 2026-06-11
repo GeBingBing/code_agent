@@ -1,7 +1,7 @@
 """Base command registry — pluggable slash command system."""
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Callable, Awaitable
+from typing import Awaitable, Callable, Dict, List, Optional
 
 
 @dataclass

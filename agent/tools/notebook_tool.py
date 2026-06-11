@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+
 from .base import BaseTool, ToolResult, registry
 
 
@@ -160,8 +161,13 @@ class NotebookEditTool(BaseTool):
         return f"Notebook · {op} · {args.get('path', '?')}"
 
     async def execute(
-        self, path: str, cell_index: int, operation: str,
-        new_source: str = "", cell_type: str = "code", **kwargs,
+        self,
+        path: str,
+        cell_index: int,
+        operation: str,
+        new_source: str = "",
+        cell_type: str = "code",
+        **kwargs,
     ) -> ToolResult:
         try:
             fp = _resolve_path(path)
@@ -180,8 +186,11 @@ class NotebookEditTool(BaseTool):
 
             if operation == "replace":
                 if cell_index < 0 or cell_index >= len(cells):
-                    return ToolResult(success=False, content="",
-                                     error=f"Cell index {cell_index} out of range (0-{len(cells)-1})")
+                    return ToolResult(
+                        success=False,
+                        content="",
+                        error=f"Cell index {cell_index} out of range (0-{len(cells)-1})",
+                    )
                 cells[cell_index]["source"] = new_source.split("\n")
                 # Ensure each line ends with \n (Jupyter convention)
                 cells[cell_index]["source"] = [line + "\n" for line in new_source.split("\n")]
@@ -204,12 +213,17 @@ class NotebookEditTool(BaseTool):
 
             elif operation == "delete":
                 if cell_index < 0 or cell_index >= len(cells):
-                    return ToolResult(success=False, content="",
-                                     error=f"Cell index {cell_index} out of range (0-{len(cells)-1})")
+                    return ToolResult(
+                        success=False,
+                        content="",
+                        error=f"Cell index {cell_index} out of range (0-{len(cells)-1})",
+                    )
                 cells.pop(cell_index)
 
             else:
-                return ToolResult(success=False, content="", error=f"Unknown operation: {operation}")
+                return ToolResult(
+                    success=False, content="", error=f"Unknown operation: {operation}"
+                )
 
             nb["cells"] = cells
             fp.write_text(json.dumps(nb, ensure_ascii=False, indent=1), "utf-8")

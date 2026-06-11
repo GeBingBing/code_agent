@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.engine import AgentConfig, AgentEngine
 from agent.tools.base import ToolResult, registry
 
 
@@ -34,15 +34,21 @@ def _make_text_msg(text: str) -> SimpleNamespace:
 
 class MockToolAlwaysFail:
     """Tool that always returns an error."""
+
     name = "always_fail"
     description = "Always fails"
     is_concurrency_safe = False
     is_read_only = False
     user_facing_name = "Mock"
 
-    def is_enabled(self): return True
-    def check_permissions(self, args): return True, ""
-    def prompt_contribution(self): return ""
+    def is_enabled(self):
+        return True
+
+    def check_permissions(self, args):
+        return True, ""
+
+    def prompt_contribution(self):
+        return ""
 
     @property
     def schema(self):
@@ -51,8 +57,8 @@ class MockToolAlwaysFail:
             "function": {
                 "name": "always_fail",
                 "description": "Always fails",
-                "parameters": {"type": "object", "properties": {}, "required": []}
-            }
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
         }
 
     async def execute(self, **kwargs):
@@ -62,15 +68,21 @@ class MockToolAlwaysFail:
 
 class MockToolSucceedOnRetry:
     """Tool that fails first time but succeeds on retry."""
+
     name = "succeed_on_retry"
     description = "Succeeds on second call"
     is_concurrency_safe = False
     is_read_only = False
     user_facing_name = "Mock"
 
-    def is_enabled(self): return True
-    def check_permissions(self, args): return True, ""
-    def prompt_contribution(self): return ""
+    def is_enabled(self):
+        return True
+
+    def check_permissions(self, args):
+        return True, ""
+
+    def prompt_contribution(self):
+        return ""
 
     @property
     def schema(self):
@@ -79,12 +91,12 @@ class MockToolSucceedOnRetry:
             "function": {
                 "name": "succeed_on_retry",
                 "description": "Succeeds on second call",
-                "parameters": {"type": "object", "properties": {}, "required": []}
-            }
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
         }
 
     async def execute(self, **kwargs):
-        if not hasattr(self, '_call_count'):
+        if not hasattr(self, "_call_count"):
             self._call_count = 0
         self._call_count += 1
         if self._call_count == 1:
@@ -101,6 +113,7 @@ class TestCircuitBreaker:
         config = AgentConfig(model="mock", provider="openai", mode="bypass")
         eng = AgentEngine(config)
         from unittest.mock import AsyncMock
+
         eng.llm = type("StubLLM", (), {"chat": AsyncMock()})()
         return eng
 
@@ -156,7 +169,10 @@ class TestCircuitBreaker:
         result = asyncio.run(run())
         # LLM keeps retrying since fake_chat always returns tool calls;
         # failure counter increments each time in engine._consecutive_failures
-        assert "Intentional failure" in result or engine._consecutive_failures.get("always_fail", 0) > 0
+        assert (
+            "Intentional failure" in result
+            or engine._consecutive_failures.get("always_fail", 0) > 0
+        )
         tool_msgs = [m.content for m in engine.memory.get_messages() if m.role == "tool"]
         assert any("Intentional failure" in msg for msg in tool_msgs)
 
@@ -188,6 +204,7 @@ class TestErrorRecovery:
         config = AgentConfig(model="mock", provider="openai", mode="bypass")
         eng = AgentEngine(config)
         from unittest.mock import AsyncMock
+
         eng.llm = type("StubLLM", (), {"chat": AsyncMock()})()
         return eng
 
@@ -199,6 +216,7 @@ class TestErrorRecovery:
 
     def test_fallback_on_tool_not_found(self, engine, monkeypatch):
         """Unknown tool should return error via tool result, not crash."""
+
         async def fake_chat(*args, **kwargs):
             return _make_tool_call_msg([{"name": "nonexistent_tool", "args": {}}])
 
@@ -210,5 +228,7 @@ class TestErrorRecovery:
         result = asyncio.run(run())
         # Check that error about unknown tool appears in memory
         tool_msgs = [m.content for m in engine.memory.get_messages() if m.role == "tool"]
-        unknown_found = any("unknown tool" in msg.lower() or "not found" in msg.lower() for msg in tool_msgs)
+        unknown_found = any(
+            "unknown tool" in msg.lower() or "not found" in msg.lower() for msg in tool_msgs
+        )
         assert unknown_found, f"Expected 'unknown tool' in tool messages: {tool_msgs}"

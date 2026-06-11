@@ -16,22 +16,27 @@ Usage:
 
 import os
 import re
-import sys
-from pathlib import Path
 
 try:
     from textual.app import App, ComposeResult
-    from textual.containers import ScrollableContainer, Horizontal
-    from textual.widgets import Header, Footer, Input, Static
+    from textual.containers import Horizontal, ScrollableContainer
     from textual.reactive import reactive
+    from textual.widgets import (  # noqa: F401 — Footer reserved for future use
+        Footer,
+        Header,
+        Input,
+        Static,
+    )
+
     TEXTUAL_AVAILABLE = True
 except ImportError:
     TEXTUAL_AVAILABLE = False
 
 try:
+    from rich.console import Group
     from rich.syntax import Syntax
     from rich.text import Text
-    from rich.console import Group
+
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
@@ -39,20 +44,29 @@ except ImportError:
 
 def _detect_language(content: str) -> str:
     """Detect programming language from markdown code fence or content heuristic."""
-    fence_match = re.match(r'^```(\w+)', content)
+    fence_match = re.match(r"^```(\w+)", content)
     if fence_match:
         return fence_match.group(1)
-    first_line = content.split('\n', 1)[0].strip()
-    if first_line.startswith('def ') or first_line.startswith('import ') or first_line.startswith('class '):
-        return 'python'
-    if first_line.startswith('function ') or first_line.startswith('const ') or first_line.startswith('let '):
-        return 'javascript'
-    if first_line.startswith('package ') or first_line.startswith('func '):
-        return 'go'
-    return 'python'
+    first_line = content.split("\n", 1)[0].strip()
+    if (
+        first_line.startswith("def ")
+        or first_line.startswith("import ")
+        or first_line.startswith("class ")
+    ):
+        return "python"
+    if (
+        first_line.startswith("function ")
+        or first_line.startswith("const ")
+        or first_line.startswith("let ")
+    ):
+        return "javascript"
+    if first_line.startswith("package ") or first_line.startswith("func "):
+        return "go"
+    return "python"
 
 
 if TEXTUAL_AVAILABLE:
+
     class RichChatMessage(Static):
         """A chat message with optional Rich syntax highlighting for code blocks."""
 
@@ -64,8 +78,20 @@ if TEXTUAL_AVAILABLE:
 
         def _render_content(self):
             """Render content with syntax highlighting for code blocks."""
-            color = {"user": "cyan", "assistant": "green", "tool": "yellow", "system": "dim", "error": "red"}.get(self.role, "white")
-            prefix = {"user": ">", "assistant": "", "tool": "  ↳", "error": "  ✗", "system": "  ℹ"}.get(self.role, "")
+            color = {
+                "user": "cyan",
+                "assistant": "green",
+                "tool": "yellow",
+                "system": "dim",
+                "error": "red",
+            }.get(self.role, "white")
+            prefix = {
+                "user": ">",
+                "assistant": "",
+                "tool": "  ↳",
+                "error": "  ✗",
+                "system": "  ℹ",
+            }.get(self.role, "")
 
             if not RICH_AVAILABLE or self.role in ("tool", "system", "error", "user"):
                 display = f"[{color}]{prefix} {self.raw_content}[/{color}]"
@@ -73,11 +99,11 @@ if TEXTUAL_AVAILABLE:
                 return
 
             parts = []
-            pattern = re.compile(r'```(\w*)\n(.*?)```', re.DOTALL)
+            pattern = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
             last_end = 0
 
             for match in pattern.finditer(self.raw_content):
-                before = self.raw_content[last_end:match.start()]
+                before = self.raw_content[last_end : match.start()]
                 if before.strip():
                     parts.append(Text.from_markup(f"[{color}]{prefix} {before.strip()}[/{color}]"))
 
@@ -108,7 +134,6 @@ if TEXTUAL_AVAILABLE:
             self.raw_content += text
             self._render_content()
 
-
     class DiffView(Static):
         """Panel showing file diff with colored additions/deletions."""
 
@@ -118,7 +143,9 @@ if TEXTUAL_AVAILABLE:
 
             old_lines = old.splitlines(keepends=True)
             new_lines = new.splitlines(keepends=True)
-            diff = list(difflib.unified_diff(old_lines, new_lines, fromfile=path, tofile=path, lineterm=""))
+            diff = list(
+                difflib.unified_diff(old_lines, new_lines, fromfile=path, tofile=path, lineterm="")
+            )
 
             if not diff:
                 self.update("[dim]No changes[/dim]")
@@ -127,11 +154,11 @@ if TEXTUAL_AVAILABLE:
             if RICH_AVAILABLE:
                 lines = []
                 for line in diff:
-                    if line.startswith('+'):
+                    if line.startswith("+"):
                         lines.append(Text(line, style="green"))
-                    elif line.startswith('-'):
+                    elif line.startswith("-"):
                         lines.append(Text(line, style="red"))
-                    elif line.startswith('@@'):
+                    elif line.startswith("@@"):
                         lines.append(Text(line, style="cyan"))
                     else:
                         lines.append(Text(line, style="dim"))
@@ -141,7 +168,6 @@ if TEXTUAL_AVAILABLE:
 
         def clear(self):
             self.update("")
-
 
     class InfoPanel(Static):
         """Right-side panel showing context: active files, plan, spec status."""
@@ -157,7 +183,6 @@ if TEXTUAL_AVAILABLE:
             if spec_status:
                 lines.append(f"\n[dim]Spec:[/dim]\n{spec_status[:200]}")
             self.update("\n".join(lines) if len(lines) > 1 else "[dim]No context[/dim]")
-
 
     class StatusBar(Static):
         """Bottom status bar showing model, mode, tokens, and progress."""
@@ -199,7 +224,6 @@ if TEXTUAL_AVAILABLE:
                 bar = "█" * (pct // 10) + "░" * (10 - pct // 10)
                 parts.append(f"  [{bar}] {pct}% {self._label}")
             self.update("  ".join(parts))
-
 
     class CodingAgentTUI(App):
         """Textual TUI for the coding agent with Rich-enhanced components."""
@@ -259,8 +283,10 @@ if TEXTUAL_AVAILABLE:
             # default handler can load the user profile. Async-safe.
             try:
                 import asyncio as _asyncio
-                from agent.core.hooks import HookRegistry, ON_SESSION_START
+
+                from agent.core.hooks import ON_SESSION_START, HookRegistry
                 from agent.core.hooks_session import load_user_profile_on_start
+
                 session_hooks = HookRegistry()
                 session_hooks.register(ON_SESSION_START, load_user_profile_on_start)
                 payload = {"session_id": f"tui-{id(self)}", "task": None}
@@ -269,9 +295,7 @@ if TEXTUAL_AVAILABLE:
                 except RuntimeError:
                     pass
                 # Schedule as a task — fires on next event loop tick
-                _asyncio.ensure_future(
-                    session_hooks.execute(ON_SESSION_START, payload)
-                )
+                _asyncio.ensure_future(session_hooks.execute(ON_SESSION_START, payload))
             except Exception:
                 pass
 
@@ -302,8 +326,12 @@ if TEXTUAL_AVAILABLE:
         async def _handle_command(self, cmd: str):
             chat = self._get_chat()
             if cmd == "/help":
-                chat.mount(RichChatMessage("assistant",
-                    "Commands: /help /clear /plan /commit /model /mode /memory /status /context /review /undo"))
+                chat.mount(
+                    RichChatMessage(
+                        "assistant",
+                        "Commands: /help /clear /plan /commit /model /mode /memory /status /context /review /undo",
+                    )
+                )
             elif cmd == "/clear":
                 await chat.query("*").remove()
                 chat.mount(RichChatMessage("system", "Conversation cleared."))
@@ -316,14 +344,18 @@ if TEXTUAL_AVAILABLE:
                 else:
                     chat.mount(RichChatMessage("system", f"Current mode: {self.current_mode}"))
             elif cmd == "/status":
-                chat.mount(RichChatMessage("system",
-                    f"Model: {self.current_model}\nMode: {self.current_mode}\nTokens: {self.token_count}"))
+                chat.mount(
+                    RichChatMessage(
+                        "system",
+                        f"Model: {self.current_model}\nMode: {self.current_mode}\nTokens: {self.token_count}",
+                    )
+                )
             else:
                 chat.mount(RichChatMessage("system", f"Unknown command: {cmd}"))
             chat.scroll_end(animate=False)
 
         async def _handle_task(self, task: str):
-            from agent.core.engine import AgentEngine, AgentConfig
+            from agent.core.engine import AgentConfig, AgentEngine
 
             config = AgentConfig(verbose=False)
             engine = AgentEngine(config)
@@ -379,7 +411,9 @@ if TEXTUAL_AVAILABLE:
 
                     elif event_type == "tool_result":
                         if not event.get("success") and event.get("error"):
-                            err_msg = RichChatMessage("error", f"{current_tool}: {event.get('error', '')}")
+                            err_msg = RichChatMessage(
+                                "error", f"{current_tool}: {event.get('error', '')}"
+                            )
                             await chat.mount(err_msg)
                             chat.scroll_end(animate=False)
 
@@ -407,7 +441,9 @@ if TEXTUAL_AVAILABLE:
 
                 self.token_count = engine.total_input_tokens + engine.total_output_tokens
                 status.update_status(
-                    self.current_model, self.current_mode, self.token_count,
+                    self.current_model,
+                    self.current_mode,
+                    self.token_count,
                     estimated=engine.last_usage_estimated,
                 )
 
@@ -428,6 +464,7 @@ def run_tui():
         print("Textual is not installed. Install it with: pip install textual")
         print("Falling back to CLI mode...")
         from ui.cli import main
+
         main()
         return
 

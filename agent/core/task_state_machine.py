@@ -14,10 +14,10 @@ This complements (not replaces) the existing TDD state machine (PR-02), which
 operates *within* a single phase. Task state machine operates at task-grain.
 """
 
+import hashlib
 import json
 import time
-import hashlib
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -26,6 +26,7 @@ from typing import Optional
 
 class TaskState(Enum):
     """High-level task lifecycle states."""
+
     INIT = "init"
     PLAN = "plan"
     EXEC = "exec"
@@ -43,13 +44,14 @@ _ALLOWED_TRANSITIONS = {
     TaskState.EXEC: {TaskState.TEST, TaskState.PLAN, TaskState.FAILED},
     TaskState.TEST: {TaskState.REVIEW, TaskState.EXEC, TaskState.FAILED},
     TaskState.REVIEW: {TaskState.DONE, TaskState.EXEC, TaskState.FAILED},
-    TaskState.DONE: set(),                # terminal
+    TaskState.DONE: set(),  # terminal
     TaskState.FAILED: {TaskState.INIT, TaskState.PLAN},
 }
 
 
 class InvalidStateTransition(Exception):
     """Raised when an illegal task state transition is attempted."""
+
     pass
 
 
@@ -59,6 +61,7 @@ class TaskStateRecord:
 
     Serialized to JSON; atomic write ensures crash safety.
     """
+
     task: str
     state: str  # TaskState.value
     created_at: str
@@ -107,7 +110,8 @@ class TaskStateMachine:
                 except OSError:
                     pass
         return TaskStateRecord(
-            task="", state=TaskState.INIT.value,
+            task="",
+            state=TaskState.INIT.value,
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
@@ -232,7 +236,8 @@ class TaskStateMachine:
         if self.state_file.exists():
             self.state_file.unlink()
         self.record = TaskStateRecord(
-            task="", state=TaskState.INIT.value,
+            task="",
+            state=TaskState.INIT.value,
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )

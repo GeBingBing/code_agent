@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -38,6 +37,7 @@ DIMENSIONS = ("completion", "code_quality", "security", "performance")
 @dataclass
 class EvaluationScore:
     """A single dimension score (0-10)."""
+
     dimension: str
     score: float
     rationale: str = ""
@@ -53,6 +53,7 @@ class EvaluationScore:
 @dataclass
 class EvaluationReport:
     """Complete evaluation report — scores + findings + suggestions."""
+
     task: str
     agent_id: str
     scores: List[EvaluationScore]
@@ -199,10 +200,10 @@ class EvaluatorAgent:
             "tool_calls": sum(1 for r in audit if r.get("action") == "tool_call"),
             "tool_results": sum(1 for r in audit if r.get("action") == "tool_result"),
             "errors": [
-                {"tool": r.get("tool"), "error": r.get("error")}
-                for r in audit
-                if r.get("error")
-            ][:20],  # Cap to keep prompt size sane
+                {"tool": r.get("tool"), "error": r.get("error")} for r in audit if r.get("error")
+            ][
+                :20
+            ],  # Cap to keep prompt size sane
             "permission_decisions": {
                 "allow": sum(1 for r in audit if r.get("permission_decision") == "allow"),
                 "ask": sum(1 for r in audit if r.get("permission_decision") == "ask"),
@@ -371,5 +372,6 @@ def _parse_score_response(text: str) -> dict:
     Returns {} on failure (caller treats {} as "no scores" / ABSTAIN).
     """
     from ..core.llm_extractor import LLMExtractor
+
     result = LLMExtractor._safe_json_loads(text)
     return result if isinstance(result, dict) else {}

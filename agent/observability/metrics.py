@@ -14,7 +14,6 @@ still expose `value()` / `samples()` for in-process inspection.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -24,6 +23,7 @@ try:
     from opentelemetry import metrics as _otel_metrics
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
     OTEL_METRICS_AVAILABLE = True
 except ImportError:
     OTEL_METRICS_AVAILABLE = False
@@ -113,7 +113,10 @@ def init_meter(otlp_endpoint: Optional[str] = None) -> Any:
     try:
         if otlp_endpoint:
             try:
-                from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+                from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+                    OTLPMetricExporter,
+                )
+
                 exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)
                 reader = PeriodicExportingMetricReader(exporter)
                 provider = MeterProvider(metric_readers=[reader])

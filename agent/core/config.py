@@ -15,8 +15,8 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
-
 # ── Load .env file (once, at module load) ──────────────────────────
+
 
 def _load_dotenv():
     """Load .env from project root using python-dotenv."""
@@ -33,6 +33,7 @@ _load_dotenv()
 
 
 # ── Load config.json (once, at module load) ────────────────────────
+
 
 def _load_config_json() -> dict:
     """Load ~/.coding-agent/config.json if it exists."""
@@ -70,13 +71,13 @@ _DEFAULTS: dict[str, Any] = {
     "embedding_model": "all-MiniLM-L6-v2",
     "embedding_dim": 128,
     # PR-14: user profile (root-cause fix for session amnesia)
-    "user_profile_enabled": True,    # Master switch for the user profile system
+    "user_profile_enabled": True,  # Master switch for the user profile system
     "auto_remember_user_facts": True,  # Auto-extract identity from user messages
-    "memory_pinned_max": 200,        # Cap for pinned entries in memory.md
-    "user_profile_path": "",         # Override default ~/.coding-agent/user_profile.json
+    "memory_pinned_max": 200,  # Cap for pinned entries in memory.md
+    "user_profile_path": "",  # Override default ~/.coding-agent/user_profile.json
     # PR-15: LLM-based extractors (replacing hard-coded regex lists)
-    "intent_use_llm": True,          # Use LLM for IntentClassifier (else legacy heuristic)
-    "fact_extraction_use_llm": True, # Use LLM for FactExtractor (else PR-14 regex)
+    "intent_use_llm": True,  # Use LLM for IntentClassifier (else legacy heuristic)
+    "fact_extraction_use_llm": True,  # Use LLM for FactExtractor (else PR-14 regex)
 }
 
 
@@ -123,6 +124,7 @@ _PROVIDER_KEY_ENV_MAP = {
 
 # ── Config singleton ────────────────────────────────────────────────
 
+
 class Config:
     """Unified configuration accessor."""
 
@@ -135,12 +137,24 @@ class Config:
         if env_name and env_name in os.environ:
             val = os.environ[env_name]
             # Coerce bool and int types
-            if key in ("mcp_enabled", "auto_evolve", "verbose",
-                       "user_profile_enabled", "auto_remember_user_facts",
-                       "intent_use_llm", "fact_extraction_use_llm"):
+            if key in (
+                "mcp_enabled",
+                "auto_evolve",
+                "verbose",
+                "user_profile_enabled",
+                "auto_remember_user_facts",
+                "intent_use_llm",
+                "fact_extraction_use_llm",
+            ):
                 return val.lower() in ("1", "true", "yes")
-            if key in ("max_steps", "max_tokens", "max_tool_retries", "server_port",
-                       "memory_pinned_max", "embedding_dim"):
+            if key in (
+                "max_steps",
+                "max_tokens",
+                "max_tool_retries",
+                "server_port",
+                "memory_pinned_max",
+                "embedding_dim",
+            ):
                 try:
                     return int(val)
                 except ValueError:

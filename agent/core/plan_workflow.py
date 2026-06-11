@@ -20,7 +20,7 @@ once at construction; tests can substitute fakes for the same seam.
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from ..llm.client import Message
 from ..prompts.assembler import PromptAssembler
@@ -35,6 +35,7 @@ def _log_event(trace_id: str, event: str, **kwargs) -> None:
     sink via duck-typed call)."""
     # Lazy import to avoid a circular dependency at module load.
     from .engine import _log_event as _engine_log_event
+
     _engine_log_event(trace_id, event, **kwargs)
 
 
@@ -119,9 +120,11 @@ class PlanWorkflow:
                     for tool_call in response.tool_calls:
                         tool_name = tool_call.function.name
                         try:
-                            args = json.loads(
-                                tool_call.function.arguments
-                            ) if tool_call.function.arguments else {}
+                            args = (
+                                json.loads(tool_call.function.arguments)
+                                if tool_call.function.arguments
+                                else {}
+                            )
                         except json.JSONDecodeError:
                             args = {}
 
@@ -129,7 +132,8 @@ class PlanWorkflow:
                         allowed, reason = self._permissions.check(tool_name, args)
                         if not allowed:
                             result = ToolResult(
-                                success=False, content="",
+                                success=False,
+                                content="",
                                 error=f"Blocked in plan mode: {reason}",
                             )
                         else:
@@ -138,20 +142,27 @@ class PlanWorkflow:
                                 result = await tool.execute(**args)
                             else:
                                 result = ToolResult(
-                                    success=False, content="",
+                                    success=False,
+                                    content="",
                                     error=f"Unknown tool: {tool_name}",
                                 )
 
-                        tool_calls_json = json.dumps([{
-                            "id": getattr(tool_call, "id", "plan_0"),
-                            "type": "function",
-                            "function": {
-                                "name": tool_name,
-                                "arguments": tool_call.function.arguments,
-                            },
-                        }])
+                        tool_calls_json = json.dumps(
+                            [
+                                {
+                                    "id": getattr(tool_call, "id", "plan_0"),
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_name,
+                                        "arguments": tool_call.function.arguments,
+                                    },
+                                }
+                            ]
+                        )
                         self._memory.add(
-                            "assistant", "", tool_calls=tool_calls_json,
+                            "assistant",
+                            "",
+                            tool_calls=tool_calls_json,
                         )
                         self._memory.add(
                             "tool",
@@ -160,9 +171,7 @@ class PlanWorkflow:
                         )
                 else:
                     # Text response — plan complete
-                    plan_text = (
-                        response.content if hasattr(response, "content") else str(response)
-                    )
+                    plan_text = response.content if hasattr(response, "content") else str(response)
                     break
 
             plan = ExecutionPlan.from_llm_response(plan_text, task)
@@ -181,21 +190,18 @@ class PlanWorkflow:
         engine's `_current_plan` slot (set via the get_current_plan hook).
         """
         _log_event(
-            self._trace_id, "run_execute_start",
-            steps=len(plan.steps), summary=plan.summary[:50],
+            self._trace_id,
+            "run_execute_start",
+            steps=len(plan.steps),
+            summary=plan.summary[:50],
         )
         plan.status = "executing"
         self._set_current_plan(plan)
 
         plan_md = plan.to_markdown()
-        current = (
-            plan.current_step().description if plan.current_step() else "all steps complete"
-        )
+        current = plan.current_step().description if plan.current_step() else "all steps complete"
         plan_context = (
-            f"Executing plan: {plan.summary}\n"
-            f"{plan_md}\n"
-            f"---\n"
-            f"Current step: {current}\n"
+            f"Executing plan: {plan.summary}\n" f"{plan_md}\n" f"---\n" f"Current step: {current}\n"
         )
 
         skill_prompt = self._skills.activate_skills_semantic(plan.task)
@@ -242,23 +248,25 @@ class PlanWorkflow:
                 for tool_call in response.tool_calls:
                     tool_name = tool_call.function.name
                     try:
-                        args = json.loads(
-                            tool_call.function.arguments
-                        ) if tool_call.function.arguments else {}
+                        args = (
+                            json.loads(tool_call.function.arguments)
+                            if tool_call.function.arguments
+                            else {}
+                        )
                     except json.JSONDecodeError:
                         args = {}
 
                     func_args_raw = (
-                        tool_call.function.arguments
-                        if hasattr(tool_call, "function") else "{}"
+                        tool_call.function.arguments if hasattr(tool_call, "function") else "{}"
                     )
                     await self._execute_tool(
-                        tool_name, args, tool_call.id, func_args_raw,
+                        tool_name,
+                        args,
+                        tool_call.id,
+                        func_args_raw,
                     )
             else:
-                content = (
-                    response.content if hasattr(response, "content") else str(response)
-                )
+                content = response.content if hasattr(response, "content") else str(response)
                 self._memory.add("assistant", content)
                 plan.status = "done"
                 self._set_current_plan(None)

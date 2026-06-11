@@ -1,10 +1,11 @@
 """Tests for the semantic_search tool (PR-04)."""
 
 import json
+
 import pytest
 
-from agent.tools.memory import semantic_search_tool
 from agent.core.vector_memory import reset_vector_memory
+from agent.tools.memory import semantic_search_tool
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +22,7 @@ def clean_memory():
 class TestToolRegistration:
     def test_tool_registered(self):
         from agent.tools.base import registry
+
         assert registry.get("semantic_search") is semantic_search_tool
 
     def test_tool_name(self):
@@ -82,6 +84,7 @@ class TestExecution:
     @pytest.mark.asyncio
     async def test_search_returns_hits(self):
         from agent.core.vector_memory import get_vector_memory
+
         vm = get_vector_memory()
         vm.add("python", "def hello(): print('world')")
         vm.add("javascript", "function hello() { console.log('world') }")
@@ -96,6 +99,7 @@ class TestExecution:
     @pytest.mark.asyncio
     async def test_metadata_excluded_by_default(self):
         from agent.core.vector_memory import get_vector_memory
+
         vm = get_vector_memory()
         vm.add("k", "v", metadata={"src": "test"})
         result = await semantic_search_tool.execute(query="v", k=1)
@@ -105,11 +109,10 @@ class TestExecution:
     @pytest.mark.asyncio
     async def test_metadata_included_when_requested(self):
         from agent.core.vector_memory import get_vector_memory
+
         vm = get_vector_memory()
         vm.add("k", "v", metadata={"src": "test"})
-        result = await semantic_search_tool.execute(
-            query="v", k=1, include_metadata=True
-        )
+        result = await semantic_search_tool.execute(query="v", k=1, include_metadata=True)
         payload = json.loads(result.content)
         assert "metadata" in payload["hits"][0]
         assert payload["hits"][0]["metadata"] == {"src": "test"}
@@ -123,4 +126,5 @@ class TestGlobalRegistration:
         # Importing agent.tools triggers all registrations
         import agent.tools  # noqa: F401
         from agent.tools.base import registry
+
         assert registry.get("semantic_search") is not None

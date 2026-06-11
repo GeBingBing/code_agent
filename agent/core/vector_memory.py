@@ -21,12 +21,11 @@ or by setting `EMBEDDING_PROVIDER=sentence-transformers` in the environment.
 import hashlib
 import json
 import os
-import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 
@@ -35,7 +34,6 @@ from .embeddings import (
     HashingEmbeddingProvider,
     get_default_provider,
 )
-
 
 # ── Backwards-compat helpers (used by other modules) ───────────────
 
@@ -78,6 +76,7 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 @dataclass
 class SearchHit:
     """A single semantic search hit."""
+
     doc_id: int
     key: str
     value: str

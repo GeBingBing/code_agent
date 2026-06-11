@@ -2,16 +2,14 @@
 
 import numpy as np
 import pytest
-from pathlib import Path
 
+from agent.core.embeddings import HashingEmbeddingProvider
 from agent.core.vector_memory import (
-    VectorMemory,
     SearchHit,
+    VectorMemory,
     get_vector_memory,
     reset_vector_memory,
 )
-from agent.core.embeddings import HashingEmbeddingProvider
-
 
 # ── Provider injection ────────────────────────────────────────────
 
@@ -70,7 +68,9 @@ class TestSearchHit:
 class TestAddAndSearch:
     @pytest.fixture
     def vm(self, tmp_path):
-        return VectorMemory(db_path=tmp_path / "test.db", provider=HashingEmbeddingProvider(dim=128))
+        return VectorMemory(
+            db_path=tmp_path / "test.db", provider=HashingEmbeddingProvider(dim=128)
+        )
 
     def test_add_returns_id(self, vm):
         id_ = vm.add("k", "value")
@@ -131,6 +131,7 @@ class TestSchemaMigration:
     def test_existing_db_without_dim_column_is_migrated(self, tmp_path):
         """Pre-PR-04 DBs lack the `dim` column. Loading them should auto-migrate."""
         import sqlite3
+
         db = tmp_path / "old.db"
         # Create an old-style table
         conn = sqlite3.connect(str(db))

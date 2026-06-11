@@ -6,12 +6,8 @@ Provides tools for the agent to:
 - Verify implementation against spec
 """
 
-import os
-from pathlib import Path
-from typing import Optional
-
-from .base import BaseTool, ToolResult, registry
 from ..core.workspace import WORKSPACE_ROOT as WORKSPACE
+from .base import BaseTool, ToolResult, registry
 
 
 class GetSpecStatusTool(BaseTool):
@@ -31,7 +27,9 @@ class GetSpecStatusTool(BaseTool):
 
         lines = ["📋 Spec Status"]
         if ctx.active_phase:
-            lines.append(f"\nCurrent phase: P{ctx.active_phase.number} — {ctx.active_phase.name} ({ctx.active_phase.status})")
+            lines.append(
+                f"\nCurrent phase: P{ctx.active_phase.number} — {ctx.active_phase.name} ({ctx.active_phase.status})"
+            )
             pending = ctx.active_phase.pending_tasks
             if pending:
                 lines.append(f"\nPending tasks ({len(pending)}):")
@@ -48,7 +46,9 @@ class GetSpecStatusTool(BaseTool):
         # Show all phases summary
         lines.append("\n---\nAll phases:")
         for p in ctx.phases:
-            status_icon = "✅" if p.status == "completed" else "⚠️" if p.status == "partial" else "🔜"
+            status_icon = (
+                "✅" if p.status == "completed" else "⚠️" if p.status == "partial" else "🔜"
+            )
             task_summary = f" ({len(p.completed_tasks)}/{len(p.tasks)} tasks)" if p.tasks else ""
             lines.append(f"  {status_icon} P{p.number}: {p.name}{task_summary}")
 
@@ -206,7 +206,9 @@ class SpecStatusTool(BaseTool):
             return ToolResult(success=False, content="", error="No SPECS.md found in workspace")
 
         target = doc.get_phase(phase_id) if phase_id else doc.get_active_phase()
-        unfinished = doc.get_unfinished_acs(phase_id=phase_id) if phase_id else doc.get_unfinished_acs()
+        unfinished = (
+            doc.get_unfinished_acs(phase_id=phase_id) if phase_id else doc.get_unfinished_acs()
+        )
         prog = doc.progress()
 
         payload = {
@@ -220,6 +222,7 @@ class SpecStatusTool(BaseTool):
             "unfinished_acs": [ac.to_dict() for ac in unfinished[:10]],
         }
         import json as _json
+
         return ToolResult(
             success=True,
             content=_json.dumps(payload, indent=2, ensure_ascii=False),
@@ -331,15 +334,19 @@ class VerifySpecACSTool(BaseTool):
 
         target_id = phase_id or (doc.get_active_phase().id if doc.get_active_phase() else None)
         if not target_id:
-            return ToolResult(success=False, content="", error="No phase to verify and no active phase")
+            return ToolResult(
+                success=False, content="", error="No phase to verify and no active phase"
+            )
         target = doc.get_phase(target_id)
         if not target:
             return ToolResult(
-                success=False, content="",
+                success=False,
+                content="",
                 error=f"Phase {target_id!r} not found in SPECS.md",
             )
         unfinished = target.pending_acs
         import json as _json
+
         if not unfinished:
             return ToolResult(
                 success=True,
@@ -363,9 +370,7 @@ class VerifySpecACSTool(BaseTool):
                     "title": target.title,
                     "status": "incomplete",
                     "unfinished_acs": [ac.to_dict() for ac in unfinished],
-                    "recommendation": (
-                        f"Implement {len(unfinished)} ACs to complete {target.id}."
-                    ),
+                    "recommendation": (f"Implement {len(unfinished)} ACs to complete {target.id}."),
                 },
                 indent=2,
                 ensure_ascii=False,

@@ -6,20 +6,18 @@ regex fallback). Existing tests in this file test the regex fallback path
 live in `TestLLMBasedExtraction`.
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 
 from agent.core.fact_extractor import (
-    FactExtractor,
-    FactConfirmExtractor,
-    PATTERNS,
-    NAME_BLACKLIST,
-    _regex_extract,
-    _is_question_form,
     CONFIRM_THRESHOLD,
+    FactConfirmExtractor,
+    FactExtractor,
+    _is_question_form,
+    _regex_extract,
 )
 from agent.core.user_profile import UserProfile, _validate_value
-
 
 # All tests in this file (except TestLLMBasedExtraction) test the regex
 # fallback path. They use the module-level _regex_extract function directly
@@ -483,6 +481,7 @@ class TestLLMPromptRules:
         # Instantiate FactExtractor without going through the LLM
         # — we just need the system prompt string
         from agent.core.fact_extractor import FactExtractor
+
         # Bypass __init__ to avoid LLMExtractor setup
         fe = FactExtractor.__new__(FactExtractor)
         return fe._system_prompt()
@@ -558,6 +557,7 @@ class TestCustomPatterns:
     def test_custom_pattern(self):
         """Patterns can be passed to _regex_extract for testing."""
         from agent.core.fact_extractor import _regex_extract
+
         custom = [(r"my email is (\S+@\S+)", "email")]
         facts = _regex_extract("my email is test@example.com", patterns=custom)
         assert ("email", "test@example.com") in facts
@@ -565,6 +565,7 @@ class TestCustomPatterns:
     def test_custom_blacklist(self):
         """Name blacklist can be extended via _regex_extract."""
         from agent.core.fact_extractor import _regex_extract
+
         # With hay blacklisted, "I'm hay" should not extract "hay"
         facts = _regex_extract("I'm hay", name_blacklist=frozenset({"hay"}))
         assert ("name", "hay") not in facts
@@ -583,10 +584,12 @@ class TestLLMBasedExtraction:
     async def test_llm_extracts_name(self):
         """LLM extracts a name from a natural English sentence."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": [{"key": "name", "value": "Alice"}]}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": [{"key": "name", "value": "Alice"}]}',
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         facts = await ext.extract("My name is Alice, please help me")
         assert ("name", "Alice") in facts
@@ -595,14 +598,16 @@ class TestLLMBasedExtraction:
     async def test_llm_extracts_multiple_facts(self):
         """LLM extracts multiple facts from one message."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": ['
-            '{"key": "name", "value": "Bob"},'
-            '{"key": "language", "value": "chinese"},'
-            '{"key": "timezone", "value": "Asia/Shanghai"}'
-            ']}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": ['
+                '{"key": "name", "value": "Bob"},'
+                '{"key": "language", "value": "chinese"},'
+                '{"key": "timezone", "value": "Asia/Shanghai"}'
+                "]}",
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         facts = await ext.extract("I'm Bob, I speak Chinese, I'm in Shanghai")
         keys = [k for k, _ in facts]
@@ -614,10 +619,12 @@ class TestLLMBasedExtraction:
     async def test_llm_extracts_chinese_name(self):
         """LLM handles Chinese name extraction."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": [{"key": "name", "value": "张三"}]}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": [{"key": "name", "value": "张三"}]}',
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         facts = await ext.extract("我是张三")
         assert ("name", "张三") in facts
@@ -645,10 +652,12 @@ class TestLLMBasedExtraction:
     async def test_json_with_markdown_fence_still_parses(self):
         """LLM that wraps JSON in ```json``` fences is still parsed."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '```json\n{"facts": [{"key": "name", "value": "Charlie"}]}\n```',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '```json\n{"facts": [{"key": "name", "value": "Charlie"}]}\n```',
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         facts = await ext.extract("I'm Charlie")
         assert ("name", "Charlie") in facts
@@ -657,11 +666,13 @@ class TestLLMBasedExtraction:
     async def test_json_with_prose_explanation_still_parses(self):
         """LLM that includes prose before/after JSON is still parsed."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            'I detected the following: {"facts": [{"key": "name", "value": "Dave"}]} '
-            'based on the user message.',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                'I detected the following: {"facts": [{"key": "name", "value": "Dave"}]} '
+                "based on the user message.",
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         facts = await ext.extract("I'm Dave")
         assert ("name", "Dave") in facts
@@ -687,13 +698,15 @@ class TestLLMBasedExtraction:
     async def test_llm_normalizes_key_aliases(self):
         """LLM might return 'user_name' or 'lang' — we normalize."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": ['
-            '{"key": "user_name", "value": "Eve"},'
-            '{"key": "lang", "value": "japanese"}'
-            ']}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": ['
+                '{"key": "user_name", "value": "Eve"},'
+                '{"key": "lang", "value": "japanese"}'
+                "]}",
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         facts = await ext.extract("I'm Eve, I speak Japanese")
         keys = [k for k, _ in facts]
@@ -708,10 +721,12 @@ class TestLLMBasedExtraction:
     async def test_preferences_get_hash_key(self):
         """'preferences' key gets converted to pref_<hash>."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": [{"key": "preferences", "value": "use tabs"}]}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": [{"key": "preferences", "value": "use tabs"}]}',
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         facts = await ext.extract("I prefer tabs")
         keys = [k for k, _ in facts]
@@ -722,10 +737,12 @@ class TestLLMBasedExtraction:
         """Defense-in-depth: blacklist filters LLM output too."""
         mock_llm = MagicMock()
         # LLM incorrectly extracts 'going' as a name
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": [{"key": "name", "value": "going"}]}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": [{"key": "name", "value": "going"}]}',
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         facts = await ext.extract("I'm going to fix the bug")
         assert ("name", "going") not in facts
@@ -734,10 +751,12 @@ class TestLLMBasedExtraction:
     async def test_cache_repeated_calls(self):
         """Repeated calls hit cache, LLM only called once."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": [{"key": "name", "value": "Frank"}]}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": [{"key": "name", "value": "Frank"}]}',
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         await ext.extract("I'm Frank")
         await ext.extract("I'm Frank")
@@ -767,10 +786,12 @@ class TestLLMBasedExtraction:
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(profile_file))
         profile = UserProfile()
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": [{"key": "name", "value": "Grace"}]}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": [{"key": "name", "value": "Grace"}]}',
+                False,
+            )
+        )
         ext = FactExtractor(llm_client=mock_llm)
         applied = await ext.extract_and_apply_async("I'm Grace", profile)
         assert profile.name == "Grace"
@@ -789,6 +810,7 @@ class TestValidateValue:
     def test_validate_value_module_function(self):
         """Direct unit test of _validate_value."""
         import pytest
+
         # Valid name
         _validate_value("name", "hay")  # no raise
         # Too long
@@ -804,7 +826,6 @@ class TestValidateValue:
         Simulates a buggy extractor that slips a question-marked name
         through L0+L1 — L2 in `remember_fact` must catch it.
         """
-        from agent.core.user_profile import _default_path
         profile_path = tmp_path / "user_profile.json"
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(profile_path))
 
@@ -832,12 +853,14 @@ class TestConfirmGate:
     async def test_confirm_low_confidence_drops_fact(self):
         """Mock LLM confirms with confidence 0.3 — fact must be dropped."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(side_effect=[
-            # Stage 1: extract returns a name
-            ('{"facts": [{"key": "name", "value": "hay"}]}', None),
-            # Stage 2: confirm returns low confidence
-            ('{"verifications": [{"key": "name", "value": "hay", "confidence": 0.3}]}', None),
-        ])
+        mock_llm.chat = AsyncMock(
+            side_effect=[
+                # Stage 1: extract returns a name
+                ('{"facts": [{"key": "name", "value": "hay"}]}', None),
+                # Stage 2: confirm returns low confidence
+                ('{"verifications": [{"key": "name", "value": "hay", "confidence": 0.3}]}', None),
+            ]
+        )
         ext = FactConfirmExtractor(llm_client=mock_llm, fallback_to_legacy=False)
         profile = UserProfile()
         confirmed = await ext.extract_and_apply_async("I think I might be hay", profile)
@@ -848,10 +871,12 @@ class TestConfirmGate:
     async def test_confirm_high_confidence_keeps_fact(self):
         """Mock LLM confirms with confidence 0.95 — fact must be applied."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(side_effect=[
-            ('{"facts": [{"key": "name", "value": "hay"}]}', None),
-            ('{"verifications": [{"key": "name", "value": "hay", "confidence": 0.95}]}', None),
-        ])
+        mock_llm.chat = AsyncMock(
+            side_effect=[
+                ('{"facts": [{"key": "name", "value": "hay"}]}', None),
+                ('{"verifications": [{"key": "name", "value": "hay", "confidence": 0.95}]}', None),
+            ]
+        )
         ext = FactConfirmExtractor(llm_client=mock_llm, fallback_to_legacy=False)
         profile = UserProfile()
         confirmed = await ext.extract_and_apply_async("我是 hay", profile)
@@ -880,13 +905,21 @@ class TestConfirmGate:
     async def test_confirm_mixed_confidence_drops_only_low(self):
         """Multi-fact: 0.95 passes, 0.5 dropped."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(side_effect=[
-            ('{"facts": [{"key": "name", "value": "hay"}, {"key": "language", "value": "chinese"}]}', None),
-            ('{"verifications": ['
-             '{"key": "name", "value": "hay", "confidence": 0.95}, '
-             '{"key": "language", "value": "chinese", "confidence": 0.5}'
-             ']}', None),
-        ])
+        mock_llm.chat = AsyncMock(
+            side_effect=[
+                (
+                    '{"facts": [{"key": "name", "value": "hay"}, {"key": "language", "value": "chinese"}]}',
+                    None,
+                ),
+                (
+                    '{"verifications": ['
+                    '{"key": "name", "value": "hay", "confidence": 0.95}, '
+                    '{"key": "language", "value": "chinese", "confidence": 0.5}'
+                    "]}",
+                    None,
+                ),
+            ]
+        )
         ext = FactConfirmExtractor(llm_client=mock_llm, fallback_to_legacy=False)
         profile = UserProfile()
         confirmed = await ext.extract_and_apply_async("我是 hay, 喜欢中文", profile)
@@ -904,10 +937,12 @@ class TestConfirmGate:
         because the confirmation step broke.
         """
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(side_effect=[
-            ('{"facts": [{"key": "name", "value": "hay"}]}', None),
-            Exception("LLM timeout"),
-        ])
+        mock_llm.chat = AsyncMock(
+            side_effect=[
+                ('{"facts": [{"key": "name", "value": "hay"}]}', None),
+                Exception("LLM timeout"),
+            ]
+        )
         ext = FactConfirmExtractor(llm_client=mock_llm, fallback_to_legacy=False)
         profile = UserProfile()
         confirmed = await ext.extract_and_apply_async("我是 hay", profile)
@@ -953,14 +988,14 @@ class TestMultiTurnHistory:
     async def test_extract_with_history_calls_llm_with_user_message(self):
         """Mock the LLM; assert the call has the history text in the user message."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"facts": [{"key": "name", "value": "hay"}]}',
-            None,
-        ))
-        ext = FactExtractor(llm_client=mock_llm, fallback_to_legacy=False)
-        result = await ext.extract_with_history(
-            "我是谁", history="用户: 我是工程师"
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"facts": [{"key": "name", "value": "hay"}]}',
+                None,
+            )
         )
+        ext = FactExtractor(llm_client=mock_llm, fallback_to_legacy=False)
+        result = await ext.extract_with_history("我是谁", history="用户: 我是工程师")
         # The LLM was called once with messages containing the history
         assert mock_llm.chat.await_count == 1
         call = mock_llm.chat.await_args

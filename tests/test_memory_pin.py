@@ -1,8 +1,6 @@
 """Tests for the pinned memory feature (PR-14)."""
 
-import os
 import pytest
-from pathlib import Path
 
 from agent.core.memory import MemoryManager
 
@@ -43,11 +41,9 @@ class TestBasicPinning:
         m.remember("user_name", "hay", pinned=True)
         m.remember("last_command", "ls", pinned=False)
         # Find the user_name line
-        user_line = next(l for l in m.long_term.split("\n")
-                         if "user_name" in l)
+        user_line = next(l for l in m.long_term.split("\n") if "user_name" in l)
         assert m.is_pinned(user_line) is True
-        cmd_line = next(l for l in m.long_term.split("\n")
-                        if "last_command" in l)
+        cmd_line = next(l for l in m.long_term.split("\n") if "last_command" in l)
         assert m.is_pinned(cmd_line) is False
 
 
@@ -74,8 +70,7 @@ class TestPinnedNotEvicted:
         for i in range(10):
             m.remember(f"pinned_{i}", f"v_{i}", pinned=True)
         # Should be capped at 5
-        pinned_lines = [l for l in m.long_term.split("\n")
-                        if "pinned_" in l and l.strip()]
+        pinned_lines = [l for l in m.long_term.split("\n") if "pinned_" in l and l.strip()]
         assert len(pinned_lines) == 5
         # The most recent ones should be kept
         assert "pinned_9" in m.long_term
@@ -91,8 +86,7 @@ class TestPinnedNotEvicted:
         for i in range(100):
             m.remember(f"pinned_fact_{i}", f"fact_{i}", pinned=True)
         # All 100 pinned should survive
-        pinned_count = sum(1 for l in m.long_term.split("\n")
-                           if "pinned_fact_" in l and l.strip())
+        pinned_count = sum(1 for l in m.long_term.split("\n") if "pinned_fact_" in l and l.strip())
         assert pinned_count == 100
 
 
@@ -105,8 +99,7 @@ class TestPinnedUpdateReplaces:
         m.remember("user_name", "old", pinned=True)
         m.remember("user_name", "new", pinned=True)
         # Only one entry with user_name should exist
-        name_lines = [l for l in m.long_term.split("\n")
-                      if "user_name" in l and l.strip()]
+        name_lines = [l for l in m.long_term.split("\n") if "user_name" in l and l.strip()]
         assert len(name_lines) == 1
         assert "new" in name_lines[0]
         assert "old" not in m.long_term
@@ -117,8 +110,7 @@ class TestPinnedUpdateReplaces:
         m.remember("user_name", "hay", pinned=True)
         m.remember("user_name", "hay_v2", pinned=False)
         # Should still be one entry, now unpinned
-        name_lines = [l for l in m.long_term.split("\n")
-                      if "user_name" in l and l.strip()]
+        name_lines = [l for l in m.long_term.split("\n") if "user_name" in l and l.strip()]
         assert len(name_lines) == 1
         assert "📌" not in name_lines[0]
 
@@ -150,6 +142,7 @@ class TestMultilineSanitize:
         # Empty value should not be stored
         assert "- test:" not in m.long_term
         # The header "- " is for entries; "test:" alone should not be a line
-        test_lines = [l for l in m.long_term.split("\n")
-                      if l.strip().startswith("-") and "test:" in l]
+        test_lines = [
+            l for l in m.long_term.split("\n") if l.strip().startswith("-") and "test:" in l
+        ]
         assert test_lines == []

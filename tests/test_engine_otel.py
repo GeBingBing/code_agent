@@ -1,11 +1,10 @@
 """Tests for engine ↔ OpenTelemetry integration (PR-10)."""
 
-import asyncio
 import pytest
 
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.engine import AgentConfig, AgentEngine
+from agent.observability.metrics import get_metrics, reset_meter
 from agent.observability.tracing import reset_tracer
-from agent.observability.metrics import reset_meter, get_metrics
 
 
 @pytest.fixture(autouse=True)
@@ -43,8 +42,10 @@ class TestOTelHooksFire:
 
     @pytest.mark.asyncio
     async def test_after_tool_ends_span_and_records_metrics(self):
-        from agent.tools.base import ToolResult
         import time
+
+        from agent.tools.base import ToolResult
+
         e = AgentEngine(AgentConfig(model="mock", provider="mock"))
         # Set up — simulate that before-hook ran
         before = {"tool": "read_file", "args": {}, "tc_id": "x"}
@@ -69,6 +70,7 @@ class TestOTelHooksFire:
     @pytest.mark.asyncio
     async def test_after_tool_records_failure(self):
         from agent.tools.base import ToolResult
+
         e = AgentEngine(AgentConfig(model="mock", provider="mock"))
         payload = {
             "tool": "write_file",
@@ -84,6 +86,7 @@ class TestOTelHooksFire:
     @pytest.mark.asyncio
     async def test_before_llm_creates_span(self):
         from agent.llm.client import Message
+
         e = AgentEngine(AgentConfig(model="mock", provider="mock"))
         payload = {"messages": [Message(role="user", content="hi")]}
         out = await e._otel_before_llm(payload)
@@ -126,6 +129,7 @@ class TestDiagnosticsTools:
     @pytest.mark.asyncio
     async def test_metrics_query_tool_registered(self):
         from agent.tools.base import registry
+
         t = registry.get("metrics_query")
         assert t is not None
         assert t.is_read_only is True
@@ -133,14 +137,17 @@ class TestDiagnosticsTools:
     @pytest.mark.asyncio
     async def test_logs_query_tool_registered(self):
         from agent.tools.base import registry
+
         t = registry.get("logs_query")
         assert t is not None
         assert t.is_read_only is True
 
     @pytest.mark.asyncio
     async def test_metrics_query_returns_json(self):
-        from agent.tools.base import registry
         import json
+
+        from agent.tools.base import registry
+
         # Seed metrics
         m = get_metrics()
         m.record_tool_call("read", 10, True)
@@ -158,8 +165,10 @@ class TestDiagnosticsTools:
 
     @pytest.mark.asyncio
     async def test_metrics_query_filter(self):
-        from agent.tools.base import registry
         import json
+
+        from agent.tools.base import registry
+
         m = get_metrics()
         m.record_tool_call("read", 10, True)
         tool = registry.get("metrics_query")
@@ -173,6 +182,7 @@ class TestDiagnosticsTools:
     @pytest.mark.asyncio
     async def test_logs_query_missing_file(self, tmp_path):
         from agent.tools.base import registry
+
         tool = registry.get("logs_query")
         r = await tool.execute(path=str(tmp_path / "no.log"))
         assert r.success
@@ -181,6 +191,7 @@ class TestDiagnosticsTools:
     @pytest.mark.asyncio
     async def test_logs_query_reads_file(self, tmp_path):
         from agent.tools.base import registry
+
         log = tmp_path / "agent.log"
         lines = [
             '{"level":"INFO","message":"a"}',
@@ -196,6 +207,7 @@ class TestDiagnosticsTools:
     @pytest.mark.asyncio
     async def test_logs_query_level_filter(self, tmp_path):
         from agent.tools.base import registry
+
         log = tmp_path / "agent.log"
         lines = [
             '{"level":"INFO","message":"a"}',
@@ -211,14 +223,21 @@ class TestDiagnosticsTools:
 
 class TestJSONFormatter:
     def test_basic_record(self):
-        import logging
-        from agent.observability.logging import JSONFormatter
         import json
+        import logging
+
+        from agent.observability.logging import JSONFormatter
 
         f = JSONFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="x.py", lineno=10,
-            msg="hello", args=(), exc_info=None, func="f",
+            name="test",
+            level=logging.INFO,
+            pathname="x.py",
+            lineno=10,
+            msg="hello",
+            args=(),
+            exc_info=None,
+            func="f",
         )
         line = f.format(record)
         parsed = json.loads(line)
@@ -228,14 +247,20 @@ class TestJSONFormatter:
         assert parsed["line"] == 10
 
     def test_handles_extras(self):
-        import logging
-        from agent.observability.logging import JSONFormatter
         import json
+        import logging
+
+        from agent.observability.logging import JSONFormatter
 
         f = JSONFormatter()
         record = logging.LogRecord(
-            name="t", level=logging.INFO, pathname="x", lineno=1,
-            msg="m", args=(), exc_info=None,
+            name="t",
+            level=logging.INFO,
+            pathname="x",
+            lineno=1,
+            msg="m",
+            args=(),
+            exc_info=None,
         )
         record.tool = "read_file"
         record.duration_ms = 12.3
@@ -244,10 +269,11 @@ class TestJSONFormatter:
         assert parsed["duration_ms"] == 12.3
 
     def test_handles_exception(self):
+        import json
         import logging
         import sys
+
         from agent.observability.logging import JSONFormatter
-        import json
 
         f = JSONFormatter()
         try:
@@ -255,8 +281,13 @@ class TestJSONFormatter:
         except ValueError:
             exc_info = sys.exc_info()
         record = logging.LogRecord(
-            name="t", level=logging.ERROR, pathname="x", lineno=1,
-            msg="m", args=(), exc_info=exc_info,
+            name="t",
+            level=logging.ERROR,
+            pathname="x",
+            lineno=1,
+            msg="m",
+            args=(),
+            exc_info=exc_info,
         )
         parsed = json.loads(f.format(record))
         assert "ValueError" in parsed["exception"]

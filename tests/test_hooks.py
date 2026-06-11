@@ -1,17 +1,16 @@
 """Tests for the HookRegistry lifecycle-extension primitive."""
 
-import asyncio
 import pytest
 
 from agent.core.hooks import (
-    HookRegistry,
-    STANDARD_HOOKS,
-    BEFORE_LLM_CALL,
     AFTER_TOOL_EXECUTION,
-    ON_TOKEN,
+    BEFORE_LLM_CALL,
     ON_ERROR,
     ON_SESSION_END,
     ON_SESSION_START,
+    ON_TOKEN,
+    STANDARD_HOOKS,
+    HookRegistry,
 )
 
 
@@ -26,8 +25,10 @@ class TestRegisterAndExecute:
     @pytest.mark.asyncio
     async def test_register_and_execute_async(self):
         reg = HookRegistry()
+
         async def hook(p):
             return p * 2
+
         reg.register("x", hook)
         result = await reg.execute("x", payload=5)
         assert result == 10
@@ -89,8 +90,10 @@ class TestPayloadTransformation:
     async def test_mixed_sync_async_chained(self):
         reg = HookRegistry()
         reg.register("x", lambda p: p + 1)
+
         async def double(p):
             return p * 2
+
         reg.register("x", double)
         result = await reg.execute("x", payload=3)
         # First hook: 3+1=4, then second hook: 4*2=8
@@ -101,8 +104,10 @@ class TestErrorPropagation:
     @pytest.mark.asyncio
     async def test_sync_hook_exception_propagates(self):
         reg = HookRegistry()
+
         def bad(p):
             raise ValueError("oops")
+
         reg.register("x", bad)
         with pytest.raises(ValueError, match="oops"):
             await reg.execute("x", payload=None)
@@ -110,8 +115,10 @@ class TestErrorPropagation:
     @pytest.mark.asyncio
     async def test_async_hook_exception_propagates(self):
         reg = HookRegistry()
+
         async def bad(p):
             raise RuntimeError("async bad")
+
         reg.register("x", bad)
         with pytest.raises(RuntimeError, match="async bad"):
             await reg.execute("x", payload=None)
@@ -122,9 +129,11 @@ class TestErrorPropagation:
         reg = HookRegistry()
         calls = []
         reg.register("x", lambda p: calls.append("a") or p)
+
         def bad(p):
             calls.append("bad")
             raise ValueError("stop")
+
         reg.register("x", bad)
         reg.register("x", lambda p: calls.append("c") or p)
         with pytest.raises(ValueError):
@@ -135,7 +144,10 @@ class TestErrorPropagation:
 class TestUnregister:
     def test_unregister_removes_hook(self):
         reg = HookRegistry()
-        def h(p): return p
+
+        def h(p):
+            return p
+
         reg.register("x", h)
         assert reg.count("x") == 1
         reg.unregister("x", h)
@@ -148,8 +160,13 @@ class TestUnregister:
 
     def test_unregister_specific_hook_keeps_others(self):
         reg = HookRegistry()
-        def h1(p): return p
-        def h2(p): return p
+
+        def h1(p):
+            return p
+
+        def h2(p):
+            return p
+
         reg.register("x", h1)
         reg.register("x", h2)
         reg.unregister("x", h1)

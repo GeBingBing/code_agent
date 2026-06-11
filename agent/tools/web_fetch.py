@@ -98,12 +98,12 @@ class WebFetchTool(BaseTool):
         if error := _validate_url(url):
             return ToolResult(success=False, content="", error=error)
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Coding-Agent)"
-        }
+        headers = {"User-Agent": "Mozilla/5.0 (Coding-Agent)"}
 
         try:
-            async with httpx.AsyncClient(timeout=15.0, headers=headers, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                timeout=15.0, headers=headers, follow_redirects=True
+            ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
 
@@ -113,8 +113,7 @@ class WebFetchTool(BaseTool):
                 # Handle binary content
                 if "image" in content_type or "pdf" in content_type:
                     return ToolResult(
-                        success=True,
-                        content=f"Binary content ({content_type}). URL: {url}"
+                        success=True, content=f"Binary content ({content_type}). URL: {url}"
                     )
 
                 # Try UTF-8 first, fallback to latin-1
@@ -135,7 +134,9 @@ class WebFetchTool(BaseTool):
         except httpx.TimeoutException:
             return ToolResult(success=False, content="", error="Request timed out after 15s")
         except httpx.HTTPStatusError as e:
-            return ToolResult(success=False, content="", error=f"HTTP error: {e.response.status_code}")
+            return ToolResult(
+                success=False, content="", error=f"HTTP error: {e.response.status_code}"
+            )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
 
@@ -154,6 +155,7 @@ class WebFetchTool(BaseTool):
 
         # Decode entities
         import html as html_module
+
         html = html_module.unescape(html)
 
         # Collapse whitespace
@@ -173,7 +175,11 @@ class WebFetchTool(BaseTool):
                     "type": "object",
                     "properties": {
                         "url": {"type": "string", "description": "URL to fetch"},
-                        "max_length": {"type": "integer", "default": 8000, "description": "Max characters to return"},
+                        "max_length": {
+                            "type": "integer",
+                            "default": 8000,
+                            "description": "Max characters to return",
+                        },
                     },
                     "required": ["url"],
                 },

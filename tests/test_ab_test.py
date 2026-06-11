@@ -1,13 +1,12 @@
 """Unit tests for A/B testing framework (PR-12)."""
 
 import json
+
 import pytest
-from pathlib import Path
 
 from agent.governance.ab_test import (
     ABTestManager,
     Experiment,
-    ExperimentAnalysis,
     ExperimentObservation,
     ExperimentStatus,
     ExperimentTarget,
@@ -15,7 +14,6 @@ from agent.governance.ab_test import (
     get_ab_test_manager,
     reset_ab_test_manager,
 )
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -28,20 +26,32 @@ def _make_exp(exp_id: str = "exp_test", **overrides) -> Experiment:
         description=overrides.get("description", "test experiment"),
         target=overrides.get("target", ExperimentTarget.SYSTEM_PROMPT.value),
         target_key=overrides.get("target_key", "intro"),
-        variants=overrides.get("variants", [
-            ExperimentVariant(id="A", name="control",
-                              config={"new_content": "You are a control agent."}),
-            ExperimentVariant(id="B", name="treatment",
-                              config={"new_content": "You are a treatment agent."}),
-        ]),
+        variants=overrides.get(
+            "variants",
+            [
+                ExperimentVariant(
+                    id="A", name="control", config={"new_content": "You are a control agent."}
+                ),
+                ExperimentVariant(
+                    id="B", name="treatment", config={"new_content": "You are a treatment agent."}
+                ),
+            ],
+        ),
         min_samples=overrides.get("min_samples", 5),
     )
     return exp
 
 
-def _make_obs(exp_id: str, variant: str, success: bool, n: int = 1,
-              tokens: int = 100, duration: float = 50.0,
-              user_id: str = "alice", rating: int = None) -> list:
+def _make_obs(
+    exp_id: str,
+    variant: str,
+    success: bool,
+    n: int = 1,
+    tokens: int = 100,
+    duration: float = 50.0,
+    user_id: str = "alice",
+    rating: int = None,
+) -> list:
     """Build N identical observations for one variant."""
     return [
         ExperimentObservation(
@@ -106,9 +116,15 @@ class TestExperimentDataClass:
 class TestObservationDataClass:
     def test_round_trip(self):
         o = ExperimentObservation(
-            experiment_id="e1", variant_id="A", user_id="u",
-            task="t", success=True, token_input=10, token_output=20,
-            duration_ms=100.0, user_rating=4,
+            experiment_id="e1",
+            variant_id="A",
+            user_id="u",
+            task="t",
+            success=True,
+            token_input=10,
+            token_output=20,
+            duration_ms=100.0,
+            user_rating=4,
         )
         d = o.to_dict()
         o2 = ExperimentObservation.from_dict(d)
@@ -117,8 +133,13 @@ class TestObservationDataClass:
 
     def test_round_trip_no_rating(self):
         o = ExperimentObservation(
-            experiment_id="e1", variant_id="A", user_id="u",
-            task="t", success=True, token_input=10, token_output=20,
+            experiment_id="e1",
+            variant_id="A",
+            user_id="u",
+            task="t",
+            success=True,
+            token_input=10,
+            token_output=20,
             duration_ms=100.0,
         )
         d = o.to_dict()
@@ -127,8 +148,14 @@ class TestObservationDataClass:
 
     def test_default_ts(self):
         o = ExperimentObservation(
-            experiment_id="e1", variant_id="A", user_id="u", task="t",
-            success=True, token_input=0, token_output=0, duration_ms=0.0,
+            experiment_id="e1",
+            variant_id="A",
+            user_id="u",
+            task="t",
+            success=True,
+            token_input=0,
+            token_output=0,
+            duration_ms=0.0,
         )
         assert o.ts == ""
 
@@ -160,7 +187,9 @@ class TestManagerCreate:
         v1 = ExperimentVariant(id="", name="c", config={})
         v2 = ExperimentVariant(id="", name="t", config={})
         e = Experiment(
-            id="x", name="x", description="x",
+            id="x",
+            name="x",
+            description="x",
             target=ExperimentTarget.SYSTEM_PROMPT.value,
             target_key="k",
             variants=[v1, v2],
@@ -648,8 +677,11 @@ class TestThreeVariants:
     def test_three_variants_creation(self, tmp_path):
         mgr = ABTestManager(exp_dir=tmp_path)
         exp = Experiment(
-            id="exp_3v", name="3-way", description="",
-            target="system_prompt", target_key="intro",
+            id="exp_3v",
+            name="3-way",
+            description="",
+            target="system_prompt",
+            target_key="intro",
             variants=[
                 ExperimentVariant(id="A", name="control", config={}),
                 ExperimentVariant(id="B", name="treatment1", config={}),
@@ -667,11 +699,15 @@ class TestThreeVariants:
         specifically (it's the canonical A/B test case). C's data is
         still recorded but not used for the winner decision."""
         mgr = ABTestManager(exp_dir=tmp_path)
-        exp = _make_exp("exp_3v", variants=[
-            ExperimentVariant(id="A", name="control", config={}),
-            ExperimentVariant(id="B", name="treatment1", config={}),
-            ExperimentVariant(id="C", name="treatment2", config={}),
-        ], min_samples=3)
+        exp = _make_exp(
+            "exp_3v",
+            variants=[
+                ExperimentVariant(id="A", name="control", config={}),
+                ExperimentVariant(id="B", name="treatment1", config={}),
+                ExperimentVariant(id="C", name="treatment2", config={}),
+            ],
+            min_samples=3,
+        )
         mgr.create(exp)
         # A: 5 samples, 80% success
         for o in _make_obs("exp_3v", "A", True, 4):
@@ -697,11 +733,15 @@ class TestThreeVariants:
     def test_three_variant_no_a_uses_top2_by_n(self, tmp_path):
         """When A is not in the experiment, fall back to top-2 by n."""
         mgr = ABTestManager(exp_dir=tmp_path)
-        exp = _make_exp("exp_no_a", variants=[
-            ExperimentVariant(id="B", name="first", config={}),
-            ExperimentVariant(id="C", name="second", config={}),
-            ExperimentVariant(id="D", name="third", config={}),
-        ], min_samples=3)
+        exp = _make_exp(
+            "exp_no_a",
+            variants=[
+                ExperimentVariant(id="B", name="first", config={}),
+                ExperimentVariant(id="C", name="second", config={}),
+                ExperimentVariant(id="D", name="third", config={}),
+            ],
+            min_samples=3,
+        )
         mgr.create(exp)
         # B: 5 samples, 30% success
         for o in _make_obs("exp_no_a", "B", True, 1):
@@ -751,9 +791,12 @@ class TestPromotedJson:
 
     def test_promoted_file_has_target_metadata(self, tmp_path):
         mgr = ABTestManager(exp_dir=tmp_path)
-        exp = _make_exp("exp_meta", min_samples=2,
-                        target=ExperimentTarget.TOOL_DEFAULT.value,
-                        target_key="read_file.timeout")
+        exp = _make_exp(
+            "exp_meta",
+            min_samples=2,
+            target=ExperimentTarget.TOOL_DEFAULT.value,
+            target_key="read_file.timeout",
+        )
         mgr.create(exp)
         for o in _make_obs("exp_meta", "A", True, 2):
             mgr.record_observation(o)
@@ -823,10 +866,13 @@ class TestWeightedDistribution:
     def test_heavy_a_weight(self, tmp_path):
         """When A is weighted 9, B is weighted 1 → ~90% of users get A."""
         mgr = ABTestManager(exp_dir=tmp_path)
-        exp = _make_exp("exp_weighted", variants=[
-            ExperimentVariant(id="A", name="heavy", config={}, weight=9.0),
-            ExperimentVariant(id="B", name="light", config={}, weight=1.0),
-        ])
+        exp = _make_exp(
+            "exp_weighted",
+            variants=[
+                ExperimentVariant(id="A", name="heavy", config={}, weight=9.0),
+                ExperimentVariant(id="B", name="light", config={}, weight=1.0),
+            ],
+        )
         mgr.create(exp)
         counts = {"A": 0, "B": 0}
         for i in range(200):
@@ -838,10 +884,13 @@ class TestWeightedDistribution:
 
     def test_zero_weight_never_picked(self, tmp_path):
         mgr = ABTestManager(exp_dir=tmp_path)
-        exp = _make_exp("exp_zero", variants=[
-            ExperimentVariant(id="A", name="active", config={}, weight=1.0),
-            ExperimentVariant(id="B", name="dead", config={}, weight=0.0),
-        ])
+        exp = _make_exp(
+            "exp_zero",
+            variants=[
+                ExperimentVariant(id="A", name="active", config={}, weight=1.0),
+                ExperimentVariant(id="B", name="dead", config={}, weight=0.0),
+            ],
+        )
         mgr.create(exp)
         for i in range(50):
             v = mgr.assign_variant("exp_zero", f"u{i}")
@@ -853,10 +902,13 @@ class TestWeightedDistribution:
         """All zero weights → sum is 0 → fallback to 1.0 → last variant
         is picked for every user (cumulative never reaches bucket)."""
         mgr = ABTestManager(exp_dir=tmp_path)
-        exp = _make_exp("exp_zeroall", variants=[
-            ExperimentVariant(id="A", name="a", config={}, weight=0.0),
-            ExperimentVariant(id="B", name="b", config={}, weight=0.0),
-        ])
+        exp = _make_exp(
+            "exp_zeroall",
+            variants=[
+                ExperimentVariant(id="A", name="a", config={}, weight=0.0),
+                ExperimentVariant(id="B", name="b", config={}, weight=0.0),
+            ],
+        )
         mgr.create(exp)
         v = mgr.assign_variant("exp_zeroall", "alice")
         # Implementation divides by 1.0 fallback → 0 cumulative → returns last
@@ -927,8 +979,11 @@ class TestExperimentValidation:
     def test_create_assigns_variant_ids_if_missing(self, tmp_path):
         mgr = ABTestManager(exp_dir=tmp_path)
         exp = Experiment(
-            id="exp_auto", name="", description="",
-            target="system_prompt", target_key="x",
+            id="exp_auto",
+            name="",
+            description="",
+            target="system_prompt",
+            target_key="x",
             variants=[
                 ExperimentVariant(id="", name="first", config={}),
                 ExperimentVariant(id="", name="second", config={}),
@@ -959,9 +1014,15 @@ class TestExperimentValidation:
 
     def test_observation_to_from_dict_preserves_metadata(self, tmp_path):
         obs = ExperimentObservation(
-            experiment_id="e", variant_id="A", user_id="u",
-            task="t", success=True, token_input=10, token_output=20,
-            duration_ms=100.0, user_rating=5,
+            experiment_id="e",
+            variant_id="A",
+            user_id="u",
+            task="t",
+            success=True,
+            token_input=10,
+            token_output=20,
+            duration_ms=100.0,
+            user_rating=5,
             metadata={"trace_id": "abc", "model": "gpt-4o"},
         )
         d = obs.to_dict()
@@ -978,14 +1039,24 @@ class TestConcurrentObservations:
         """20 parallel record_observation calls should all show up in the
         file (no append-mode clobbering)."""
         import threading
+
         mgr = ABTestManager(exp_dir=tmp_path)
         mgr.create(_make_exp("exp_concurrent"))
+
         def record_one(i):
-            mgr.record_observation(ExperimentObservation(
-                experiment_id="exp_concurrent", variant_id="A",
-                user_id=f"u{i}", task=f"t{i}", success=True,
-                token_input=10, token_output=10, duration_ms=10.0,
-            ))
+            mgr.record_observation(
+                ExperimentObservation(
+                    experiment_id="exp_concurrent",
+                    variant_id="A",
+                    user_id=f"u{i}",
+                    task=f"t{i}",
+                    success=True,
+                    token_input=10,
+                    token_output=10,
+                    duration_ms=10.0,
+                )
+            )
+
         threads = [threading.Thread(target=record_one, args=(i,)) for i in range(20)]
         for t in threads:
             t.start()

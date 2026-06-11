@@ -16,8 +16,6 @@ Per-turn transient state (cwd, git, mode, plan_progress) is delivered via
 prompt — to avoid breaking prompt cache stability.
 """
 
-from typing import List, Optional
-
 
 class PromptAssembler:
     """Assemble structured system prompts for the ReAct agent."""
@@ -197,8 +195,7 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
         """
         from ..tools.base import registry
 
-        tools = [t for t in sorted(registry.list(), key=lambda t: t.name)
-                 if t.is_enabled()]
+        tools = [t for t in sorted(registry.list(), key=lambda t: t.name) if t.is_enabled()]
 
         lines = ["<available_tools>"]
         for tool in tools:

@@ -6,10 +6,9 @@ Falls back to regex if tree-sitter is not installed.
 
 import ast
 import json
-import os
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
-from dataclasses import dataclass, field, asdict
 
 # Optional tree-sitter import
 _TREE_SITTER = None
@@ -17,11 +16,13 @@ _TREE_SITTER_LANGS = {}
 try:
     # Try newer tree-sitter-languages package first
     import tree_sitter_languages  # type: ignore
+
     _TREE_SITTER = "languages"
 except ImportError:
     try:
         # Fall back to bare tree-sitter package
-        import tree_sitter  # type: ignore
+        import tree_sitter  # type: ignore  # noqa: F401 — availability probe
+
         _TREE_SITTER = "bare"
     except ImportError:
         pass
@@ -72,8 +73,15 @@ class CodeIndexer:
     def _should_skip(self, filepath: Path) -> bool:
         """Skip common non-source directories."""
         skip_dirs = {
-            "__pycache__", ".git", "node_modules", "venv", ".venv",
-            "dist", "build", ".pytest_cache", ".mypy_cache",
+            "__pycache__",
+            ".git",
+            "node_modules",
+            "venv",
+            ".venv",
+            "dist",
+            "build",
+            ".pytest_cache",
+            ".mypy_cache",
         }
         return any(part in skip_dirs for part in filepath.parts)
 
@@ -116,13 +124,28 @@ class CodeIndexer:
                 symbols.append(Symbol("class", node.name, node.lineno, node.col_offset))
                 for item in node.body:
                     if isinstance(item, ast.FunctionDef):
-                        symbols.append(Symbol("method", f"{node.name}.{item.name}", item.lineno, item.col_offset))
+                        symbols.append(
+                            Symbol(
+                                "method", f"{node.name}.{item.name}", item.lineno, item.col_offset
+                            )
+                        )
                     elif isinstance(item, ast.AsyncFunctionDef):
-                        symbols.append(Symbol("method", f"{node.name}.{item.name}", item.lineno, item.col_offset))
+                        symbols.append(
+                            Symbol(
+                                "method", f"{node.name}.{item.name}", item.lineno, item.col_offset
+                            )
+                        )
                     elif isinstance(item, ast.Assign):
                         for target in item.targets:
                             if isinstance(target, ast.Name):
-                                symbols.append(Symbol("variable", f"{node.name}.{target.id}", item.lineno, item.col_offset))
+                                symbols.append(
+                                    Symbol(
+                                        "variable",
+                                        f"{node.name}.{target.id}",
+                                        item.lineno,
+                                        item.col_offset,
+                                    )
+                                )
             elif isinstance(node, ast.FunctionDef):
                 symbols.append(Symbol("function", node.name, node.lineno, node.col_offset))
             elif isinstance(node, ast.AsyncFunctionDef):
@@ -137,13 +160,17 @@ class CodeIndexer:
     def _parse_generic(self, content: str, ext: str) -> List[Symbol]:
         """Regex-based parsing for non-Python languages."""
         import re
+
         symbols = []
         patterns = {
             ".js": [r"function\s+(\w+)", r"class\s+(\w+)", r"const\s+(\w+)\s*="],
             ".ts": [r"function\s+(\w+)", r"class\s+(\w+)", r"const\s+(\w+)\s*="],
             ".go": [r"func\s+(?:\([^)]+\)\s+)?(\w+)", r"type\s+(\w+)\s+struct"],
             ".rs": [r"fn\s+(\w+)", r"struct\s+(\w+)", r"impl\s+(\w+)"],
-            ".java": [r"(?:public\s+|private\s+|protected\s+)?(?:class|interface)\s+(\w+)", r"(?:public\s+|private\s+|protected\s+)?[\w<>\[\]]+\s+(\w+)\s*\("],
+            ".java": [
+                r"(?:public\s+|private\s+|protected\s+)?(?:class|interface)\s+(\w+)",
+                r"(?:public\s+|private\s+|protected\s+)?[\w<>\[\]]+\s+(\w+)\s*\(",
+            ],
         }
 
         regexes = patterns.get(ext, [])
@@ -151,7 +178,9 @@ class CodeIndexer:
             for regex in regexes:
                 for match in re.finditer(regex, line):
                     name = match.group(1)
-                    kind = "function" if "func" in regex or "fn " in regex or "(" in line else "class"
+                    kind = (
+                        "function" if "func" in regex or "fn " in regex or "(" in line else "class"
+                    )
                     if "struct" in regex:
                         kind = "class"
                     symbols.append(Symbol(kind, name, i, match.start()))
@@ -164,8 +193,12 @@ class CodeIndexer:
 
         # Map our language names to tree-sitter language names
         lang_map = {
-            "javascript": "javascript", "typescript": "typescript",
-            "tsx": "tsx", "go": "go", "rust": "rust", "java": "java",
+            "javascript": "javascript",
+            "typescript": "typescript",
+            "tsx": "tsx",
+            "go": "go",
+            "rust": "rust",
+            "java": "java",
         }
         ts_lang = lang_map.get(language, language)
 
@@ -184,12 +217,21 @@ class CodeIndexer:
 
             # Walk the tree for function/class/variable declarations
             _node_types = {
-                "function": {"function_declaration", "method_definition",
-                             "arrow_function", "function_expression"},
+                "function": {
+                    "function_declaration",
+                    "method_definition",
+                    "arrow_function",
+                    "function_expression",
+                },
                 "class": {"class_declaration", "class_definition"},
-                "variable": {"variable_declaration", "variable_declarator",
-                             "lexical_declaration", "const_declaration",
-                             "let_declaration", "var_declaration"},
+                "variable": {
+                    "variable_declaration",
+                    "variable_declarator",
+                    "lexical_declaration",
+                    "const_declaration",
+                    "let_declaration",
+                    "var_declaration",
+                },
             }
 
             # Use cursor for efficient traversal
@@ -249,6 +291,7 @@ class CodeIndexer:
         Returns list of dicts with keys: path, line, col, context
         """
         import re
+
         refs = []
         # Use base name for method references (e.g., "Class.method" -> "method")
         base_name = symbol_name.split(".")[-1]
@@ -256,14 +299,11 @@ class CodeIndexer:
         for path, file_idx in self.files.items():
             content = "\n".join(file_idx.lines)
             # Pattern: word boundary + symbol name + not followed by definition patterns
-            pattern = re.compile(
-                rf'\b{re.escape(base_name)}\b',
-                re.MULTILINE
-            )
+            pattern = re.compile(rf"\b{re.escape(base_name)}\b", re.MULTILINE)
             for match in pattern.finditer(content):
                 # Convert absolute position to line/col
-                line_start = content.rfind('\n', 0, match.start())
-                line_no = content[:match.start()].count('\n') + 1
+                line_start = content.rfind("\n", 0, match.start())
+                line_no = content[: match.start()].count("\n") + 1
                 col = match.start() - line_start - 1 if line_start >= 0 else match.start()
 
                 # Skip self-references (the definition line)
@@ -275,13 +315,17 @@ class CodeIndexer:
                             break
 
                 if not is_definition:
-                    line_text = file_idx.lines[line_no - 1] if line_no <= len(file_idx.lines) else ""
-                    refs.append({
-                        "path": path,
-                        "line": line_no,
-                        "col": max(0, col),
-                        "context": line_text.strip()[:120],
-                    })
+                    line_text = (
+                        file_idx.lines[line_no - 1] if line_no <= len(file_idx.lines) else ""
+                    )
+                    refs.append(
+                        {
+                            "path": path,
+                            "line": line_no,
+                            "col": max(0, col),
+                            "context": line_text.strip()[:120],
+                        }
+                    )
 
         return refs
 
@@ -291,6 +335,7 @@ class CodeIndexer:
         Uses heuristic regex matching for cross-file references.
         """
         import re
+
         graph: Dict[str, List[dict]] = {}
         all_symbols = {}
         for path, file_idx in self.files.items():
@@ -314,12 +359,14 @@ class CodeIndexer:
                 if callee_name == caller_name:
                     continue
                 base = callee_name.split(".")[-1]
-                if re.search(rf'\b{re.escape(base)}\s*\(', body):
-                    called.append({
-                        "name": callee_name,
-                        "path": callee_info["path"],
-                        "line": callee_info["line"],
-                    })
+                if re.search(rf"\b{re.escape(base)}\s*\(", body):
+                    called.append(
+                        {
+                            "name": callee_name,
+                            "path": callee_info["path"],
+                            "line": callee_info["line"],
+                        }
+                    )
             if called:
                 graph[caller_name] = called
 
@@ -335,37 +382,43 @@ class CodeIndexer:
             for path, file_idx in self.files.items():
                 for sym in file_idx.symbols:
                     if sym.name.startswith(f"{class_name}.") and sym.name != symbol_name:
-                        related.append({
-                            "relation": "same_class",
-                            "name": sym.name,
-                            "path": path,
-                            "line": sym.line,
-                            "kind": sym.kind,
-                        })
+                        related.append(
+                            {
+                                "relation": "same_class",
+                                "name": sym.name,
+                                "path": path,
+                                "line": sym.line,
+                                "kind": sym.kind,
+                            }
+                        )
 
         # Callers
         graph = self.build_call_graph()
         for caller, callees in graph.items():
             for c in callees:
                 if c["name"] == symbol_name:
-                    related.append({
-                        "relation": "called_by",
-                        "name": caller,
-                        "path": c["path"],
-                        "line": c["line"],
-                        "kind": "function",
-                    })
+                    related.append(
+                        {
+                            "relation": "called_by",
+                            "name": caller,
+                            "path": c["path"],
+                            "line": c["line"],
+                            "kind": "function",
+                        }
+                    )
 
         # Callees
         if symbol_name in graph:
             for c in graph[symbol_name]:
-                related.append({
-                    "relation": "calls",
-                    "name": c["name"],
-                    "path": c["path"],
-                    "line": c["line"],
-                    "kind": "function",
-                })
+                related.append(
+                    {
+                        "relation": "calls",
+                        "name": c["name"],
+                        "path": c["path"],
+                        "line": c["line"],
+                        "kind": "function",
+                    }
+                )
 
         return related
 
@@ -381,7 +434,7 @@ class CodeIndexer:
                     "language": fi.language,
                 }
                 for name, fi in self.files.items()
-            }
+            },
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f)

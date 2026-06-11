@@ -109,7 +109,9 @@ class SandboxExecuteTool(BaseTool):
     def __init__(self):
         self.sandbox = Sandbox()
 
-    async def execute(self, command: str, cwd: str = ".", timeout: int = 60, **kwargs) -> ToolResult:
+    async def execute(
+        self, command: str, cwd: str = ".", timeout: int = 60, **kwargs
+    ) -> ToolResult:
         try:
             result = await self.sandbox.execute(command, cwd, timeout)
             output = result["stdout"]
@@ -133,9 +135,20 @@ class SandboxExecuteTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "command": {"type": "string", "description": "Shell command to run in sandbox"},
-                        "cwd": {"type": "string", "description": "Working directory to mount", "default": "."},
-                        "timeout": {"type": "integer", "description": "Timeout in seconds", "default": 60},
+                        "command": {
+                            "type": "string",
+                            "description": "Shell command to run in sandbox",
+                        },
+                        "cwd": {
+                            "type": "string",
+                            "description": "Working directory to mount",
+                            "default": ".",
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "description": "Timeout in seconds",
+                            "default": 60,
+                        },
                     },
                     "required": ["command"],
                 },
@@ -173,8 +186,16 @@ class SnapshotTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "Directory to snapshot", "default": "."},
-                        "name": {"type": "string", "description": "Snapshot name", "default": "default"},
+                        "path": {
+                            "type": "string",
+                            "description": "Directory to snapshot",
+                            "default": ".",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Snapshot name",
+                            "default": "default",
+                        },
                     },
                     "required": ["path"],
                 },
@@ -195,7 +216,9 @@ class RollbackTool(BaseTool):
     async def execute(self, name: str, target: str = ".", **kwargs) -> ToolResult:
         try:
             self.sandbox.rollback(name, target)
-            return ToolResult(success=True, content=f"Rolled back '{target}' from snapshot '{name}'")
+            return ToolResult(
+                success=True, content=f"Rolled back '{target}' from snapshot '{name}'"
+            )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
 
@@ -210,7 +233,11 @@ class RollbackTool(BaseTool):
                     "type": "object",
                     "properties": {
                         "name": {"type": "string", "description": "Snapshot name to restore"},
-                        "target": {"type": "string", "description": "Directory to restore into", "default": "."},
+                        "target": {
+                            "type": "string",
+                            "description": "Directory to restore into",
+                            "default": ".",
+                        },
                     },
                     "required": ["name"],
                 },

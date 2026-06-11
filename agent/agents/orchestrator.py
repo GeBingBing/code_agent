@@ -21,14 +21,12 @@ Design notes:
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from .roles import AgentRole, BUILTIN_ROLES, get_role
-
+from .roles import BUILTIN_ROLES, AgentRole
 
 # ── Errors ──────────────────────────────────────────────────────────
 
@@ -47,6 +45,7 @@ class CyclicDependencyError(Exception):
 @dataclass
 class TaskRequest:
     """A single subtask in the orchestrator's DAG."""
+
     task_id: str
     role: str  # "code" | "test" | "reviewer" | "devops"
     description: str
@@ -72,6 +71,7 @@ class TaskRequest:
 @dataclass
 class TaskResponse:
     """Result of a subtask execution."""
+
     task_id: str
     status: str  # "done" | "failed" | "timeout"
     outputs: Dict[str, Any] = field(default_factory=dict)
@@ -150,6 +150,7 @@ def _parse_decomposition(text: str) -> List[TaskRequest]:
     trailing commas, and prose-embedded JSON.
     """
     from ..core.llm_extractor import LLMExtractor
+
     data = LLMExtractor._safe_json_loads(text)
     if data is None:
         return []
@@ -161,12 +162,14 @@ def _parse_decomposition(text: str) -> List[TaskRequest]:
     for item in data:
         if not isinstance(item, dict):
             continue
-        tasks.append(TaskRequest(
-            task_id=str(item.get("id") or f"st-{len(tasks) + 1}"),
-            role=str(item.get("role") or "code"),
-            description=str(item.get("description") or "").strip(),
-            depends_on=list(item.get("depends_on") or []),
-        ))
+        tasks.append(
+            TaskRequest(
+                task_id=str(item.get("id") or f"st-{len(tasks) + 1}"),
+                role=str(item.get("role") or "code"),
+                description=str(item.get("description") or "").strip(),
+                depends_on=list(item.get("depends_on") or []),
+            )
+        )
     return tasks
 
 
@@ -286,9 +289,7 @@ class OrchestratorAgent:
         for t in tasks:
             for dep in t.depends_on:
                 if dep not in ids:
-                    raise TaskExecutionError(
-                        f"Task {t.task_id!r} depends on unknown task {dep!r}"
-                    )
+                    raise TaskExecutionError(f"Task {t.task_id!r} depends on unknown task {dep!r}")
         # Topological sort (Kahn's algorithm) to detect cycles
         in_deg: Dict[str, int] = {t.task_id: 0 for t in tasks}
         children: Dict[str, List[str]] = {t.task_id: [] for t in tasks}
@@ -360,7 +361,8 @@ class OrchestratorAgent:
 
         while len(completed) < len(tasks):
             ready = [
-                t for t in tasks
+                t
+                for t in tasks
                 if t.task_id not in completed
                 and t.task_id not in in_flight
                 and all(dep in completed for dep in t.depends_on)

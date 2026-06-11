@@ -1,13 +1,12 @@
 """Tests for web_search tool."""
 
-import pytest
-
-from agent.tools.web_search import WebSearchTool
 from agent.tools.base import registry
+from agent.tools.web_search import WebSearchTool
 
 
 def _run(coro):
     import asyncio
+
     return asyncio.run(coro)
 
 

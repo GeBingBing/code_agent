@@ -5,25 +5,103 @@ import re
 import shlex
 import time
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
-from .base import BaseTool, ToolResult, registry, read_process, IdleTimeoutError
-
+from .base import BaseTool, IdleTimeoutError, ToolResult, read_process, registry
 
 # Whitelist of safe commands
 SAFE_COMMANDS = {
-    "ls", "cat", "grep", "find", "echo", "python", "python3", "node", "npm",
-    "pip", "pip3", "git", "cd", "pwd", "mkdir", "rm", "cp", "mv", "touch",
-    "chmod", "head", "tail", "wc", "sort", "uniq", "awk", "sed", "cut",
-    "xargs", "which", "file", "stat", "diff", "patch", "make", "cmake",
-    "cargo", "rustc", "go", "java", "javac", "node", "ruby", "perl",
-    "bash", "sh", "zsh", "fish", "curl", "wget", "tar", "gzip", "gunzip",
-    "zip", "unzip", "rsync", "scp", "ssh", "ping", "nc", "netstat",
-    "ps", "top", "htop", "kill", "killall", "pkill", "pgrep", "free",
-    "df", "du", "lsblk", "mount", "umount", "fdisk", "mkfs.ext4",
+    "ls",
+    "cat",
+    "grep",
+    "find",
+    "echo",
+    "python",
+    "python3",
+    "node",
+    "npm",
+    "pip",
+    "pip3",
+    "git",
+    "cd",
+    "pwd",
+    "mkdir",
+    "rm",
+    "cp",
+    "mv",
+    "touch",
+    "chmod",
+    "head",
+    "tail",
+    "wc",
+    "sort",
+    "uniq",
+    "awk",
+    "sed",
+    "cut",
+    "xargs",
+    "which",
+    "file",
+    "stat",
+    "diff",
+    "patch",
+    "make",
+    "cmake",
+    "cargo",
+    "rustc",
+    "go",
+    "java",
+    "javac",
+    "ruby",
+    "perl",
+    "bash",
+    "sh",
+    "zsh",
+    "fish",
+    "curl",
+    "wget",
+    "tar",
+    "gzip",
+    "gunzip",
+    "zip",
+    "unzip",
+    "rsync",
+    "scp",
+    "ssh",
+    "ping",
+    "nc",
+    "netstat",
+    "ps",
+    "top",
+    "htop",
+    "kill",
+    "killall",
+    "pkill",
+    "pgrep",
+    "free",
+    "df",
+    "du",
+    "lsblk",
+    "mount",
+    "umount",
+    "fdisk",
+    "mkfs.ext4",
     # Package managers
-    "brew", "apt", "apt-get", "dnf", "yum", "pacman", "conda", "gem",
-    "snap", "npx", "pnpm", "yarn", "poetry", "mamba", "pipx",
+    "brew",
+    "apt",
+    "apt-get",
+    "dnf",
+    "yum",
+    "pacman",
+    "conda",
+    "gem",
+    "snap",
+    "npx",
+    "pnpm",
+    "yarn",
+    "poetry",
+    "mamba",
+    "pipx",
 }
 
 # Blocked command patterns (more robust than simple string matching)
@@ -41,7 +119,7 @@ BLOCKED_PATTERNS = [
     r"exec\s*\(",
     r"system\s*\(",
     r" subprocess",  # python subprocess in a shell string
-    r"__import__",    # python code injection
+    r"__import__",  # python code injection
     r"open\s*\([^)]*\.py",  # file write to .py
     # System paths that should never be modified by rm/chmod/mv
     r"rm\s+.*\.pyenv",
@@ -56,6 +134,7 @@ BLOCKED_PATTERNS = [
 # fallback patterns like "which X || pip show X" or "cd dir && make".
 # The dangerous command patterns (rm, sudo, etc.) are checked separately.
 _SHELL_METACHARS = {";", "`", "$("}
+
 
 def _has_unsafe_pipe(command: str) -> bool:
     """Check for standalone pipe (|) not part of ||."""
@@ -116,8 +195,20 @@ class ExecuteCommandTool(BaseTool):
         # Check standalone pipe (| not part of ||) — only block in dangerous contexts
         if _has_unsafe_pipe(command):
             dangerous_with_pipe = [
-                "curl", "wget", "ssh", "nc ", "telnet", "bash ", "sh ",
-                "sudo", "rm ", "dd ", "/dev/", "> /", "chmod", "chown",
+                "curl",
+                "wget",
+                "ssh",
+                "nc ",
+                "telnet",
+                "bash ",
+                "sh ",
+                "sudo",
+                "rm ",
+                "dd ",
+                "/dev/",
+                "> /",
+                "chmod",
+                "chown",
             ]
             if any(op in cmd_lower for op in dangerous_with_pipe):
                 return f"Shell metacharacter '|' not allowed with '{cmd_lower[:20]}...'"
@@ -136,7 +227,9 @@ class ExecuteCommandTool(BaseTool):
         cmd_name = cmd_path.name if cmd_path.is_absolute() else cmd_path.name
 
         # Whitelist check
-        effective_allowed = self.allowed_commands if self.allowed_commands is not None else SAFE_COMMANDS
+        effective_allowed = (
+            self.allowed_commands if self.allowed_commands is not None else SAFE_COMMANDS
+        )
         if effective_allowed and cmd_name not in effective_allowed:
             return f"Command not allowed: {cmd_name}"
 
@@ -155,16 +248,14 @@ class ExecuteCommandTool(BaseTool):
 
         return None
 
-    async def execute(self, command: str, cwd: Optional[str] = None, timeout: int = 30, **kwargs) -> ToolResult:
+    async def execute(
+        self, command: str, cwd: Optional[str] = None, timeout: int = 30, **kwargs
+    ) -> ToolResult:
         """Execute a shell command"""
 
         # Security validation
         if error := self._validate_command(command):
-            return ToolResult(
-                success=False,
-                content="",
-                error=f"Command blocked: {error}"
-            )
+            return ToolResult(success=False, content="", error=f"Command blocked: {error}")
 
         try:
             t0 = time.time()
@@ -188,7 +279,8 @@ class ExecuteCommandTool(BaseTool):
                 )
 
             return ToolResult(
-                success=True, content=stdout,
+                success=True,
+                content=stdout,
                 metadata={"duration_ms": elapsed_ms, "lines": output_lines},
             )
 
@@ -199,7 +291,11 @@ class ExecuteCommandTool(BaseTool):
                 msg += f"\n[partial output before timeout]\n{partial[-500:]}"
             return ToolResult(success=False, content=e.stdout, error=msg)
         except asyncio.TimeoutError:
-            return ToolResult(success=False, content="", error=f"No output for {timeout}s (idle timeout, process killed)")
+            return ToolResult(
+                success=False,
+                content="",
+                error=f"No output for {timeout}s (idle timeout, process killed)",
+            )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
 
@@ -215,9 +311,13 @@ class ExecuteCommandTool(BaseTool):
                     "properties": {
                         "command": {"type": "string", "description": "Shell command to execute"},
                         "cwd": {"type": "string", "description": "Working directory"},
-                        "timeout": {"type": "integer", "description": "Idle timeout in seconds (kill if no output for this long)", "default": 30}
+                        "timeout": {
+                            "type": "integer",
+                            "description": "Idle timeout in seconds (kill if no output for this long)",
+                            "default": 30,
+                        },
                     },
-                    "required": ["command"]
+                    "required": ["command"],
                 },
             },
         }

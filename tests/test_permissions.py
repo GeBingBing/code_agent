@@ -1,7 +1,5 @@
 """Tests for Phase 3: Permission system."""
 
-import pytest
-
 from agent.core.permissions import (
     PermissionManager,
     RiskLevel,
@@ -25,7 +23,9 @@ class TestRiskAssessment:
         assert assess_risk("execute_command", {"command": "rm -rf /"}) == RiskLevel.CRITICAL
 
     def test_sudo_is_critical(self):
-        assert assess_risk("execute_command", {"command": "sudo apt install x"}) == RiskLevel.CRITICAL
+        assert (
+            assess_risk("execute_command", {"command": "sudo apt install x"}) == RiskLevel.CRITICAL
+        )
 
 
 class TestPlanMode:
@@ -102,6 +102,7 @@ class TestAlwaysAllowCache:
         pm = PermissionManager("default")
         # Simulate user pressing 'a' (always) by directly adding to cache
         from agent.core.permissions import _make_signature
+
         sig = _make_signature("write_file", {"path": "/tmp/foo.py"})
         pm._approved.add(sig)
         assert pm.needs_confirmation("write_file", {"path": "/tmp/foo.py"}) is False
@@ -109,6 +110,7 @@ class TestAlwaysAllowCache:
     def test_different_path_still_needs_confirmation(self):
         pm = PermissionManager("default")
         from agent.core.permissions import _make_signature
+
         sig = _make_signature("write_file", {"path": "/tmp/foo.py"})
         pm._approved.add(sig)
         # Different path should still need confirmation
@@ -117,6 +119,7 @@ class TestAlwaysAllowCache:
     def test_execute_command_cached(self):
         pm = PermissionManager("default")
         from agent.core.permissions import _make_signature
+
         sig = _make_signature("execute_command", {"command": "python test.py"})
         pm._approved.add(sig)
         assert pm.needs_confirmation("execute_command", {"command": "python test.py"}) is False

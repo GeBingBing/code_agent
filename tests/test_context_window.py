@@ -1,6 +1,5 @@
 """Tests for dynamic context window management."""
 
-import pytest
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -10,6 +9,7 @@ from agent.core.memory import MemoryManager, MemoryMessage
 @dataclass
 class ContextWindowStats:
     """Context window statistics."""
+
     total_tokens: int
     hard_limit: int = 16000  # Block below this
     warn_limit: int = 32000  # Warn below this
@@ -24,7 +24,13 @@ class MockMemoryManager(MemoryManager):
         super().__init__(max_tokens=max_tokens)
         self._token_counts: List[int] = []
 
-    def add(self, role: str, content: str, tool_call_id: Optional[str] = None, tool_calls: Optional[str] = None):
+    def add(
+        self,
+        role: str,
+        content: str,
+        tool_call_id: Optional[str] = None,
+        tool_calls: Optional[str] = None,
+    ):
         """Override add to track tokens."""
         super().add(role, content, tool_call_id, tool_calls)
         self._token_counts.append(self._estimate_tokens())
@@ -35,7 +41,7 @@ class MockMemoryManager(MemoryManager):
         return ContextWindowStats(
             total_tokens=tokens,
             is_critical=tokens < 16000,
-            is_warning=tokens < 32000 and tokens >= 16000
+            is_warning=tokens < 32000 and tokens >= 16000,
         )
 
     def needs_compaction(self) -> bool:

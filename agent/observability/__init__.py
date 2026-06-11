@@ -14,9 +14,9 @@ Detection: try to import `opentelemetry`. If it succeeds, real APIs are
 used. If not, the in-module no-op shims take over.
 """
 
-from .tracing import init_tracer, get_tracer, OTEL_AVAILABLE
-from .metrics import init_meter, get_metrics, AgentMetrics
 from .logging import JSONFormatter, setup_logging
+from .metrics import AgentMetrics, get_metrics, init_meter
+from .tracing import OTEL_AVAILABLE, get_tracer, init_tracer
 
 __all__ = [
     "init_tracer",

@@ -4,11 +4,9 @@ import asyncio
 import difflib
 import os
 from pathlib import Path
-from typing import Optional
 
-from .base import BaseTool, ToolResult, registry
 from ..core.workspace import WORKSPACE_ROOT
-
+from .base import BaseTool, ToolResult, registry
 
 # In testing mode, workspace check is relaxed
 _TESTING_MODE = os.getenv("CODING_AGENT_TESTING", "0") == "1"
@@ -40,7 +38,7 @@ def _validate_write_path(path: str) -> ToolResult:
         return ToolResult(
             success=False,
             content="",
-            error=f"Write denied: path '{path}' is outside workspace '{WORKSPACE_ROOT}'"
+            error=f"Write denied: path '{path}' is outside workspace '{WORKSPACE_ROOT}'",
         )
     return None
 
@@ -115,8 +113,11 @@ class ReadFileTool(BaseTool):
             header = f"{path} ({total} lines total)"
             if limit > 0:
                 header += f" -- showing lines {start + 1}-{min(end, total)}"
-            return ToolResult(success=True, content=f"{header}\n" + "\n".join(numbered),
-                            metadata={"lines": len(selected), "total_lines": total})
+            return ToolResult(
+                success=True,
+                content=f"{header}\n" + "\n".join(numbered),
+                metadata={"lines": len(selected), "total_lines": total},
+            )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
 
@@ -131,8 +132,16 @@ class ReadFileTool(BaseTool):
                     "type": "object",
                     "properties": {
                         "path": {"type": "string"},
-                        "offset": {"type": "integer", "default": 1, "description": "Starting line number (1-based)"},
-                        "limit": {"type": "integer", "default": 0, "description": "Max lines to read (0 = all)"},
+                        "offset": {
+                            "type": "integer",
+                            "default": 1,
+                            "description": "Starting line number (1-based)",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "Max lines to read (0 = all)",
+                        },
                     },
                     "required": ["path"],
                 },
@@ -212,7 +221,9 @@ class ListFilesTool(BaseTool):
                 item_type = "dir" if item.is_dir() else "file"
                 result_lines.append(f"[{item_type}] {item.name}")
 
-            return ToolResult(success=True, content="\n".join(result_lines) if result_lines else "(empty)")
+            return ToolResult(
+                success=True, content="\n".join(result_lines) if result_lines else "(empty)"
+            )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
 
@@ -233,7 +244,9 @@ class ApplyDiffTool(BaseTool):
 
             original = await asyncio.to_thread(file_path.read_text, "utf-8")
             if search not in original:
-                return ToolResult(success=False, content="", error=f"Search text not found in {path}")
+                return ToolResult(
+                    success=False, content="", error=f"Search text not found in {path}"
+                )
 
             # Normalize line endings for matching
             search_norm = search.replace("\r\n", "\n")
@@ -288,7 +301,11 @@ class InsertAfterLineTool(BaseTool):
 
             # Ensure the inserted content ends with newline if not already
             insert = content if content.endswith("\n") else content + "\n"
-            if not insert.startswith("\n") and idx < len(original_lines) and not original_lines[idx].endswith("\n"):
+            if (
+                not insert.startswith("\n")
+                and idx < len(original_lines)
+                and not original_lines[idx].endswith("\n")
+            ):
                 insert = "\n" + insert
 
             modified_lines = original_lines[:idx] + [insert] + original_lines[idx:]
@@ -297,7 +314,9 @@ class InsertAfterLineTool(BaseTool):
 
             preview = _make_diff(original, modified, path)
             await asyncio.to_thread(file_path.write_text, modified, "utf-8")
-            return ToolResult(success=True, content=f"Inserted into {path} after line {line}:\n{preview}")
+            return ToolResult(
+                success=True, content=f"Inserted into {path} after line {line}:\n{preview}"
+            )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
 
@@ -312,7 +331,10 @@ class InsertAfterLineTool(BaseTool):
                     "type": "object",
                     "properties": {
                         "path": {"type": "string"},
-                        "line": {"type": "integer", "description": "Line number after which to insert (1-based)"},
+                        "line": {
+                            "type": "integer",
+                            "description": "Line number after which to insert (1-based)",
+                        },
                         "content": {"type": "string", "description": "Content to insert"},
                     },
                     "required": ["path", "line", "content"],
@@ -349,7 +371,9 @@ class ReplaceLinesTool(BaseTool):
 
             preview = _make_diff(original, modified, path)
             await asyncio.to_thread(file_path.write_text, modified, "utf-8")
-            return ToolResult(success=True, content=f"Replaced lines {start}-{end} in {path}:\n{preview}")
+            return ToolResult(
+                success=True, content=f"Replaced lines {start}-{end} in {path}:\n{preview}"
+            )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
 
@@ -364,7 +388,10 @@ class ReplaceLinesTool(BaseTool):
                     "type": "object",
                     "properties": {
                         "path": {"type": "string"},
-                        "start": {"type": "integer", "description": "Start line (1-based, inclusive)"},
+                        "start": {
+                            "type": "integer",
+                            "description": "Start line (1-based, inclusive)",
+                        },
                         "end": {"type": "integer", "description": "End line (1-based, inclusive)"},
                         "content": {"type": "string", "description": "Replacement content"},
                     },

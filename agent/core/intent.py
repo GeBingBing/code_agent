@@ -26,23 +26,31 @@ Public API (current):
 
 import json
 from dataclasses import dataclass
-from typing import Callable, Awaitable, Optional
+from typing import Awaitable, Callable, Optional
 
 from .llm_extractor import LLMExtractor
 
-
 # ── Intent definitions ──────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class Intent:
-    name: str         # e.g. "ask", "edit", "agent"
+    name: str  # e.g. "ask", "edit", "agent"
     description: str  # for the classification prompt
 
 
 # Built-in intents
-INTENT_ASK = Intent("ask", "A conversational question, explanation, or chat — no file changes needed")
-INTENT_EDIT = Intent("edit", "A single operation: install a package, rename a symbol, fix a specific bug in one file, or run a command")
-INTENT_AGENT = Intent("agent", "A multi-step project task: build a feature, create multiple files, refactor across files")
+INTENT_ASK = Intent(
+    "ask", "A conversational question, explanation, or chat — no file changes needed"
+)
+INTENT_EDIT = Intent(
+    "edit",
+    "A single operation: install a package, rename a symbol, fix a specific bug in one file, or run a command",
+)
+INTENT_AGENT = Intent(
+    "agent",
+    "A multi-step project task: build a feature, create multiple files, refactor across files",
+)
 
 
 # All built-in intent names (used for fallback parse and validation)
@@ -89,10 +97,14 @@ class IntentClassifier(LLMExtractor[str]):
         "agent": INTENT_AGENT.description,
     }
 
-    def __init__(self, llm_client=None, use_llm: bool = True,
-                 fallback_to_legacy: bool = True,
-                 cache=None,  # PR-17: ignored, kept for PR-14 backward compat
-                 cache_ttl: float = 300.0):
+    def __init__(
+        self,
+        llm_client=None,
+        use_llm: bool = True,
+        fallback_to_legacy: bool = True,
+        cache=None,  # PR-17: ignored, kept for PR-14 backward compat
+        cache_ttl: float = 300.0,
+    ):
         super().__init__(
             llm_client=llm_client,
             use_llm=use_llm,
@@ -134,16 +146,34 @@ GUIDANCE:
         if not t:
             return "agent"
         # Greetings (covers most "short ask" cases)
-        if any(t.startswith(g) for g in (
-            "hello", "hi", "hi ", "hi.", "hey", "你好", "您好",
-            "早上好", "晚上好", "嗨",
-        )) or t in ("hi", "hello", "hey", "你好"):
+        if any(
+            t.startswith(g)
+            for g in (
+                "hello",
+                "hi",
+                "hi ",
+                "hi.",
+                "hey",
+                "你好",
+                "您好",
+                "早上好",
+                "晚上好",
+                "嗨",
+            )
+        ) or t in ("hi", "hello", "hey", "你好"):
             return "ask"
         # Self-referential
-        if any(p in t for p in (
-            "你是谁", "who are you", "what can you do",
-            "你能做什么", "can you do", "help me understand",
-        )):
+        if any(
+            p in t
+            for p in (
+                "你是谁",
+                "who are you",
+                "what can you do",
+                "你能做什么",
+                "can you do",
+                "help me understand",
+            )
+        ):
             return "ask"
         # Default safe: agent (will run sub-agents, can do anything)
         return "agent"

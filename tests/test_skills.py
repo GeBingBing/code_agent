@@ -1,11 +1,13 @@
 """Tests for Phase 2: Skill manager functional tests."""
 
 import asyncio
-import tempfile
 
-import pytest
-
-from agent.tools.skill_manager import CreateSkillTool, ListSkillsTool, SearchSkillsTool, SkillManager
+from agent.tools.skill_manager import (
+    CreateSkillTool,
+    ListSkillsTool,
+    SearchSkillsTool,
+    SkillManager,
+)
 
 
 def _run(async_fn):
@@ -17,12 +19,14 @@ class TestCreateSkill:
         tool = CreateSkillTool()
         tool.manager.skills_dir = tmp_path
 
-        result = _run(tool.execute(
-            name="setup-flake8",
-            description="Configure flake8 linter",
-            content="pip install flake8\nflake8 .",
-            tags=["python", "linting"],
-        ))
+        result = _run(
+            tool.execute(
+                name="setup-flake8",
+                description="Configure flake8 linter",
+                content="pip install flake8\nflake8 .",
+                tags=["python", "linting"],
+            )
+        )
         assert result.success is True
         assert "setup-flake8.md" in result.content
 

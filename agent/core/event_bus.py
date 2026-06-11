@@ -14,12 +14,12 @@ import asyncio
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
 class Event:
     """A single event flowing through the bus."""
+
     type: str
     payload: dict = field(default_factory=dict)
     ts: float = field(default_factory=time.time)

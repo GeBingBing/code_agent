@@ -21,6 +21,7 @@ from typing import Optional
 
 class TDDState(Enum):
     """TDD cycle states."""
+
     RED = "red"
     GREEN = "green"
     REFACTOR = "refactor"
@@ -38,6 +39,7 @@ _TRANSITIONS = {
 
 class InvalidTDDTransition(Exception):
     """Raised when an illegal state transition is attempted in strict mode."""
+
     pass
 
 
@@ -47,6 +49,7 @@ class TDDCycle:
 
     Tracks where we are in the cycle and what artifacts have been produced.
     """
+
     feature: str
     state: TDDState = TDDState.RED
     test_path: Optional[str] = None
@@ -115,6 +118,7 @@ class TDDStateMachine:
                 raise InvalidTDDTransition(msg)
             # guided: warn but proceed
             import logging
+
             logging.getLogger(__name__).warning("TDD skip: %s", msg)
         self.cycle.state = next_state
 
@@ -139,7 +143,9 @@ class TDDStateMachine:
         """Record a refactor commit."""
         if self.cycle is None:
             return
-        self.cycle.refactor_commits.append(commit_hash or f"refactor@{len(self.cycle.refactor_commits)+1}")
+        self.cycle.refactor_commits.append(
+            commit_hash or f"refactor@{len(self.cycle.refactor_commits)+1}"
+        )
 
     def reset(self) -> None:
         """Clear the current cycle (does not affect history)."""

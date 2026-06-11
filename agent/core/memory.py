@@ -6,15 +6,16 @@ Context compression uses token-budget-based, semantic-aware strategy.
 
 import json
 import os
-from pathlib import Path
-from typing import List, Optional, Tuple, Dict
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
 # Try tiktoken for accurate token counting
 try:
     import tiktoken
+
     _TIKTOKEN_ENC = tiktoken.get_encoding("cl100k_base")
 except (ImportError, Exception):
     _TIKTOKEN_ENC = None
@@ -27,7 +28,9 @@ class MemoryMessage:
     tool_call_id: Optional[str] = None
     tool_calls: Optional[str] = None  # JSON string of tool_calls for assistant messages
     relevance_score: float = 0.0  # Semantic relevance score (0-1) used for priority sorting
-    metadata: Dict[str, str] = field(default_factory=dict)  # Additional metadata (e.g., file_path, task_id)
+    metadata: Dict[str, str] = field(
+        default_factory=dict
+    )  # Additional metadata (e.g., file_path, task_id)
 
 
 class MemoryManager:
@@ -65,6 +68,7 @@ class MemoryManager:
         """Lazy-load vector memory."""
         if self._vector_memory is None:
             from .vector_memory import get_vector_memory
+
             self._vector_memory = get_vector_memory()
         return self._vector_memory
 
@@ -76,7 +80,13 @@ class MemoryManager:
     def _save_long_term(self):
         self.memory_file.write_text(self.long_term, encoding="utf-8")
 
-    def add(self, role: str, content: str, tool_call_id: Optional[str] = None, tool_calls: Optional[str] = None):
+    def add(
+        self,
+        role: str,
+        content: str,
+        tool_call_id: Optional[str] = None,
+        tool_calls: Optional[str] = None,
+    ):
         """Add a message to working memory and compress if needed."""
         self.working_memory.append(MemoryMessage(role, content, tool_call_id, tool_calls))
         if self._estimate_tokens() > self.max_tokens:
@@ -88,7 +98,7 @@ class MemoryManager:
         if _TIKTOKEN_ENC:
             return len(_TIKTOKEN_ENC.encode(text))
         # Fallback: CJK chars ≈ 1 token, non-CJK ≈ 1/3 token each
-        cjk = sum(1 for c in text if '\u4e00' <= c <= '\u9fff' or '\u3400' <= c <= '\u4dbf')
+        cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff" or "\u3400" <= c <= "\u4dbf")
         return cjk + max(1, (len(text) - cjk) // 3)
 
     def _estimate_tokens(self) -> int:
@@ -111,9 +121,11 @@ class MemoryManager:
         system_msgs = [m for m in self.working_memory if m.role == "system"]
         recent = self.working_memory[-6:]
         # Build new working memory
-        self.working_memory = system_msgs + [
-            MemoryMessage("user", f"[Context summary]\n{summary}", None, None)
-        ] + recent
+        self.working_memory = (
+            system_msgs
+            + [MemoryMessage("user", f"[Context summary]\n{summary}", None, None)]
+            + recent
+        )
 
     def _compress(self):
         """Semantic-aware context compression.
@@ -199,8 +211,8 @@ class MemoryManager:
         for msg in older:
             content = msg.content
             # Truncate large read_file outputs
-            if msg.role == "tool" and msg.content.count('\n') > 200:
-                head = "\n".join(msg.content.split('\n')[:20])
+            if msg.role == "tool" and msg.content.count("\n") > 200:
+                head = "\n".join(msg.content.split("\n")[:20])
                 content = f"{head}\n... ({msg.content.count(chr(10)) - 20} more lines)"
             # Truncate large command outputs
             elif msg.role == "tool" and len(msg.content) > 500:
@@ -256,9 +268,9 @@ class MemoryManager:
         """
         # Sanitize multi-line values: replace \n with the visual marker ↵
         # to keep memory.md as a clean line-based format.
-        safe_value = str(value).replace("\r\n", "\n").replace("\n", "\u21B5")
+        safe_value = str(value).replace("\r\n", "\n").replace("\n", "\u21b5")
         # Strip control characters that could break the format
-        safe_value = "".join(c for c in safe_value if c == "\u21B5" or (c >= " " and c != "\x7f"))
+        safe_value = "".join(c for c in safe_value if c == "\u21b5" or (c >= " " and c != "\x7f"))
         if not safe_value:
             return
 
@@ -267,7 +279,7 @@ class MemoryManager:
         entry = f"- {marker}{key}: {safe_value}"
 
         # If key already exists, replace its value
-        lines = [l for l in self.long_term.strip().split('\n') if l] if self.long_term else []
+        lines = [l for l in self.long_term.strip().split("\n") if l] if self.long_term else []
         new_lines = []
         # Match both pinned and unpinned variants of the same key
         key_prefix_pinned = f"- 📌 {key}:"
@@ -297,12 +309,12 @@ class MemoryManager:
         if len(unpinned_lines) > 50:
             unpinned_lines = unpinned_lines[-50:]
         if len(pinned_lines) > self._PINNED_MAX:
-            pinned_lines = pinned_lines[-self._PINNED_MAX:]
+            pinned_lines = pinned_lines[-self._PINNED_MAX :]
 
         # Combine: pinned first, then unpinned
         new_lines = pinned_lines + unpinned_lines
 
-        self.long_term = '\n'.join(new_lines) + ('\n' if new_lines else '')
+        self.long_term = "\n".join(new_lines) + ("\n" if new_lines else "")
         self._save_long_term()
 
         # Also store in vector memory for semantic search
@@ -358,7 +370,9 @@ class MemoryManager:
             recency_boost = 0.1 * (msg_idx / max(1, len(self.working_memory)))
             msg.relevance_score = min(1.0, score + recency_boost)
 
-    def get_prioritized_messages(self, max_tokens: int, context_keywords: Optional[List[str]] = None) -> List[MemoryMessage]:
+    def get_prioritized_messages(
+        self, max_tokens: int, context_keywords: Optional[List[str]] = None
+    ) -> List[MemoryMessage]:
         """Get prioritized messages within token budget.
 
         Combines semantic relevance scoring with token budget to select
@@ -378,7 +392,7 @@ class MemoryManager:
         sorted_msgs = sorted(
             self.working_memory,
             key=lambda m: (m.relevance_score, self.working_memory.index(m)),
-            reverse=True
+            reverse=True,
         )
 
         # Select messages within token budget, preferring high-relevance ones
@@ -439,6 +453,7 @@ class MemoryManager:
         # Compute similarity scores for each message
         try:
             from .vector_memory import simple_text_hash
+
             query_emb = simple_text_hash(query, dim=128)
         except Exception:
             # Fallback if vector hashing fails
@@ -489,7 +504,10 @@ class MemoryManager:
                     content = content[:200] + "..."
                 summary_parts.append(f"[{msg.role}] {content}")
 
-            self.summaries.append(f"[Semantic compression] {len(dropped)} messages summarized:\n" + "\n".join(summary_parts))
+            self.summaries.append(
+                f"[Semantic compression] {len(dropped)} messages summarized:\n"
+                + "\n".join(summary_parts)
+            )
 
         # Rebuild working memory with kept messages
         kept_messages = [msg for i, msg in enumerate(self.working_memory) if i in kept_indices]

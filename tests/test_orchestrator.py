@@ -2,27 +2,27 @@
 
 import asyncio
 import json
+
 import pytest
 
 from agent.agents import (
+    BUILTIN_ROLES,
+    CODE_ROLE,
+    DEVOPS_ROLE,
+    REVIEWER_ROLE,
+    TEST_ROLE,
+    CyclicDependencyError,
     OrchestratorAgent,
+    TaskExecutionError,
     TaskRequest,
     TaskResponse,
-    TaskExecutionError,
-    CyclicDependencyError,
-    CODE_ROLE,
-    TEST_ROLE,
-    REVIEWER_ROLE,
-    DEVOPS_ROLE,
-    BUILTIN_ROLES,
     get_role,
 )
 from agent.agents.orchestrator import (
-    _parse_decomposition,
     DECOMPOSE_PROMPT,
     MERGE_PROMPT,
+    _parse_decomposition,
 )
-
 
 # ── Roles ──────────────────────────────────────────────────────────
 
@@ -64,8 +64,13 @@ class TestRoles:
 class TestTaskDataclasses:
     def test_request_round_trip(self):
         r = TaskRequest(
-            task_id="st-1", role="code", description="impl X",
-            depends_on=["st-0"], inputs={"a": 1}, priority=3, timeout=120.0,
+            task_id="st-1",
+            role="code",
+            description="impl X",
+            depends_on=["st-0"],
+            inputs={"a": 1},
+            priority=3,
+            timeout=120.0,
         )
         d = r.to_dict()
         assert d["task_id"] == "st-1"
@@ -97,7 +102,7 @@ class TestParseDecomposition:
         assert tasks[0].task_id == "a"
 
     def test_handles_smart_quotes(self):
-        text = '[{"id": "st-1", "role": "code", "description": "Implement \"hello\""}]'
+        text = '[{"id": "st-1", "role": "code", "description": "Implement "hello""}]'
         # Our regex doesn't fix smart quotes; that's handled in the relaxed path
         tasks = _parse_decomposition(text)
         # May or may not parse — either way should not crash
@@ -127,35 +132,43 @@ class TestParseDecomposition:
 class TestValidateDependencies:
     def test_known_deps_pass(self):
         o = OrchestratorAgent()
-        o._validate_dependencies([
-            TaskRequest(task_id="a", role="code", description="x"),
-            TaskRequest(task_id="b", role="test", description="y", depends_on=["a"]),
-        ])
+        o._validate_dependencies(
+            [
+                TaskRequest(task_id="a", role="code", description="x"),
+                TaskRequest(task_id="b", role="test", description="y", depends_on=["a"]),
+            ]
+        )
 
     def test_unknown_dep_raises(self):
         o = OrchestratorAgent()
         with pytest.raises(TaskExecutionError, match="unknown task"):
-            o._validate_dependencies([
-                TaskRequest(task_id="a", role="code", description="x", depends_on=["zzz"]),
-            ])
+            o._validate_dependencies(
+                [
+                    TaskRequest(task_id="a", role="code", description="x", depends_on=["zzz"]),
+                ]
+            )
 
     def test_cycle_raises(self):
         o = OrchestratorAgent()
         with pytest.raises(CyclicDependencyError):
-            o._validate_dependencies([
-                TaskRequest(task_id="a", role="code", description="x", depends_on=["b"]),
-                TaskRequest(task_id="b", role="code", description="y", depends_on=["a"]),
-            ])
+            o._validate_dependencies(
+                [
+                    TaskRequest(task_id="a", role="code", description="x", depends_on=["b"]),
+                    TaskRequest(task_id="b", role="code", description="y", depends_on=["a"]),
+                ]
+            )
 
     def test_diamond_is_ok(self):
         """A → B, A → C, B → D, C → D: not a cycle."""
         o = OrchestratorAgent()
-        o._validate_dependencies([
-            TaskRequest(task_id="a", role="code", description="x"),
-            TaskRequest(task_id="b", role="code", description="x", depends_on=["a"]),
-            TaskRequest(task_id="c", role="code", description="x", depends_on=["a"]),
-            TaskRequest(task_id="d", role="code", description="x", depends_on=["b", "c"]),
-        ])
+        o._validate_dependencies(
+            [
+                TaskRequest(task_id="a", role="code", description="x"),
+                TaskRequest(task_id="b", role="code", description="x", depends_on=["a"]),
+                TaskRequest(task_id="c", role="code", description="x", depends_on=["a"]),
+                TaskRequest(task_id="d", role="code", description="x", depends_on=["b", "c"]),
+            ]
+        )
 
 
 # ── DAG execution ──────────────────────────────────────────────────
@@ -298,8 +311,10 @@ class TestFullRun:
 
         async def dispatch_fn(t, completed):
             return TaskResponse(
-                task_id=t.task_id, status="done",
-                role=t.role, outputs={"summary": f"did {t.task_id}"},
+                task_id=t.task_id,
+                status="done",
+                role=t.role,
+                outputs={"summary": f"did {t.task_id}"},
             )
 
         async def merge_fn(task, results):
@@ -327,9 +342,11 @@ class TestFullRun:
 
         async def llm(prompt):
             if "Decompose" in prompt:
-                return json.dumps([
-                    {"id": "a", "role": "code", "description": "impl X", "depends_on": []},
-                ])
+                return json.dumps(
+                    [
+                        {"id": "a", "role": "code", "description": "impl X", "depends_on": []},
+                    ]
+                )
             return "merge result"
 
         async def dispatch_fn(t, completed):
@@ -342,6 +359,7 @@ class TestFullRun:
     @pytest.mark.asyncio
     async def test_fallback_merge(self):
         """No LLM, no merge_fn: deterministic tabular summary."""
+
         async def decompose_fn(task, roles):
             return [
                 TaskRequest(task_id="a", role="code", description="x"),
@@ -350,8 +368,10 @@ class TestFullRun:
 
         async def dispatch_fn(t, completed):
             return TaskResponse(
-                task_id=t.task_id, status="done",
-                role=t.role, outputs={"summary": "ok"},
+                task_id=t.task_id,
+                status="done",
+                role=t.role,
+                outputs={"summary": "ok"},
             )
 
         o = OrchestratorAgent(decompose_fn=decompose_fn, dispatch_fn=dispatch_fn)

@@ -1,8 +1,8 @@
 """Code retrieval - hybrid search over indexed codebase."""
 
 import time
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List, Optional
 
 from .code_indexer import CodeIndexer
 
@@ -23,7 +23,9 @@ class CodeRetriever:
     def __init__(self, indexer: CodeIndexer):
         self.indexer = indexer
 
-    def search(self, query: str, top_k: int = 5, language: Optional[str] = None) -> List[SearchResult]:
+    def search(
+        self, query: str, top_k: int = 5, language: Optional[str] = None
+    ) -> List[SearchResult]:
         """Search the indexed codebase."""
         start = time.time()
         query_lower = query.lower()
@@ -43,14 +45,16 @@ class CodeRetriever:
                     filename_score += 3
 
             if filename_score > 0:
-                results.append(SearchResult(
-                    path=path,
-                    kind="file",
-                    name=path,
-                    line=1,
-                    snippet=f"File: {path}",
-                    score=filename_score,
-                ))
+                results.append(
+                    SearchResult(
+                        path=path,
+                        kind="file",
+                        name=path,
+                        line=1,
+                        snippet=f"File: {path}",
+                        score=filename_score,
+                    )
+                )
 
             # 2. Symbol match (medium-high weight)
             for sym in file_idx.symbols:
@@ -65,14 +69,16 @@ class CodeRetriever:
 
                 if sym_score > 0:
                     snippet = self._get_snippet(file_idx.lines, sym.line)
-                    results.append(SearchResult(
-                        path=path,
-                        kind=sym.kind,
-                        name=sym.name,
-                        line=sym.line,
-                        snippet=snippet,
-                        score=sym_score,
-                    ))
+                    results.append(
+                        SearchResult(
+                            path=path,
+                            kind=sym.kind,
+                            name=sym.name,
+                            line=sym.line,
+                            snippet=snippet,
+                            score=sym_score,
+                        )
+                    )
 
             # 3. Content line match (low weight)
             for i, line in enumerate(file_idx.lines):
@@ -86,14 +92,16 @@ class CodeRetriever:
                         content_score = 1
 
                 if content_score > 0:
-                    results.append(SearchResult(
-                        path=path,
-                        kind="line",
-                        name=line.strip()[:80],
-                        line=i + 1,
-                        snippet=line.strip()[:200],
-                        score=content_score,
-                    ))
+                    results.append(
+                        SearchResult(
+                            path=path,
+                            kind="line",
+                            name=line.strip()[:80],
+                            line=i + 1,
+                            snippet=line.strip()[:200],
+                            score=content_score,
+                        )
+                    )
 
         # Deduplicate by (path, line)
         seen = set()
@@ -114,7 +122,9 @@ class CodeRetriever:
 
         return deduped[:top_k]
 
-    def semantic_search(self, query: str, top_k: int = 5, include_related: bool = True) -> List[SearchResult]:
+    def semantic_search(
+        self, query: str, top_k: int = 5, include_related: bool = True
+    ) -> List[SearchResult]:
         """Semantic-aware search that includes related symbols.
 
         Performs regular search first, then augments results with:
@@ -141,14 +151,16 @@ class CodeRetriever:
                 key = (ref["path"], ref["line"], ref["context"])
                 if key not in seen_keys:
                     seen_keys.add(key)
-                    extra_results.append(SearchResult(
-                        path=ref["path"],
-                        kind="reference",
-                        name=f"ref: {name}",
-                        line=ref["line"],
-                        snippet=f"  {ref['line']:4d} | {ref['context']}",
-                        score=3.0,
-                    ))
+                    extra_results.append(
+                        SearchResult(
+                            path=ref["path"],
+                            kind="reference",
+                            name=f"ref: {name}",
+                            line=ref["line"],
+                            snippet=f"  {ref['line']:4d} | {ref['context']}",
+                            score=3.0,
+                        )
+                    )
 
             # Add related symbols
             related = self.indexer.get_related_symbols(name)
@@ -156,17 +168,21 @@ class CodeRetriever:
                 key = (rel["path"], rel["line"], rel["name"])
                 if key not in seen_keys:
                     seen_keys.add(key)
-                    snippet = self._get_snippet(
-                        self.indexer.files[rel["path"]].lines, rel["line"]
-                    ) if rel["path"] in self.indexer.files else ""
-                    extra_results.append(SearchResult(
-                        path=rel["path"],
-                        kind=rel.get("kind", "related"),
-                        name=f"{rel['relation']}: {rel['name']}",
-                        line=rel["line"],
-                        snippet=snippet,
-                        score=4.0 if rel["relation"] == "same_class" else 3.5,
-                    ))
+                    snippet = (
+                        self._get_snippet(self.indexer.files[rel["path"]].lines, rel["line"])
+                        if rel["path"] in self.indexer.files
+                        else ""
+                    )
+                    extra_results.append(
+                        SearchResult(
+                            path=rel["path"],
+                            kind=rel.get("kind", "related"),
+                            name=f"{rel['relation']}: {rel['name']}",
+                            line=rel["line"],
+                            snippet=snippet,
+                            score=4.0 if rel["relation"] == "same_class" else 3.5,
+                        )
+                    )
 
         all_results = base_results + extra_results
         all_results.sort(key=lambda x: x.score, reverse=True)

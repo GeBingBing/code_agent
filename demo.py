@@ -2,14 +2,13 @@
 
 import asyncio
 import json
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.engine import AgentConfig, AgentEngine
 from agent.llm.client import Message
-from agent.tools.base import registry, ToolResult
 from agent.prompts.assembler import PromptAssembler
-
+from agent.tools.base import ToolResult, registry
 
 WORKSPACE = Path(__file__).parent / "workspace"
 
@@ -51,27 +50,31 @@ class DemoEngine(AgentEngine):
             print(f"{'─' * 60}")
 
             mem_messages = self.memory.get_messages()
-            messages = [Message(role=m.role, content=m.content, tool_call_id=m.tool_call_id) for m in mem_messages]
+            messages = [
+                Message(role=m.role, content=m.content, tool_call_id=m.tool_call_id)
+                for m in mem_messages
+            ]
 
             print("  [Think]  Calling LLM with current context...")
-            response = await self.llm.chat(
-                messages=messages,
-                tools=registry.schemas
-            )
+            response = await self.llm.chat(messages=messages, tools=registry.schemas)
 
             if isinstance(response, str):
                 print(f"  [Final]  {response[:200]}...")
                 self.memory.add("assistant", response)
                 return response
 
-            if hasattr(response, 'tool_calls') and response.tool_calls:
+            if hasattr(response, "tool_calls") and response.tool_calls:
                 for tool_call in response.tool_calls:
                     tool_name = tool_call.function.name
-                    args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
+                    args = (
+                        json.loads(tool_call.function.arguments)
+                        if tool_call.function.arguments
+                        else {}
+                    )
 
                     print(f"  [Act]    Tool: {tool_name}")
                     for k, v in args.items():
-                        v_short = str(v)[:80].replace('\n', '\\n')
+                        v_short = str(v)[:80].replace("\n", "\\n")
                         print(f"           arg {k}={v_short}")
 
                     if tool_name == "execute_command" and "cwd" not in args:
@@ -85,18 +88,20 @@ class DemoEngine(AgentEngine):
 
                     tool = registry.get(tool_name)
                     if not tool:
-                        result = ToolResult(success=False, content="", error=f"Unknown tool: {tool_name}")
+                        result = ToolResult(
+                            success=False, content="", error=f"Unknown tool: {tool_name}"
+                        )
                     else:
                         result = await tool.execute(**args)
 
                     obs = result.content if result.success else f"Error: {result.error}"
-                    obs_short = str(obs)[:150].replace('\n', '\\n')
+                    obs_short = str(obs)[:150].replace("\n", "\\n")
                     print(f"  [Observe] {obs_short}")
 
                     self.memory.add("assistant", f"Called {tool_name}")
                     self.memory.add("tool", obs, tool_call_id=tool_call.id)
             else:
-                content = response.content if hasattr(response, 'content') else str(response)
+                content = response.content if hasattr(response, "content") else str(response)
                 print(f"  [Final]  {content[:200]}...")
                 self.memory.add("assistant", content)
                 return content
@@ -134,13 +139,15 @@ async def main():
                     id="call_1",
                     function=MockFunction(
                         name="write_file",
-                        arguments=json.dumps({
-                            "path": str(WORKSPACE / "fibonacci.py"),
-                            "content": "def fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\nif __name__ == '__main__':\n    for i in range(10):\n        print(f'fib({i}) = {fibonacci(i)}')\n"
-                        })
-                    )
+                        arguments=json.dumps(
+                            {
+                                "path": str(WORKSPACE / "fibonacci.py"),
+                                "content": "def fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\nif __name__ == '__main__':\n    for i in range(10):\n        print(f'fib({i}) = {fibonacci(i)}')\n",
+                            }
+                        ),
+                    ),
                 )
-            ]
+            ],
         ),
         MockMessage(
             content="",
@@ -149,17 +156,19 @@ async def main():
                     id="call_2",
                     function=MockFunction(
                         name="execute_command",
-                        arguments=json.dumps({
-                            "command": f"cd {WORKSPACE} && python fibonacci.py",
-                            "cwd": str(WORKSPACE)
-                        })
-                    )
+                        arguments=json.dumps(
+                            {
+                                "command": f"cd {WORKSPACE} && python fibonacci.py",
+                                "cwd": str(WORKSPACE),
+                            }
+                        ),
+                    ),
                 )
-            ]
+            ],
         ),
         MockMessage(
             content="任务完成！我已经将斐波那契函数保存到 workspace/fibonacci.py，并运行成功。输出显示了 fib(0) 到 fib(9) 的结果。",
-            tool_calls=None
+            tool_calls=None,
         ),
     ]
 

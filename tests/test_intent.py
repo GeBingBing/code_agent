@@ -11,20 +11,19 @@ with minimal heuristic fallback). The tests in this file are split:
     a mock LLM client.
 """
 
-import time
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from agent.core.intent import (
+    CLASSIFY_PROMPT,
+    INTENT_AGENT,
+    INTENT_ASK,
+    INTENT_EDIT,
     Intent,
     IntentClassifier,
     IntentRouter,
-    INTENT_ASK,
-    INTENT_EDIT,
-    INTENT_AGENT,
-    CLASSIFY_PROMPT,
 )
-
 
 # All tests in this file EXCEPT TestLLMBasedClassification test the
 # regex/heuristic fallback path. Apply the marker via the class.
@@ -121,8 +120,12 @@ class TestIntentRouter:
         router.set_classifier(IntentClassifier(llm_client=mock_llm))
 
         results = {}
-        async def ask_h(task): results["ask"] = task
-        async def edit_h(task): results["edit"] = task
+
+        async def ask_h(task):
+            results["ask"] = task
+
+        async def edit_h(task):
+            results["edit"] = task
 
         router.register("ask", ask_h)
         router.register("edit", edit_h)
@@ -227,10 +230,12 @@ class TestLLMBasedClassification:
     async def test_llm_classifies_install_as_edit(self):
         """Install commands — now classified by LLM, not regex."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"intent": "edit", "confidence": 0.9, "reasoning": "install package"}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"intent": "edit", "confidence": 0.9, "reasoning": "install package"}',
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("install hermes")
         assert result == "edit"
@@ -238,10 +243,12 @@ class TestLLMBasedClassification:
     @pytest.mark.asyncio
     async def test_llm_classifies_greeting_as_ask(self):
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"intent": "ask", "confidence": 0.95, "reasoning": "greeting"}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"intent": "ask", "confidence": 0.95, "reasoning": "greeting"}',
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("hello there")
         assert result == "ask"
@@ -249,10 +256,12 @@ class TestLLMBasedClassification:
     @pytest.mark.asyncio
     async def test_llm_classifies_complex_as_agent(self):
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"intent": "agent", "confidence": 0.85, "reasoning": "multi-step task"}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"intent": "agent", "confidence": 0.85, "reasoning": "multi-step task"}',
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("build a user authentication module with JWT")
         assert result == "agent"
@@ -262,10 +271,12 @@ class TestLLMBasedClassification:
         """PR-14: 'run this project' was a hard-coded project phrase.
         PR-15: handled by LLM (no longer in legacy fallback)."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"intent": "agent", "confidence": 0.9, "reasoning": "needs cwd exploration"}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"intent": "agent", "confidence": 0.9, "reasoning": "needs cwd exploration"}',
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("run this project")
         assert result == "agent"
@@ -273,10 +284,12 @@ class TestLLMBasedClassification:
     @pytest.mark.asyncio
     async def test_llm_classifies_chinese_project_phrase(self):
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"intent": "agent", "confidence": 0.9, "reasoning": "启动本项目"}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"intent": "agent", "confidence": 0.9, "reasoning": "启动本项目"}',
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("启动本项目")
         assert result == "agent"
@@ -298,10 +311,12 @@ class TestLLMBasedClassification:
     async def test_cache_hit_skips_llm(self):
         """Repeated calls hit cache, LLM only called once."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"intent": "edit"}',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"intent": "edit"}',
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         await c.classify("install numpy")
         await c.classify("install numpy")
@@ -321,10 +336,12 @@ class TestLLMBasedClassification:
     async def test_json_with_markdown_fence_still_parses(self):
         """LLM that wraps JSON in ```json``` fences is still parsed."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '```json\n{"intent": "edit"}\n```',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '```json\n{"intent": "edit"}\n```',
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("install foo")
         assert result == "edit"
@@ -333,10 +350,12 @@ class TestLLMBasedClassification:
     async def test_json_with_prose_explanation_still_parses(self):
         """LLM that includes prose before/after JSON is still parsed."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            'I think this is edit because: {"intent": "edit"} as the user said.',
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                'I think this is edit because: {"intent": "edit"} as the user said.',
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("rename x to y")
         assert result == "edit"
@@ -345,10 +364,12 @@ class TestLLMBasedClassification:
     async def test_malformed_json_falls_back_to_text_scan(self):
         """When JSON is unparseable, scan text for known intent name."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            "The intent should be 'edit' because...",
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                "The intent should be 'edit' because...",
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("some task")
         assert result == "edit"
@@ -357,10 +378,12 @@ class TestLLMBasedClassification:
     async def test_unknown_intent_returns_agent(self):
         """LLM returning an unknown intent name defaults to 'agent'."""
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=(
-            '{"intent": "chitchat"}',  # not in our schema
-            False,
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=(
+                '{"intent": "chitchat"}',  # not in our schema
+                False,
+            )
+        )
         c = IntentClassifier(llm_client=mock_llm)
         result = await c.classify("hello")
         assert result == "agent"

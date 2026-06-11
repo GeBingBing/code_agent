@@ -34,7 +34,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Awaitable, Callable, List, Optional
 
-
 # ── Public exceptions ───────────────────────────────────────────────
 
 
@@ -178,24 +177,26 @@ class DualReviewManager:
     as `LLMClient.chat(messages, stream) -> (str, usage_dict_or_None)`.
     """
 
-    HIGH_RISK_TOOLS = frozenset({
-        "write_file",
-        "apply_diff",
-        "edit_file",
-        "insert_after_line",
-        "replace_lines",
-        "execute_command",
-        "git",
-        "git_push",  # may not exist as a tool name; tolerated
-        "create_pr",
-        "web_fetch",
-        "web_search",
-        "install_package",
-        "uninstall_package",
-        "smart_commit",
-        "smart_branch",
-        "sandbox_execute",
-    })
+    HIGH_RISK_TOOLS = frozenset(
+        {
+            "write_file",
+            "apply_diff",
+            "edit_file",
+            "insert_after_line",
+            "replace_lines",
+            "execute_command",
+            "git",
+            "git_push",  # may not exist as a tool name; tolerated
+            "create_pr",
+            "web_fetch",
+            "web_search",
+            "install_package",
+            "uninstall_package",
+            "smart_commit",
+            "smart_branch",
+            "sandbox_execute",
+        }
+    )
 
     def __init__(
         self,
@@ -248,12 +249,8 @@ class DualReviewManager:
 
         # Run both reviewers concurrently
         decisions = await asyncio.gather(
-            self._review_with(
-                self.primary_chat, prompt, "primary", self.primary_model
-            ),
-            self._review_with(
-                self.secondary_chat, prompt, "secondary", self.secondary_model
-            ),
+            self._review_with(self.primary_chat, prompt, "primary", self.primary_model),
+            self._review_with(self.secondary_chat, prompt, "secondary", self.secondary_model),
             return_exceptions=False,
         )
         # asyncio.gather propagates exceptions; we caught them inside _review_with
@@ -367,22 +364,28 @@ class DualReviewManager:
         if idx != -1:
             # Args section runs until "Context:" or end
             end = text.find("Context:", idx)
-            args_section = text[idx + len(marker): end if end != -1 else None]
+            args_section = text[idx + len(marker) : end if end != -1 else None]
         args_lower = args_section.lower()
-        destructive = ("rm -rf" in args_lower or
-                       "drop table" in args_lower or
-                       "drop database" in args_lower or
-                       "mkfs" in args_lower)
+        destructive = (
+            "rm -rf" in args_lower
+            or "drop table" in args_lower
+            or "drop database" in args_lower
+            or "mkfs" in args_lower
+        )
         if destructive:
-            resp = json.dumps({
-                "verdict": "reject",
-                "rationale": "Destructive operation detected in args by stub reviewer",
-            })
+            resp = json.dumps(
+                {
+                    "verdict": "reject",
+                    "rationale": "Destructive operation detected in args by stub reviewer",
+                }
+            )
         else:
-            resp = json.dumps({
-                "verdict": "approve",
-                "rationale": "Stub secondary reviewer: no destructive patterns in args",
-            })
+            resp = json.dumps(
+                {
+                    "verdict": "approve",
+                    "rationale": "Stub secondary reviewer: no destructive patterns in args",
+                }
+            )
         return resp, None
 
     @staticmethod
@@ -450,6 +453,7 @@ def _parse_verdict_response(resp: str) -> tuple:
         return ReviewVerdict.ABSTAIN, "Non-string response"
     text = resp.strip()
     from .llm_extractor import LLMExtractor
+
     parsed = LLMExtractor._safe_json_loads(text)
     if not isinstance(parsed, dict):
         return ReviewVerdict.ABSTAIN, f"Could not parse: {text[:80]}"

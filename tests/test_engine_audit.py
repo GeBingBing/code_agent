@@ -1,10 +1,9 @@
 """Tests for engine ↔ audit log integration (PR-08)."""
 
-import os
 import pytest
 
-from agent.core.engine import AgentEngine, AgentConfig
-from agent.core.audit_log import reset_audit_logger, get_audit_logger
+from agent.core.audit_log import get_audit_logger, reset_audit_logger
+from agent.core.engine import AgentConfig, AgentEngine
 
 
 @pytest.fixture
@@ -27,10 +26,15 @@ class TestEngineAuditWiring:
         assert e.audit is None
 
     def test_audit_hooks_registered(self, isolated_audit):
-        from agent.core.hooks import BEFORE_TOOL_EXECUTION, AFTER_TOOL_EXECUTION
+        from agent.core.hooks import AFTER_TOOL_EXECUTION, BEFORE_TOOL_EXECUTION
+
         e = AgentEngine(AgentConfig(model="mock", provider="mock"))
-        before = e.hooks.get_handlers(BEFORE_TOOL_EXECUTION) if hasattr(e.hooks, "get_handlers") else []
-        after = e.hooks.get_handlers(AFTER_TOOL_EXECUTION) if hasattr(e.hooks, "get_handlers") else []
+        before = (
+            e.hooks.get_handlers(BEFORE_TOOL_EXECUTION) if hasattr(e.hooks, "get_handlers") else []
+        )
+        after = (
+            e.hooks.get_handlers(AFTER_TOOL_EXECUTION) if hasattr(e.hooks, "get_handlers") else []
+        )
         # Either via get_handlers or via direct internal state; just assert the audit is wired
         assert e.audit is not None
 
@@ -53,8 +57,10 @@ class TestAuditHooksFire:
     @pytest.mark.asyncio
     async def test_after_tool_hook_logs_with_duration(self, isolated_audit):
         from agent.tools.base import ToolResult
+
         e = AgentEngine(AgentConfig(model="mock", provider="mock"))
         import time
+
         payload = {
             "tool": "read_file",
             "args": {},
@@ -100,6 +106,7 @@ class TestAuditQueryTool:
     @pytest.mark.asyncio
     async def test_tool_registered(self):
         from agent.tools.base import registry
+
         tool = registry.get("audit_query")
         assert tool is not None
         assert tool.is_read_only is True
@@ -108,25 +115,37 @@ class TestAuditQueryTool:
     @pytest.mark.asyncio
     async def test_tool_returns_json(self, isolated_audit):
         from agent.tools.base import registry
+
         # Seed
-        isolated_audit.log({"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "x"})
+        isolated_audit.log(
+            {"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "x"}
+        )
         tool = registry.get("audit_query")
         result = await tool.execute()
         assert result.success
         import json
+
         records = json.loads(result.content)
         assert len(records) >= 1
 
     @pytest.mark.asyncio
     async def test_tool_filters(self, isolated_audit):
         from agent.tools.base import registry
-        isolated_audit.log({"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "read"})
-        isolated_audit.log({"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "write"})
-        isolated_audit.log({"session_id": "s", "agent_id": "sub-1", "action": "tool_call", "tool": "read"})
+
+        isolated_audit.log(
+            {"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "read"}
+        )
+        isolated_audit.log(
+            {"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "write"}
+        )
+        isolated_audit.log(
+            {"session_id": "s", "agent_id": "sub-1", "action": "tool_call", "tool": "read"}
+        )
         tool = registry.get("audit_query")
         # Filter by tool
         r = await tool.execute(tool="read")
         import json
+
         recs = json.loads(r.content)
         assert all(rec["tool"] == "read" for rec in recs)
         assert len(recs) == 2
@@ -138,16 +157,21 @@ class TestAuditQueryTool:
     @pytest.mark.asyncio
     async def test_tool_limit(self, isolated_audit):
         from agent.tools.base import registry
+
         for i in range(5):
-            isolated_audit.log({"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "x"})
+            isolated_audit.log(
+                {"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "x"}
+            )
         tool = registry.get("audit_query")
         r = await tool.execute(limit=3)
         import json
+
         assert len(json.loads(r.content)) == 3
 
     @pytest.mark.asyncio
     async def test_tool_limit_clamping(self, isolated_audit):
         from agent.tools.base import registry
+
         tool = registry.get("audit_query")
         # Negative/huge limits should be clamped to [1, 1000]
         r = await tool.execute(limit=-5)
@@ -162,7 +186,10 @@ class TestAuditSlashCommand:
     @pytest.mark.asyncio
     async def test_audit_stats(self, isolated_audit):
         from agent.commands.builtin import _handle_audit
-        isolated_audit.log({"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "read"})
+
+        isolated_audit.log(
+            {"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "read"}
+        )
         out = await _handle_audit("stats", {})
         assert "Audit stats" in out
         assert "total entries: 1" in out
@@ -171,37 +198,45 @@ class TestAuditSlashCommand:
     @pytest.mark.asyncio
     async def test_audit_stats_default(self, isolated_audit):
         from agent.commands.builtin import _handle_audit
+
         out = await _handle_audit("", {})  # Defaults to stats
         assert "Audit stats" in out
 
     @pytest.mark.asyncio
     async def test_audit_query(self, isolated_audit):
         from agent.commands.builtin import _handle_audit
-        isolated_audit.log({"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "x"})
+
+        isolated_audit.log(
+            {"session_id": "s", "agent_id": "main", "action": "tool_call", "tool": "x"}
+        )
         out = await _handle_audit("query 5", {})
         assert "tool_call" in out
 
     @pytest.mark.asyncio
     async def test_audit_query_empty(self, isolated_audit):
         from agent.commands.builtin import _handle_audit
+
         out = await _handle_audit("query", {})
         assert "empty" in out.lower()
 
     @pytest.mark.asyncio
     async def test_audit_rotate(self, isolated_audit):
         from agent.commands.builtin import _handle_audit
+
         out = await _handle_audit("rotate 30", {})
         assert "Rotated" in out
 
     @pytest.mark.asyncio
     async def test_audit_unknown_subcommand(self, isolated_audit):
         from agent.commands.builtin import _handle_audit
+
         out = await _handle_audit("frobnicate", {})
         assert "Usage" in out
 
     @pytest.mark.asyncio
     async def test_audit_command_registered(self):
         from agent.commands.base import registry
+
         cmd = registry.get("audit")
         assert cmd is not None
         assert "audit" in cmd.description.lower()

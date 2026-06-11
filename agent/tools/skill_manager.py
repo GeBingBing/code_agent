@@ -1,14 +1,13 @@
 """Skill manager - save, retrieve, and activate reusable skills"""
 
 import re
-from pathlib import Path
-from typing import List, Optional, Dict
 from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Optional
 
 import yaml
 
 from .base import BaseTool, ToolResult, registry
-
 
 SKILLS_DIR = Path.home() / ".coding-agent" / "skills"
 SKILLS_DIR.mkdir(parents=True, exist_ok=True)
@@ -94,6 +93,7 @@ class SkillManager:
     def _embed_text(self, text: str) -> dict:
         """Build a simple TF-IDF-style sparse vector: word → frequency."""
         import re
+
         text = text.lower()
         # Split on non-alphanumeric, keep CJK unigrams
         tokens = []
@@ -186,6 +186,7 @@ class SkillManager:
 
 # === Tools for the agent ===
 
+
 class CreateSkillTool(BaseTool):
     user_facing_name = "Skill"
 
@@ -195,7 +196,9 @@ class CreateSkillTool(BaseTool):
     def __init__(self):
         self.manager = SkillManager()
 
-    async def execute(self, name: str, description: str, content: str, tags: Optional[List[str]] = None, **kwargs) -> ToolResult:
+    async def execute(
+        self, name: str, description: str, content: str, tags: Optional[List[str]] = None, **kwargs
+    ) -> ToolResult:
         try:
             skill = self.manager.create_skill(name, description, content, tags)
             return ToolResult(success=True, content=f"Skill saved: {skill.source_file}")
@@ -214,8 +217,15 @@ class CreateSkillTool(BaseTool):
                     "properties": {
                         "name": {"type": "string", "description": "Skill identifier (snake_case)"},
                         "description": {"type": "string", "description": "What this skill does"},
-                        "content": {"type": "string", "description": "The skill instructions/content"},
-                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Search tags"},
+                        "content": {
+                            "type": "string",
+                            "description": "The skill instructions/content",
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Search tags",
+                        },
                     },
                     "required": ["name", "description", "content"],
                 },

@@ -10,23 +10,19 @@ These verify:
 - Disabling via AgentConfig.enable_dual_review=False removes the hook
 """
 
-import asyncio
 import json
+
 import pytest
 
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.audit_log import reset_audit_logger
 from agent.core.dual_review import (
     DualReviewManager,
     PermissionDenied,
     RateLimiter,
-    ReviewDecision,
     ReviewRequiresUser,
-    ReviewVerdict,
-    reset_dual_review_manager,
 )
-from agent.core.audit_log import reset_audit_logger
+from agent.core.engine import AgentConfig, AgentEngine
 from agent.core.hooks import BEFORE_TOOL_EXECUTION
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -49,9 +45,13 @@ def _config(**overrides) -> AgentConfig:
     return AgentConfig(**base)
 
 
-def _make_engine_with_reviewers(primary_chat=None, secondary_chat=None,
-                                 primary_model="gpt-4o", secondary_model="claude-sonnet-4-6",
-                                 **config_overrides):
+def _make_engine_with_reviewers(
+    primary_chat=None,
+    secondary_chat=None,
+    primary_model="gpt-4o",
+    secondary_model="claude-sonnet-4-6",
+    **config_overrides,
+):
     """Create an engine and inject a custom dual-review manager."""
     e = AgentEngine(_config(**config_overrides))
     if primary_chat is not None or secondary_chat is not None:
@@ -190,6 +190,7 @@ class TestDualReviewLoggingToAudit:
         e = _make_engine_with_reviewers(_approve_chat, _approve_chat)
         # Force audit init (lazy)
         from agent.core.audit_log import get_audit_logger
+
         e.audit = get_audit_logger()
         payload = {"tool": "write_file", "args": {"path": "x.py"}, "tc_id": "t1"}
         await e._dual_review_hook(payload)
@@ -201,9 +202,11 @@ class TestDualReviewLoggingToAudit:
         # the in-memory entry was logged. We just verify it was logged.
         # Look for it in the raw line.
         import json as _json
+
         # The audit query returns records that have been re-scrubbed.
         # We check that the action made it to disk
         from pathlib import Path
+
         files = list(Path(e.audit.log_dir).glob("*.jsonl"))
         assert len(files) >= 1
         lines = files[0].read_text().strip().split("\n")
@@ -218,11 +221,13 @@ class TestDualReviewLoggingToAudit:
     async def test_rejection_logged_to_audit(self):
         e = _make_engine_with_reviewers(_approve_chat, _reject_chat)
         from agent.core.audit_log import get_audit_logger
+
         e.audit = get_audit_logger()
         payload = {"tool": "write_file", "args": {"path": "x.py"}}
         with pytest.raises(PermissionDenied):
             await e._dual_review_hook(payload)
         from pathlib import Path
+
         files = list(Path(e.audit.log_dir).glob("*.jsonl"))
         lines = files[0].read_text().strip().split("\n")
         dual_review_entries = [l for l in lines if '"action": "dual_review"' in l]
@@ -234,10 +239,12 @@ class TestDualReviewLoggingToAudit:
     async def test_low_risk_tool_not_logged(self):
         e = _make_engine_with_reviewers(_approve_chat, _approve_chat)
         from agent.core.audit_log import get_audit_logger
+
         e.audit = get_audit_logger()
         payload = {"tool": "read_file", "args": {"path": "x.py"}}
         await e._dual_review_hook(payload)
         from pathlib import Path
+
         files = list(Path(e.audit.log_dir).glob("*.jsonl"))
         if files:
             lines = files[0].read_text().strip().split("\n")
@@ -251,32 +258,37 @@ class TestDualReviewLoggingToAudit:
 class TestAlternateModelConfig:
     def test_pick_alternate_for_claude(self):
         from agent.core.engine import _pick_alternate_model
+
         assert _pick_alternate_model("claude-sonnet-4-6") == "gpt-4o"
         assert _pick_alternate_model("claude-opus-4-6") == "gpt-4o"
 
     def test_pick_alternate_for_gpt(self):
         from agent.core.engine import _pick_alternate_model
+
         assert _pick_alternate_model("gpt-4o") == "claude-sonnet-4-6"
         assert _pick_alternate_model("gpt-4o-mini") == "claude-sonnet-4-6"
         assert _pick_alternate_model("o1-preview") == "claude-sonnet-4-6"
 
     def test_pick_alternate_for_chinese_models(self):
         from agent.core.engine import _pick_alternate_model
-        for m in ("qwen-max", "deepseek-chat", "glm-4", "kimi-k2",
-                  "MiniMax-Text-01", "doubao-pro"):
+
+        for m in ("qwen-max", "deepseek-chat", "glm-4", "kimi-k2", "MiniMax-Text-01", "doubao-pro"):
             assert _pick_alternate_model(m) == "gpt-4o"
 
     def test_pick_alternate_for_unknown(self):
         from agent.core.engine import _pick_alternate_model
+
         assert _pick_alternate_model("some-unknown-model") == "claude-sonnet-4-6"
 
     def test_pick_alternate_for_empty(self):
         from agent.core.engine import _pick_alternate_model
+
         assert _pick_alternate_model("") == "claude-sonnet-4-6"
 
     def test_dual_review_model_override(self):
         e = _make_engine_with_reviewers(
-            _approve_chat, _approve_chat,
+            _approve_chat,
+            _approve_chat,
             primary_model="claude-sonnet-4-6",
             secondary_model="custom-judge",
             dual_review_model="custom-judge",  # via config not via _make_engine_with_reviewers
@@ -309,18 +321,18 @@ class TestEngineIntegrationEndToEnd:
     @pytest.mark.asyncio
     async def test_hook_skips_low_risk(self):
         e = _make_engine_with_reviewers(_approve_chat, _approve_chat)
-        out = await e._dual_review_hook({
-            "tool": "read_file", "args": {"path": "x.py"}, "tc_id": "t"
-        })
+        out = await e._dual_review_hook(
+            {"tool": "read_file", "args": {"path": "x.py"}, "tc_id": "t"}
+        )
         assert e.dual_review.reviews_run == 0
 
     @pytest.mark.asyncio
     async def test_hook_blocks_high_risk_rejected(self):
         e = _make_engine_with_reviewers(_approve_chat, _reject_chat)
         with pytest.raises(PermissionDenied):
-            await e._dual_review_hook({
-                "tool": "write_file", "args": {"path": "rm -rf /"}, "tc_id": "t"
-            })
+            await e._dual_review_hook(
+                {"tool": "write_file", "args": {"path": "rm -rf /"}, "tc_id": "t"}
+            )
 
 
 # ── TestRateLimitingInEngine ────────────────────────────────────────
@@ -334,15 +346,15 @@ class TestRateLimitingInEngine:
         e.dual_review.rate_limiter = RateLimiter(max_per_minute=2)
         # 2 calls pass through
         for i in range(2):
-            out = await e._dual_review_hook({
-                "tool": "write_file", "args": {"path": f"f{i}.py"}, "tc_id": f"t{i}"
-            })
+            out = await e._dual_review_hook(
+                {"tool": "write_file", "args": {"path": f"f{i}.py"}, "tc_id": f"t{i}"}
+            )
             assert out is not None
         # 3rd call is rate-limited → raises ReviewRequiresUser
         with pytest.raises(ReviewRequiresUser):
-            await e._dual_review_hook({
-                "tool": "write_file", "args": {"path": "f3.py"}, "tc_id": "t3"
-            })
+            await e._dual_review_hook(
+                {"tool": "write_file", "args": {"path": "f3.py"}, "tc_id": "t3"}
+            )
 
 
 # ── TestContextPassing ──────────────────────────────────────────────
@@ -358,12 +370,14 @@ class TestContextPassing:
             return json.dumps({"verdict": "approve", "rationale": "ok"}), None
 
         e = _make_engine_with_reviewers(spy, spy)
-        await e._dual_review_hook({
-            "tool": "write_file",
-            "args": {"path": "x.py"},
-            "context": "user is refactoring",
-            "tc_id": "t1",
-        })
+        await e._dual_review_hook(
+            {
+                "tool": "write_file",
+                "args": {"path": "x.py"},
+                "context": "user is refactoring",
+                "tc_id": "t1",
+            }
+        )
         assert len(captured) == 2
         for prompt in captured:
             assert "user is refactoring" in prompt
@@ -381,9 +395,9 @@ class TestNoExceptionEscapesUnexpectedly:
         e = _make_engine_with_reviewers(_approve_chat, bad_chat)
         # One reviewer works, one fails → split → requires_user
         with pytest.raises(ReviewRequiresUser):
-            await e._dual_review_hook({
-                "tool": "write_file", "args": {"path": "x.py"}, "tc_id": "t1"
-            })
+            await e._dual_review_hook(
+                {"tool": "write_file", "args": {"path": "x.py"}, "tc_id": "t1"}
+            )
 
 
 # ── TestHighRiskToolSetEnumeration ──────────────────────────────
@@ -396,6 +410,7 @@ class TestHighRiskToolSetEnumeration:
         # PR-11 ships with a curated set. If this number changes, the
         # set membership test should be updated to reflect the new tools.
         from agent.core.dual_review import DualReviewManager
+
         expected_count = len(DualReviewManager.HIGH_RISK_TOOLS)
         assert expected_count >= 8
         # All entries are non-empty strings
@@ -404,25 +419,34 @@ class TestHighRiskToolSetEnumeration:
 
     def test_common_tools_are_high_risk(self):
         from agent.core.dual_review import DualReviewManager
+
         # Tools that should DEFINITELY be in the high-risk set
         must_be_high_risk = {
-            "write_file", "execute_command", "apply_diff",
-            "create_pr", "web_fetch", "install_package",
+            "write_file",
+            "execute_command",
+            "apply_diff",
+            "create_pr",
+            "web_fetch",
+            "install_package",
         }
         for tool in must_be_high_risk:
-            assert tool in DualReviewManager.HIGH_RISK_TOOLS, \
-                f"{tool} should be high-risk"
+            assert tool in DualReviewManager.HIGH_RISK_TOOLS, f"{tool} should be high-risk"
 
     def test_read_only_tools_are_not_high_risk(self):
         from agent.core.dual_review import DualReviewManager
+
         # Tools that should DEFINITELY NOT be high-risk
         must_be_low_risk = {
-            "read_file", "list_files", "grep", "code_search",
-            "semantic_search", "render_progress", "view_diff",
+            "read_file",
+            "list_files",
+            "grep",
+            "code_search",
+            "semantic_search",
+            "render_progress",
+            "view_diff",
         }
         for tool in must_be_low_risk:
-            assert tool not in DualReviewManager.HIGH_RISK_TOOLS, \
-                f"{tool} should not be high-risk"
+            assert tool not in DualReviewManager.HIGH_RISK_TOOLS, f"{tool} should not be high-risk"
 
 
 # ── TestHookWithContextField ────────────────────────────────────
@@ -477,10 +501,12 @@ class TestHookMultipleHighRiskCallsInSequence:
     async def test_approved_counter_increments(self):
         e = _make_engine_with_reviewers(_approve_chat, _approve_chat)
         for i in range(5):
-            await e._dual_review_hook({
-                "tool": "write_file",
-                "args": {"path": f"f{i}.py"},
-            })
+            await e._dual_review_hook(
+                {
+                    "tool": "write_file",
+                    "args": {"path": f"f{i}.py"},
+                }
+            )
         assert e.dual_review.reviews_run == 5
         assert e.dual_review.reviews_approved == 5
 
@@ -489,10 +515,12 @@ class TestHookMultipleHighRiskCallsInSequence:
         e = _make_engine_with_reviewers(_reject_chat, _reject_chat)
         for i in range(3):
             with pytest.raises(PermissionDenied):
-                await e._dual_review_hook({
-                    "tool": "write_file",
-                    "args": {"path": f"f{i}.py"},
-                })
+                await e._dual_review_hook(
+                    {
+                        "tool": "write_file",
+                        "args": {"path": f"f{i}.py"},
+                    }
+                )
         assert e.dual_review.reviews_run == 3
         assert e.dual_review.reviews_rejected == 3
 
@@ -530,17 +558,20 @@ class TestHookMultipleHighRiskCallsInSequence:
 class TestPickAlternateModelEdgeCases:
     def test_gemini_picks_alternate(self):
         from agent.core.engine import _pick_alternate_model
+
         # Gemini is in the unknown bucket
         result = _pick_alternate_model("gemini-1.5-pro")
         assert result in {"claude-sonnet-4-6", "gpt-4o"}
 
     def test_o1_picks_alternate(self):
         from agent.core.engine import _pick_alternate_model
+
         result = _pick_alternate_model("o1-preview")
         assert result == "claude-sonnet-4-6"
 
     def test_case_insensitive(self):
         from agent.core.engine import _pick_alternate_model
+
         # The function lowercases input before matching, so "CLAUDE" still
         # matches the "claude" substring → returns the GPT alternate
         result = _pick_alternate_model("CLAUDE-SONNET-4-6")
@@ -548,6 +579,7 @@ class TestPickAlternateModelEdgeCases:
 
     def test_partial_match(self):
         from agent.core.engine import _pick_alternate_model
+
         # A model name that starts with "claude" but has extras
         result = _pick_alternate_model("claude-haiku-3-5")
         assert result == "gpt-4o"
@@ -585,6 +617,7 @@ class TestAuditFailureDoesNotBreakHook:
     @pytest.fixture(autouse=True)
     def _reset(self, tmp_path, monkeypatch):
         from agent.core.audit_log import reset_audit_logger
+
         reset_audit_logger()
         monkeypatch.setenv("CODING_AGENT_AUDIT_DIR", str(tmp_path / "audit"))
         yield
@@ -594,16 +627,22 @@ class TestAuditFailureDoesNotBreakHook:
     async def test_audit_failure_still_raises_correctly(self):
         e = _make_engine_with_reviewers(_approve_chat, _reject_chat)
         from agent.core.audit_log import get_audit_logger
+
         e.audit = get_audit_logger()
         # Make audit.log() raise
         original_log = e.audit.log
+
         def broken_log(record):
             raise OSError("disk full")
+
         e.audit.log = broken_log
         # Hook should still raise PermissionDenied, not OSError
         with pytest.raises(PermissionDenied):
-            await e._dual_review_hook({
-                "tool": "write_file", "args": {"path": "x.py"},
-            })
+            await e._dual_review_hook(
+                {
+                    "tool": "write_file",
+                    "args": {"path": "x.py"},
+                }
+            )
         # Restore
         e.audit.log = original_log

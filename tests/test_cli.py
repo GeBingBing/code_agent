@@ -1,10 +1,13 @@
 """Tests for CLI module — simple questions, commands, and confirm dialog."""
 
 import pytest
+
 from ui.cli import (
-    _is_simple_question, _tool_icon, _confirm_handler, _build_diff_lines,
+    _build_diff_lines,
     _clear_two_lines,
-    BOLD, DIM, GREEN, RED, CYAN, YELLOW, MAGENTA, RESET,
+    _confirm_handler,
+    _is_simple_question,
+    _tool_icon,
 )
 
 
@@ -90,10 +93,12 @@ class TestConfirmHandler:
 
     def test_handler_is_callable(self):
         import asyncio
+
         assert asyncio.iscoroutinefunction(_confirm_handler)
 
     def test_handler_accepts_params(self):
         import inspect
+
         sig = inspect.signature(_confirm_handler)
         params = list(sig.parameters.keys())
         assert params == ["tool_name", "message", "args"]
@@ -118,13 +123,16 @@ class TestAsyncInput:
     """Test the cancellable async input helper."""
 
     def test_is_coroutine(self):
-        from ui.cli import _async_input
         import inspect
+
+        from ui.cli import _async_input
+
         assert inspect.iscoroutinefunction(_async_input)
 
     def test_empty_string_on_eof(self, monkeypatch):
         """EOF on stdin returns empty string (not raises)."""
         import asyncio
+
         from ui.cli import _async_input
 
         # Simulate non-TTY (piped) stdin — falls back to run_in_executor
@@ -132,6 +140,7 @@ class TestAsyncInput:
 
         def _eof(*a, **kw):
             raise EOFError
+
         monkeypatch.setattr("builtins.input", _eof)
         result = asyncio.run(_async_input("> "))
         assert result == ""
@@ -139,12 +148,14 @@ class TestAsyncInput:
     def test_empty_string_on_keyboard_interrupt(self, monkeypatch):
         """Ctrl+C in piped mode returns empty string (not leaks a thread)."""
         import asyncio
+
         from ui.cli import _async_input
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: False)
 
         def _ki(*a, **kw):
             raise KeyboardInterrupt
+
         monkeypatch.setattr("builtins.input", _ki)
         result = asyncio.run(_async_input("> "))
         assert result == ""
@@ -152,6 +163,7 @@ class TestAsyncInput:
     def test_strips_input(self, monkeypatch):
         """Returned value is stripped of leading/trailing whitespace."""
         import asyncio
+
         from ui.cli import _async_input
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: False)
@@ -165,12 +177,14 @@ class TestConfirmHandlerCancellation:
 
     def test_empty_answer_returns_n(self, monkeypatch):
         """If _async_input returns '' (Ctrl+C), confirm returns 'n'."""
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
 
         # Pretend the async input returns empty string (cancelled)
         async def fake_input(prompt):
             return ""
+
         monkeypatch.setattr("ui.cli._async_input", fake_input)
 
         result = asyncio.run(_confirm_handler("read_file", "Read", {"path": "x"}))
@@ -178,11 +192,13 @@ class TestConfirmHandlerCancellation:
 
     def test_keyboard_interrupt_returns_n(self, monkeypatch):
         """If _async_input raises KeyboardInterrupt, confirm returns 'n'."""
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
 
         async def fake_input(prompt):
             raise KeyboardInterrupt
+
         monkeypatch.setattr("ui.cli._async_input", fake_input)
 
         result = asyncio.run(_confirm_handler("read_file", "Read", {"path": "x"}))
@@ -190,9 +206,10 @@ class TestConfirmHandlerCancellation:
 
     def test_eof_during_full_diff_returns_n(self, monkeypatch):
         """EOF/Ctrl+C while viewing the full diff also returns 'n'."""
-        from ui.cli import _confirm_handler
         import asyncio
         import tempfile
+
+        from ui.cli import _confirm_handler
 
         # Build a 60-line diff to trigger pagination
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -202,11 +219,19 @@ class TestConfirmHandlerCancellation:
 
         async def fake_input(prompt):
             return ""  # simulate Ctrl+C
+
         monkeypatch.setattr("ui.cli._async_input", fake_input)
 
-        result = asyncio.run(_confirm_handler("write_file", "Edit big", {
-            "path": tmp, "content": "x\n" * 100,
-        }))
+        result = asyncio.run(
+            _confirm_handler(
+                "write_file",
+                "Edit big",
+                {
+                    "path": tmp,
+                    "content": "x\n" * 100,
+                },
+            )
+        )
         assert result == "n"
 
 
@@ -216,6 +241,7 @@ class TestUnraisableHook:
     def test_keyboard_interrupt_silenced(self):
         """sys.unraisablehook should silence KeyboardInterrupt unraisables."""
         import sys
+
         from ui.cli import _silent_unraisable
 
         # Hook must be installed
@@ -228,12 +254,14 @@ class TestUnraisableHook:
             exc_traceback = None
             err_msg = "simulated"
             object = None
+
         # This should not raise or print anything
         sys.unraisablehook(U())
 
     def test_non_kb_interrupt_falls_through(self, monkeypatch, capsys):
         """Non-KeyboardInterrupt unraisables fall through to default hook."""
         import sys
+
         from ui.cli import _silent_unraisable
 
         class U:
@@ -245,8 +273,10 @@ class TestUnraisableHook:
 
         # Replace default hook with a recording one
         calls = []
+
         def record(u):
             calls.append(u)
+
         monkeypatch.setattr(sys, "__unraisablehook__", record)
 
         _silent_unraisable(U())
@@ -260,6 +290,7 @@ class TestRichHelpers:
     def test_rich_print_markdown_empty(self, capsys):
         """Empty markdown doesn't print anything."""
         from ui.cli import _rich_print_markdown
+
         _rich_print_markdown("")
         _rich_print_markdown("   \n  ")
         out = capsys.readouterr().out
@@ -269,6 +300,7 @@ class TestRichHelpers:
     def test_rich_print_todo_empty(self, capsys):
         """Empty todo list doesn't crash."""
         from ui.cli import _rich_print_todo
+
         _rich_print_todo([])
         out = capsys.readouterr().out
         # No panel for empty list
@@ -276,7 +308,8 @@ class TestRichHelpers:
 
     def test_rich_print_todo_with_items(self, capsys):
         """Todo list renders with rich Panel."""
-        from ui.cli import _rich_print_todo, RICH_AVAILABLE
+        from ui.cli import RICH_AVAILABLE, _rich_print_todo
+
         if not RICH_AVAILABLE:
             return  # skip if rich missing
         todos = [
@@ -296,6 +329,7 @@ class TestRichHelpers:
     def test_rich_print_tool_result_success(self, capsys):
         """Tool result success badge."""
         from ui.cli import _rich_print_tool_result
+
         _rich_print_tool_result("Read", "hello.py · 120 lines", success=True)
         out = capsys.readouterr().out
         assert "Read" in out
@@ -304,6 +338,7 @@ class TestRichHelpers:
     def test_rich_print_tool_result_failure(self, capsys):
         """Tool result failure badge shows ✗."""
         from ui.cli import _rich_print_tool_result
+
         _rich_print_tool_result("Bash", "Permission denied", success=False)
         out = capsys.readouterr().out
         assert "Bash" in out
@@ -311,10 +346,13 @@ class TestRichHelpers:
 
     def test_rich_print_confirm_no_diff(self, capsys):
         """Confirm dialog without diff doesn't include option 4."""
-        from ui.cli import _rich_print_confirm, RICH_AVAILABLE
+        from ui.cli import RICH_AVAILABLE, _rich_print_confirm
+
         if not RICH_AVAILABLE:
             return
-        _rich_print_confirm("read_file", "Read hello.py", [], has_diff=False, choice_prompt="[1/2/3]: ")
+        _rich_print_confirm(
+            "read_file", "Read hello.py", [], has_diff=False, choice_prompt="[1/2/3]: "
+        )
         out = capsys.readouterr().out
         assert "Read hello.py" in out
         assert "Confirm" in out
@@ -322,14 +360,17 @@ class TestRichHelpers:
 
     def test_rich_print_confirm_with_diff(self, capsys):
         """Confirm dialog with diff includes option 4 and shows diff lines."""
-        from ui.cli import _rich_print_confirm, RICH_AVAILABLE
+        from ui.cli import RICH_AVAILABLE, _rich_print_confirm
+
         if not RICH_AVAILABLE:
             return
         diff = [
             ("+1 -0 hello.txt", "DIM"),
             ("+hello world", "GREEN"),
         ]
-        _rich_print_confirm("write_file", "Write hello.txt", diff, has_diff=True, choice_prompt="[1/2/3/4]: ")
+        _rich_print_confirm(
+            "write_file", "Write hello.txt", diff, has_diff=True, choice_prompt="[1/2/3/4]: "
+        )
         out = capsys.readouterr().out
         assert "Write hello.txt" in out
         assert "View full diff (2 lines)" in out
@@ -341,12 +382,23 @@ class TestHandleCommand:
 
     def test_handle_command_does_not_crash(self):
         """_handle_command should not raise for any built-in command."""
-        from ui.cli import SimpleCLI
         import asyncio
 
+        from ui.cli import SimpleCLI
+
         cli = SimpleCLI()
-        commands = ["/help", "/model", "/mode", "/clear", "/status",
-                     "/context", "/memory", "/quit", "/plan", "/undo"]
+        commands = [
+            "/help",
+            "/model",
+            "/mode",
+            "/clear",
+            "/status",
+            "/context",
+            "/memory",
+            "/quit",
+            "/plan",
+            "/undo",
+        ]
 
         async def run():
             for cmd in commands:
@@ -363,25 +415,32 @@ class TestHandleCommand:
 
     def test_help_contains_commands(self):
         """/help should list available commands."""
-        from ui.cli import SimpleCLI
         import asyncio
 
+        from ui.cli import SimpleCLI
+
         cli = SimpleCLI()
+
         async def run():
             result = await cli._handle_command("/help")
             return result
+
         result = asyncio.run(run())
-        assert any(cmd in result for cmd in ["/help", "/model", "/clear", "/quit"]), \
-            f"Help output missing commands: {result[:200]}"
+        assert any(
+            cmd in result for cmd in ["/help", "/model", "/clear", "/quit"]
+        ), f"Help output missing commands: {result[:200]}"
 
     def test_unknown_command_returns_error(self):
         """Unknown commands should return an error message."""
-        from ui.cli import SimpleCLI
         import asyncio
 
+        from ui.cli import SimpleCLI
+
         cli = SimpleCLI()
+
         async def run():
             return await cli._handle_command("/nonexistent_cmd_xyz")
+
         result = asyncio.run(run())
         assert "Unknown" in result or "unknown" in result.lower()
 
@@ -394,9 +453,10 @@ class TestUndoProfile:
 
     def test_undo_profile_subcommand(self, tmp_path, monkeypatch):
         """Make a profile change, then /undo profile — name must revert."""
-        from ui.cli import SimpleCLI
-        from agent.core.user_profile import UserProfile
         import asyncio
+
+        from agent.core.user_profile import UserProfile
+        from ui.cli import SimpleCLI
 
         # Direct the profile to a tmp file so we don't touch real user data
         p_path = tmp_path / "user_profile.json"
@@ -411,6 +471,7 @@ class TestUndoProfile:
 
         async def run():
             return await cli._handle_command("/undo profile")
+
         result = asyncio.run(run())
 
         assert "Reverted" in result
@@ -421,9 +482,10 @@ class TestUndoProfile:
 
     def test_undo_profile_with_no_history(self, tmp_path, monkeypatch):
         """Empty change_log → 'Nothing to undo' message."""
-        from ui.cli import SimpleCLI
-        from agent.core.user_profile import UserProfile
         import asyncio
+
+        from agent.core.user_profile import UserProfile
+        from ui.cli import SimpleCLI
 
         p_path = tmp_path / "user_profile.json"
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(p_path))
@@ -431,16 +493,19 @@ class TestUndoProfile:
         # Ensure empty profile on disk
         UserProfile()  # creates empty
         cli = SimpleCLI()
+
         async def run():
             return await cli._handle_command("/undo profile")
+
         result = asyncio.run(run())
         assert "Nothing to undo" in result
 
     def test_undo_profile_uses_engine_profile(self, tmp_path, monkeypatch):
         """When ctx['engine'] is provided, undo targets engine.user_profile."""
-        from ui.cli import SimpleCLI
-        from agent.core.user_profile import UserProfile
         import asyncio
+
+        from agent.core.user_profile import UserProfile
+        from ui.cli import SimpleCLI
 
         p_path = tmp_path / "user_profile.json"
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(p_path))
@@ -461,6 +526,7 @@ class TestUndoProfile:
 
         async def run():
             return await cli._handle_command("/undo profile")
+
         result = asyncio.run(run())
 
         assert "Reverted" in result
@@ -478,10 +544,13 @@ class TestBuildDiffLines:
     def test_write_file_to_new_path(self, tmp_path):
         """Write to a new file shows all additions."""
         target = tmp_path / "new.py"
-        lines = _build_diff_lines("write_file", {
-            "path": str(target),
-            "content": "print('hello')\nprint('world')\n",
-        })
+        lines = _build_diff_lines(
+            "write_file",
+            {
+                "path": str(target),
+                "content": "print('hello')\nprint('world')\n",
+            },
+        )
         # Header + 2 added lines
         assert any("+2 -0" in t for t, _ in lines)
         assert sum(1 for t, c in lines if c == "GREEN") == 2
@@ -490,30 +559,39 @@ class TestBuildDiffLines:
         """Edit shows added + removed lines."""
         target = tmp_path / "old.py"
         target.write_text("a\nb\nc\n")
-        lines = _build_diff_lines("write_file", {
-            "path": str(target),
-            "content": "a\nB\nc\nd\n",
-        })
+        lines = _build_diff_lines(
+            "write_file",
+            {
+                "path": str(target),
+                "content": "a\nB\nc\nd\n",
+            },
+        )
         # 1 added, 1 removed
         assert any("+2 -1" in t or "+1 -1" in t for t, _ in lines)
         assert any(c == "RED" for _, c in lines)
 
     def test_apply_diff_single_line(self):
         """apply_diff shows first changed line as - / + pair."""
-        lines = _build_diff_lines("apply_diff", {
-            "search": "old_var = 1\n",
-            "replace": "new_var = 1\n",
-        })
+        lines = _build_diff_lines(
+            "apply_diff",
+            {
+                "search": "old_var = 1\n",
+                "replace": "new_var = 1\n",
+            },
+        )
         # Should have a - and a + line
         assert any(c == "RED" for _, c in lines)
         assert any(c == "GREEN" for _, c in lines)
 
     def test_apply_diff_multiline(self):
         """Multi-line apply_diff shows count summary."""
-        lines = _build_diff_lines("apply_diff", {
-            "search": "a\nb\nc\n",
-            "replace": "x\ny\nz\nw\n",
-        })
+        lines = _build_diff_lines(
+            "apply_diff",
+            {
+                "search": "a\nb\nc\n",
+                "replace": "x\ny\nz\nw\n",
+            },
+        )
         # Should have a "(3 → 4 lines)" annotation
         assert any("3 → 4 lines" in t for t, _ in lines)
 
@@ -532,10 +610,13 @@ class TestBuildDiffLines:
 
     def test_diff_lines_are_tuples(self, tmp_path):
         """Each diff line is a (text, color) tuple — renderable format."""
-        lines = _build_diff_lines("write_file", {
-            "path": str(tmp_path / "x.py"),
-            "content": "hello\n",
-        })
+        lines = _build_diff_lines(
+            "write_file",
+            {
+                "path": str(tmp_path / "x.py"),
+                "content": "hello\n",
+            },
+        )
         assert all(isinstance(item, tuple) and len(item) == 2 for item in lines)
         assert all(color in ("RED", "GREEN", "DIM", "YELLOW", "CYAN") for _, color in lines)
 
@@ -545,8 +626,9 @@ class TestConfirmHandlerFourOptions:
 
     def test_4th_option_only_for_diff_tools(self, monkeypatch):
         """The '4. View full diff' line only shows for write/apply_diff."""
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
 
         captured = []
         monkeypatch.setattr("builtins.input", lambda _: "3")
@@ -554,34 +636,42 @@ class TestConfirmHandlerFourOptions:
         # Non-diff tool — should still work, no 4th option offered
         async def run():
             return await _confirm_handler("execute_command", "Run ls", {"command": "ls"})
+
         result = asyncio.run(run())
         assert result == "n"
 
     def test_choice_1_returns_y(self, monkeypatch):
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
+
         monkeypatch.setattr("builtins.input", lambda _: "1")
         result = asyncio.run(_confirm_handler("read_file", "Read file", {"path": "x.py"}))
         assert result == "y"
 
     def test_choice_2_returns_a(self, monkeypatch):
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
+
         monkeypatch.setattr("builtins.input", lambda _: "2")
         result = asyncio.run(_confirm_handler("read_file", "Read file", {"path": "x.py"}))
         assert result == "a"
 
     def test_choice_3_returns_n(self, monkeypatch):
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
+
         monkeypatch.setattr("builtins.input", lambda _: "3")
         result = asyncio.run(_confirm_handler("read_file", "Read file", {"path": "x.py"}))
         assert result == "n"
 
     def test_choice_4_loops_then_yes(self, monkeypatch, tmp_path, capsys):
         """Choice 4 prints full diff, then re-prompts; 1 on re-prompt returns y."""
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
 
         target = tmp_path / "diff_test.py"
         target.write_text("old line 1\nold line 2\n")
@@ -589,10 +679,16 @@ class TestConfirmHandlerFourOptions:
         inputs = iter(["4", "1"])
         monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-        result = asyncio.run(_confirm_handler("write_file", "Edit", {
-            "path": str(target),
-            "content": "old line 1\nnew line 2\n",
-        }))
+        result = asyncio.run(
+            _confirm_handler(
+                "write_file",
+                "Edit",
+                {
+                    "path": str(target),
+                    "content": "old line 1\nnew line 2\n",
+                },
+            )
+        )
         assert result == "y"
         out = capsys.readouterr().out
         # Full diff header should have appeared
@@ -601,36 +697,47 @@ class TestConfirmHandlerFourOptions:
 
     def test_choice_4_loops_then_no(self, monkeypatch, tmp_path, capsys):
         """Choice 4 prints full diff, then 3 returns n."""
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
 
         target = tmp_path / "diff_test.py"
         target.write_text("a\nb\n")
         inputs = iter(["4", "3"])
         monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-        result = asyncio.run(_confirm_handler("write_file", "Edit", {
-            "path": str(target),
-            "content": "a\nB\nc\n",
-        }))
+        result = asyncio.run(
+            _confirm_handler(
+                "write_file",
+                "Edit",
+                {
+                    "path": str(target),
+                    "content": "a\nB\nc\n",
+                },
+            )
+        )
         assert result == "n"
 
     def test_eof_returns_n(self, monkeypatch):
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
 
         def _raise(*a, **kw):
             raise EOFError
+
         monkeypatch.setattr("builtins.input", _raise)
         result = asyncio.run(_confirm_handler("read_file", "Read", {"path": "x"}))
         assert result == "n"
 
     def test_keyboard_interrupt_returns_n(self, monkeypatch):
-        from ui.cli import _confirm_handler
         import asyncio
+
+        from ui.cli import _confirm_handler
 
         def _raise(*a, **kw):
             raise KeyboardInterrupt
+
         monkeypatch.setattr("builtins.input", _raise)
         result = asyncio.run(_confirm_handler("read_file", "Read", {"path": "x"}))
         assert result == "n"
@@ -650,7 +757,6 @@ class TestDirectAnswerIdentity:
     @pytest.mark.asyncio
     async def test_fact_extraction_runs_on_simple_question(self, tmp_path, monkeypatch):
         """'我是hay' via the simple-question path must save name=hay to disk."""
-        from pathlib import Path
         from ui.cli import SimpleCLI
 
         # Redirect user profile to a temp file
@@ -658,36 +764,47 @@ class TestDirectAnswerIdentity:
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(profile_path))
 
         from agent.core.user_profile import UserProfile
+
         # Make sure we start clean
         if profile_path.exists():
             profile_path.unlink()
 
         cli = SimpleCLI()
         # Build a mock engine with user_profile and an LLM that returns nothing
-        from agent.core.engine import AgentEngine, AgentConfig
-        from agent.core.user_profile import UserProfile
+        from agent.core.engine import AgentConfig, AgentEngine
+
         engine = AgentEngine(AgentConfig())
         engine.user_profile = UserProfile()
 
         # Mock the LLM chat to return a simple string (not stream)
         class _MockChoice:
             delta = type("D", (), {"content": "ok", "tool_calls": None})()
+
         class _MockChunk:
             choices = [_MockChoice]
             usage = None
+
         class _MockResp:
-            def __init__(self): self._done = False
-            def __aiter__(self): return self
+            def __init__(self):
+                self._done = False
+
+            def __aiter__(self):
+                return self
+
             async def __anext__(self):
-                if self._done: raise StopAsyncIteration
+                if self._done:
+                    raise StopAsyncIteration
                 self._done = True
                 return _MockChunk()
+
         from agent.llm.client import LLMClient
+
         engine.llm = LLMClient(provider="mock", model="test")
 
         # Patch the LLM.chat to return our mock stream
         async def mock_chat(messages, stream=True):
             return _MockResp(), True
+
         engine.llm.chat = mock_chat
 
         # Run a "simple question" that contains an identity statement
@@ -695,6 +812,7 @@ class TestDirectAnswerIdentity:
 
         # Reload profile from disk and verify name was saved
         from agent.core.user_profile import UserProfile
+
         saved = UserProfile.load()
         assert saved.name == "hay", f"expected name='hay', got {saved.name!r}"
 
@@ -702,9 +820,9 @@ class TestDirectAnswerIdentity:
     async def test_user_profile_injected_into_prompt(self, tmp_path, monkeypatch):
         """When the profile has stored identity, `_direct_answer` must include
         it in the prompt sent to the LLM."""
-        from ui.cli import SimpleCLI
-        from agent.core.engine import AgentEngine, AgentConfig
+        from agent.core.engine import AgentConfig, AgentEngine
         from agent.core.user_profile import UserProfile
+        from ui.cli import SimpleCLI
 
         profile_path = tmp_path / "profile.json"
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(profile_path))
@@ -719,22 +837,31 @@ class TestDirectAnswerIdentity:
         engine.user_profile = profile
 
         captured_messages = []
+
         class _MockChunk:
             delta = type("D", (), {"content": "ok", "tool_calls": None})()
             usage = None
             choices = [type("C", (), {"delta": delta})()]
+
         class _MockResp:
-            def __init__(self): self._done = False
-            def __aiter__(self): return self
+            def __init__(self):
+                self._done = False
+
+            def __aiter__(self):
+                return self
+
             async def __anext__(self):
-                if self._done: raise StopAsyncIteration
+                if self._done:
+                    raise StopAsyncIteration
                 self._done = True
                 return _MockChunk()
 
         async def mock_chat(messages, stream=True):
             captured_messages.extend(messages)
             return _MockResp(), True
+
         from agent.llm.client import LLMClient
+
         engine.llm = LLMClient(provider="mock", model="test")
         engine.llm.chat = mock_chat
 
@@ -760,9 +887,9 @@ class TestDirectAnswerNoLingeringRefs:
 
     @pytest.mark.asyncio
     async def test_no_name_error_on_streaming_response(self, tmp_path, monkeypatch):
-        from ui.cli import SimpleCLI
         from agent.core.engine import AgentEngine
         from agent.llm.client import LLMClient
+        from ui.cli import SimpleCLI
 
         profile_path = tmp_path / "profile.json"
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(profile_path))
@@ -808,10 +935,10 @@ class TestQuestionFormNoExtraction:
     @pytest.mark.asyncio
     async def test_我是谁你知道吗_does_not_pollute_profile(self, tmp_path, monkeypatch):
         """The exact bug input — must not save a bogus name to disk."""
-        from ui.cli import SimpleCLI
-        from agent.core.engine import AgentEngine, AgentConfig
+        from agent.core.engine import AgentConfig, AgentEngine
         from agent.core.user_profile import UserProfile
         from agent.llm.client import LLMClient
+        from ui.cli import SimpleCLI
 
         profile_path = tmp_path / "profile.json"
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(profile_path))
@@ -826,15 +953,20 @@ class TestQuestionFormNoExtraction:
         class _Delta:
             content = "I don't know who you are"
             tool_calls = None
+
         class _Choice:
             delta = _Delta()
+
         class _Chunk:
             choices = [_Choice()]
             usage = None
+
         async def _aiter():
             yield _Chunk()
+
         async def mock_chat(messages, stream=True):
             return _aiter(), True
+
         engine.llm = LLMClient(provider="mock", model="test")
         engine.llm.chat = mock_chat
 
@@ -843,17 +975,18 @@ class TestQuestionFormNoExtraction:
 
         # Profile must NOT be polluted with the question text
         saved = UserProfile.load()
-        assert saved.name is None, \
-            f"Question polluted profile.name = {saved.name!r} (expected None)"
+        assert (
+            saved.name is None
+        ), f"Question polluted profile.name = {saved.name!r} (expected None)"
         assert saved.name != "谁你知道吗"
 
     @pytest.mark.asyncio
     async def test_who_am_i_does_not_pollute_profile(self, tmp_path, monkeypatch):
         """English question form — same guard applies."""
-        from ui.cli import SimpleCLI
-        from agent.core.engine import AgentEngine, AgentConfig
+        from agent.core.engine import AgentConfig, AgentEngine
         from agent.core.user_profile import UserProfile
         from agent.llm.client import LLMClient
+        from ui.cli import SimpleCLI
 
         profile_path = tmp_path / "profile.json"
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(profile_path))
@@ -867,31 +1000,35 @@ class TestQuestionFormNoExtraction:
         class _Delta:
             content = "I don't know"
             tool_calls = None
+
         class _Choice:
             delta = _Delta()
+
         class _Chunk:
             choices = [_Choice()]
             usage = None
+
         async def _aiter():
             yield _Chunk()
+
         async def mock_chat(messages, stream=True):
             return _aiter(), True
+
         engine.llm = LLMClient(provider="mock", model="test")
         engine.llm.chat = mock_chat
 
         await cli._direct_answer("Who am I?", engine, 0.0)
 
         saved = UserProfile.load()
-        assert saved.name is None, \
-            f"Question polluted profile.name = {saved.name!r}"
+        assert saved.name is None, f"Question polluted profile.name = {saved.name!r}"
 
     @pytest.mark.asyncio
     async def test_statement_still_saves_to_profile(self, tmp_path, monkeypatch):
         """Regression: '我是 hay' must STILL save name='hay' to profile."""
-        from ui.cli import SimpleCLI
-        from agent.core.engine import AgentEngine, AgentConfig
+        from agent.core.engine import AgentConfig, AgentEngine
         from agent.core.user_profile import UserProfile
         from agent.llm.client import LLMClient
+        from ui.cli import SimpleCLI
 
         profile_path = tmp_path / "profile.json"
         monkeypatch.setenv("CODING_AGENT_USER_PROFILE", str(profile_path))
@@ -905,23 +1042,27 @@ class TestQuestionFormNoExtraction:
         class _Delta:
             content = "Hi hay"
             tool_calls = None
+
         class _Choice:
             delta = _Delta()
+
         class _Chunk:
             choices = [_Choice()]
             usage = None
+
         async def _aiter():
             yield _Chunk()
+
         async def mock_chat(messages, stream=True):
             return _aiter(), True
+
         engine.llm = LLMClient(provider="mock", model="test")
         engine.llm.chat = mock_chat
 
         await cli._direct_answer("我是 hay", engine, 0.0)
 
         saved = UserProfile.load()
-        assert saved.name == "hay", \
-            f"Statement did not save name: got {saved.name!r}"
+        assert saved.name == "hay", f"Statement did not save name: got {saved.name!r}"
 
 
 class TestInstantResponse:
@@ -929,15 +1070,17 @@ class TestInstantResponse:
 
     def test_echo_uses_rich_path_when_available(self, monkeypatch, capsys):
         """Echo must call _RICH.print so the bubble appears synchronously."""
-        from ui.cli import SimpleCLI, RICH_AVAILABLE, _RICH
+        from ui.cli import _RICH, RICH_AVAILABLE, SimpleCLI
 
         cli = SimpleCLI()
         # Capture Console.print calls
         if RICH_AVAILABLE:
             calls = []
             real_print = _RICH.print
+
             def _spy(*args, **kwargs):
                 calls.append((args, kwargs))
+
             monkeypatch.setattr(_RICH, "print", _spy)
             try:
                 cli._echo_user_input("列出所有 .py 文件")
@@ -946,9 +1089,9 @@ class TestInstantResponse:
             assert len(calls) >= 1
             # First arg should be a Rich Panel (or a renderable containing the text)
             from rich.panel import Panel
+
             first_arg = calls[0][0][0]
-            assert isinstance(first_arg, Panel), \
-                f"Expected Panel, got {type(first_arg).__name__}"
+            assert isinstance(first_arg, Panel), f"Expected Panel, got {type(first_arg).__name__}"
             # The Panel's renderable (Text) contains the user input
             body = first_arg.renderable
             body_str = str(body) if hasattr(body, "__str__") else ""
@@ -975,6 +1118,7 @@ class TestInstantResponse:
         # The output should NOT contain all 5000 x's in a row (truncation)
         # (NO_COLOR may strip all output, so only check when not stripped)
         from ui.cli import _NO_COLOR
+
         if not _NO_COLOR:
             # Truncation suffix appears
             assert "more chars" in captured.out or len(captured.out) < 6000
@@ -990,7 +1134,7 @@ class TestInstantResponse:
 
     def test_echo_respects_no_color(self, monkeypatch):
         """NO_COLOR=1 → Rich Console should be in no_color mode for echo."""
-        from ui.cli import SimpleCLI, _RICH, RICH_AVAILABLE
+        from ui.cli import _RICH, RICH_AVAILABLE, SimpleCLI
 
         if not RICH_AVAILABLE:
             pytest.skip("Rich not available")
@@ -998,14 +1142,16 @@ class TestInstantResponse:
         cli = SimpleCLI()
         # _RICH is constructed at import time with no_color=_NO_COLOR.
         # Verify the echo path produces no ANSI escapes when NO_COLOR is set.
-        import os
         from ui.cli import _NO_COLOR as current_no_color
+
         if not current_no_color:
             # Sanity: when not in NO_COLOR mode, the rendered output uses ANSI
             captured_text = []
             real_print = _RICH.print
+
             def _spy(*args, **kwargs):
                 captured_text.append(str(args))
+
             monkeypatch.setattr(_RICH, "print", _spy)
             try:
                 cli._echo_user_input("hello world")
@@ -1029,9 +1175,15 @@ class TestInstantResponse:
 
         # Mock config to return known model/mode
         from agent.core.config import config as _cfg
-        monkeypatch.setattr(_cfg, "get", lambda key, default=None: {
-            "model": "moonshot-v1-8k", "mode": "default",
-        }.get(key, default))
+
+        monkeypatch.setattr(
+            _cfg,
+            "get",
+            lambda key, default=None: {
+                "model": "moonshot-v1-8k",
+                "mode": "default",
+            }.get(key, default),
+        )
 
         result = cli._build_toolbar()
         assert result is not None
@@ -1051,9 +1203,15 @@ class TestInstantResponse:
         assert cli._session_tokens_out == 0
 
         from agent.core.config import config as _cfg
-        monkeypatch.setattr(_cfg, "get", lambda key, default=None: {
-            "model": "test-model", "mode": "plan",
-        }.get(key, default))
+
+        monkeypatch.setattr(
+            _cfg,
+            "get",
+            lambda key, default=None: {
+                "model": "test-model",
+                "mode": "plan",
+            }.get(key, default),
+        )
 
         result = cli._build_toolbar()
         text = "".join(t[1] for t in result if isinstance(t, tuple))
@@ -1068,9 +1226,15 @@ class TestInstantResponse:
 
         cli = SimpleCLI()
         from agent.core.config import config as _cfg
-        monkeypatch.setattr(_cfg, "get", lambda key, default=None: {
-            "model": "openai/gpt-4-turbo", "mode": "default",
-        }.get(key, default))
+
+        monkeypatch.setattr(
+            _cfg,
+            "get",
+            lambda key, default=None: {
+                "model": "openai/gpt-4-turbo",
+                "mode": "default",
+            }.get(key, default),
+        )
 
         result = cli._build_toolbar()
         text = "".join(t[1] for t in result if isinstance(t, tuple))
@@ -1084,10 +1248,16 @@ class TestInstantResponse:
 
         cli = SimpleCLI()
         from agent.core.config import config as _cfg
+
         long_name = "some-provider/" + ("a" * 30)  # > 24 chars
-        monkeypatch.setattr(_cfg, "get", lambda key, default=None: {
-            "model": long_name, "mode": "default",
-        }.get(key, default))
+        monkeypatch.setattr(
+            _cfg,
+            "get",
+            lambda key, default=None: {
+                "model": long_name,
+                "mode": "default",
+            }.get(key, default),
+        )
 
         result = cli._build_toolbar()
         text = "".join(t[1] for t in result if isinstance(t, tuple))
@@ -1104,6 +1274,7 @@ class TestInstantResponse:
         refactor.
         """
         import inspect
+
         from ui.cli import SimpleCLI
 
         src = inspect.getsource(SimpleCLI.run)
@@ -1117,6 +1288,7 @@ class TestInstantResponse:
     def test_prompt_session_uses_bottom_toolbar(self):
         """PromptSession must be constructed with bottom_toolbar=_build_toolbar."""
         import inspect
+
         from ui.cli import SimpleCLI
 
         src = inspect.getsource(SimpleCLI._read_line)

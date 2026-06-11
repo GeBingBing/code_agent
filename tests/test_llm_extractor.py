@@ -6,11 +6,11 @@ any specific subclass behavior.
 """
 
 import time
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 
-from agent.core.llm_extractor import LLMExtractor, _CacheEntry
-
+from agent.core.llm_extractor import LLMExtractor
 
 # ── Test doubles ──────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ class MockExtractor(LLMExtractor[list]):
         self.llm_calls = 0
 
     def _system_prompt(self) -> str:
-        return "Return JSON: {\"result\": \"<some string>\"}"
+        return 'Return JSON: {"result": "<some string>"}'
 
     def _legacy_extract(self, text: str) -> list:
         self.legacy_calls += 1
@@ -226,7 +226,7 @@ class TestSafeJsonLoads:
         assert LLMExtractor._safe_json_loads('{"a": 1}') == {"a": 1}
 
     def test_direct_json_array(self):
-        assert LLMExtractor._safe_json_loads('[1, 2, 3]') == [1, 2, 3]
+        assert LLMExtractor._safe_json_loads("[1, 2, 3]") == [1, 2, 3]
 
     def test_json_fenced_with_json_tag(self):
         text = '```json\n{"a": 1}\n```'
@@ -241,7 +241,7 @@ class TestSafeJsonLoads:
         assert LLMExtractor._safe_json_loads(text) == {"intent": "edit"}
 
     def test_prose_with_embedded_array(self):
-        text = 'Here are the items: [1, 2, 3] in order.'
+        text = "Here are the items: [1, 2, 3] in order."
         assert LLMExtractor._safe_json_loads(text) == [1, 2, 3]
 
     def test_garbage_returns_none(self):
@@ -268,7 +268,7 @@ class TestSafeJsonLoads:
     def test_smart_quotes_normalized_to_ascii(self):
         """Smart double quotes (U+201C/D) around JSON keys/values are normalized."""
         # Use \u201c and \u201d escapes to be safe across encodings
-        text = '{\u201cintent\u201d: \u201cedit\u201d, \u201crationale\u201d: \u201cok\u201d}'
+        text = "{\u201cintent\u201d: \u201cedit\u201d, \u201crationale\u201d: \u201cok\u201d}"
         result = LLMExtractor._safe_json_loads(text)
         assert result == {"intent": "edit", "rationale": "ok"}
 
@@ -287,19 +287,19 @@ class TestSafeJsonLoads:
         assert result == {"intent": "edit", "confidence": 0.9}
 
     def test_trailing_comma_in_array_stripped(self):
-        text = '[1, 2, 3,]'
+        text = "[1, 2, 3,]"
         result = LLMExtractor._safe_json_loads(text)
         assert result == [1, 2, 3]
 
     def test_smart_quotes_with_trailing_comma(self):
         """Combined: smart quotes + trailing comma — both fixes apply."""
-        text = '{\u201cintent\u201d: \u201cedit\u201d,}'
+        text = "{\u201cintent\u201d: \u201cedit\u201d,}"
         result = LLMExtractor._safe_json_loads(text)
         assert result == {"intent": "edit"}
 
     def test_prose_with_smart_quote_json_parses(self):
         """The original orchestrator use case: prose + smart-quoted JSON."""
-        text = 'Here is my plan: {\u201cintent\u201d: \u201cedit\u201d, \u201crationale\u201d: \u201cok\u201d} done.'
+        text = "Here is my plan: {\u201cintent\u201d: \u201cedit\u201d, \u201crationale\u201d: \u201cok\u201d} done."
         result = LLMExtractor._safe_json_loads(text)
         assert result == {"intent": "edit", "rationale": "ok"}
 
@@ -316,6 +316,7 @@ class TestAbstractEnforcement:
         class HalfExtractor(LLMExtractor):
             def _system_prompt(self) -> str:
                 return "x"
+
             # Missing _legacy_extract and _parse_response
 
         with pytest.raises(TypeError):

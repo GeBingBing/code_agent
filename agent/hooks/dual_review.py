@@ -12,10 +12,9 @@ Decision is also logged to the audit log regardless of outcome
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ..core.dual_review import (
-    DualReviewManager,
     PermissionDenied,
     ReviewRequiresUser,
 )
@@ -61,27 +60,29 @@ class DualReviewHook:
         audit = self._get_audit()
         if audit is not None:
             try:
-                audit.log({
-                    "session_id": self._get_trace_id(),
-                    "agent_id": "main",
-                    "action": "dual_review",
-                    "tool": tool_name,
-                    "metadata": {
-                        "decisions": [
-                            {
-                                "reviewer": d.reviewer_id,
-                                "model": d.model,
-                                "verdict": d.verdict.value,
-                                "rationale": d.rationale[:200],
-                                "elapsed_ms": d.elapsed_ms,
-                            }
-                            for d in result.decisions
-                        ],
-                        "final_verdict": result.final_verdict.value,
-                        "consensus": result.consensus,
-                        "requires_user": result.requires_user,
-                    },
-                })
+                audit.log(
+                    {
+                        "session_id": self._get_trace_id(),
+                        "agent_id": "main",
+                        "action": "dual_review",
+                        "tool": tool_name,
+                        "metadata": {
+                            "decisions": [
+                                {
+                                    "reviewer": d.reviewer_id,
+                                    "model": d.model,
+                                    "verdict": d.verdict.value,
+                                    "rationale": d.rationale[:200],
+                                    "elapsed_ms": d.elapsed_ms,
+                                }
+                                for d in result.decisions
+                            ],
+                            "final_verdict": result.final_verdict.value,
+                            "consensus": result.consensus,
+                            "requires_user": result.requires_user,
+                        },
+                    }
+                )
             except Exception:
                 pass  # Audit must never break tool execution
         # Translate verdict into a hook outcome

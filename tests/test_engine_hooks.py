@@ -8,13 +8,15 @@ Engine-level tests focus on:
 """
 
 import asyncio
+
 import pytest
 
-from agent.core.engine import AgentEngine, AgentConfig
+from agent.core.engine import AgentConfig, AgentEngine
 from agent.core.hooks import (
-    BEFORE_LLM_CALL, AFTER_LLM_CALL, ON_TOKEN,
-    BEFORE_TOOL_EXECUTION, AFTER_TOOL_EXECUTION,
-    ON_ERROR, ON_SESSION_END, BEFORE_PERCEIVE,
+    AFTER_LLM_CALL,
+    BEFORE_LLM_CALL,
+    BEFORE_TOOL_EXECUTION,
+    ON_TOKEN,
 )
 
 
@@ -42,10 +44,14 @@ class TestEngineHasBusAndHooks:
 
     def test_engine_hooks_empty_when_tdd_off(self):
         # PR-08 + PR-10 + PR-11 also register on BEFORE_TOOL_EXECUTION, so disable them all
-        e = AgentEngine(AgentConfig(
-            tdd_mode="off", audit_enabled=False, otel_enabled=False,
-            enable_dual_review=False,
-        ))
+        e = AgentEngine(
+            AgentConfig(
+                tdd_mode="off",
+                audit_enabled=False,
+                otel_enabled=False,
+                enable_dual_review=False,
+            )
+        )
         # In off mode with audit + otel + dual review disabled, no BEFORE_TOOL_EXECUTION hooks
         assert not e.hooks.has(BEFORE_TOOL_EXECUTION)
 
@@ -77,9 +83,11 @@ class TestHookExecutionIsolated:
     @pytest.mark.asyncio
     async def test_async_hook_via_engine(self):
         e = AgentEngine()
+
         async def slow(p):
             await asyncio.sleep(0)
             return p + 1
+
         e.hooks.register(BEFORE_LLM_CALL, slow)
         result = await e.hooks.execute(BEFORE_LLM_CALL, payload=10)
         assert result == 11
@@ -133,12 +141,14 @@ class TestHookConstants:
     def test_12_standard_hooks_listed(self):
         """PR-14: ON_SESSION_START was added → 11 → 12."""
         from agent.core.hooks import STANDARD_HOOKS
+
         assert len(STANDARD_HOOKS) == 12
 
     def test_hooks_exported_from_core(self):
         from agent.core import (
-            EventBus, HookRegistry, BEFORE_LLM_CALL, AFTER_LLM_CALL,
-            ON_TOKEN, BEFORE_TOOL_EXECUTION, AFTER_TOOL_EXECUTION,
+            EventBus,
+            HookRegistry,
         )
+
         assert EventBus is not None
         assert HookRegistry is not None

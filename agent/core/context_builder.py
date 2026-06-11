@@ -51,6 +51,7 @@ class ContextBuilder:
         if getattr(config, "codmap_enabled", True):
             try:
                 from index.codmap import CodmapGenerator
+
                 self._codmap = CodmapGenerator(workspace=workspace)
             except Exception:
                 # Don't crash the engine if codmap init fails (bad path, etc.)
@@ -61,6 +62,7 @@ class ContextBuilder:
         # with phase/AC objects. We load both — context strings for the
         # system prompt, the structured form for AC injection.
         from .spec_loader import load_spec, load_spec_document
+
         self.spec_context = load_spec(workspace)
         self.spec_document = None
         try:
@@ -101,9 +103,7 @@ class ContextBuilder:
             return self._config.custom_system_prompt
         # PR-14: user_profile rendered as <user_profile> XML before <memory>
         # so the agent sees identity before generic long-term facts.
-        user_profile_prompt = (
-            self._user_profile.to_prompt() if self._user_profile else ""
-        )
+        user_profile_prompt = self._user_profile.to_prompt() if self._user_profile else ""
         return PromptAssembler.build_system_prompt(
             long_term_memory=self._memory.get_long_term_context(),
             skill_prompt=skill_prompt,
@@ -138,11 +138,7 @@ class ContextBuilder:
         if not codmap_text:
             return payload
         reminder = (
-            "<system-reminder>\n"
-            "<codmap>\n"
-            f"{codmap_text}\n"
-            "</codmap>\n"
-            "</system-reminder>"
+            "<system-reminder>\n" "<codmap>\n" f"{codmap_text}\n" "</codmap>\n" "</system-reminder>"
         )
         for msg in reversed(messages):
             if getattr(msg, "role", None) == "user":
@@ -165,6 +161,7 @@ class ContextBuilder:
             return payload
         try:
             from .spec_loader import load_spec_document
+
             doc = load_spec_document(self._workspace)
         except Exception:
             return payload
@@ -174,9 +171,7 @@ class ContextBuilder:
         pending = active.pending_acs
         if not pending:
             return payload
-        ac_lines = "\n".join(
-            f"- [ ] {ac.id}: {ac.description[:80]}" for ac in pending[:5]
-        )
+        ac_lines = "\n".join(f"- [ ] {ac.id}: {ac.description[:80]}" for ac in pending[:5])
         reminder = (
             "<system-reminder>\n"
             "<spec_acs>\n"
@@ -201,7 +196,6 @@ class ContextBuilder:
 
     @property
     def spec_ac_inject_active(self) -> bool:
-        return (
-            self.spec_document is not None
-            and bool(getattr(self._config, "spec_ac_inject", True))
+        return self.spec_document is not None and bool(
+            getattr(self._config, "spec_ac_inject", True)
         )

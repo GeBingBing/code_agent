@@ -8,7 +8,6 @@ from agent.observability.metrics import (
     _NoOpHistogram,
     _NoOpMeter,
     get_metrics,
-    init_meter,
     reset_meter,
 )
 

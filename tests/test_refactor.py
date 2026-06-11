@@ -1,11 +1,10 @@
 """Tests for multi-file refactoring tools (P2-2)."""
 
 import asyncio
-import os
 
 import pytest
 
-from agent.tools.refactor import SafeRenameTool, GetRefactorPreviewTool, _validate_python_syntax
+from agent.tools.refactor import GetRefactorPreviewTool, SafeRenameTool, _validate_python_syntax
 
 
 class TestSafeRenameTool:
@@ -32,17 +31,11 @@ class TestSafeRenameTool:
 
         # module_b.py: imports and uses calculate
         (tmp_path / "module_b.py").write_text(
-            "from module_a import calculate\n"
-            "\n"
-            "def caller():\n"
-            "    return calculate() + 1\n"
+            "from module_a import calculate\n" "\n" "def caller():\n" "    return calculate() + 1\n"
         )
 
         # module_c.py: unrelated
-        (tmp_path / "module_c.py").write_text(
-            "def other():\n"
-            "    return 'hello'\n"
-        )
+        (tmp_path / "module_c.py").write_text("def other():\n" "    return 'hello'\n")
 
         return tmp_path
 
@@ -98,7 +91,9 @@ class TestSafeRenameTool:
             "        return Rectangle().compute_area()\n"
         )
 
-        result = asyncio.run(tool.execute(symbol="compute_area", new_name="compute_area", dry_run=False))
+        result = asyncio.run(
+            tool.execute(symbol="compute_area", new_name="compute_area", dry_run=False)
+        )
         assert result.success is True
 
         content = (sample_project / "shapes.py").read_text()
@@ -115,13 +110,12 @@ class TestSafeRenameTool:
         # Create a subdir with its own calculate
         sub = sample_project / "subdir"
         sub.mkdir()
-        (sub / "local.py").write_text(
-            "def calculate():\n"
-            "    return 'local'\n"
-        )
+        (sub / "local.py").write_text("def calculate():\n" "    return 'local'\n")
 
         # Rename only in subdir
-        result = asyncio.run(tool.execute(symbol="calculate", new_name="local_helper", path="subdir", dry_run=False))
+        result = asyncio.run(
+            tool.execute(symbol="calculate", new_name="local_helper", path="subdir", dry_run=False)
+        )
         assert result.success is True
 
         # Root calculate should be untouched
