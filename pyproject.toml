@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coding-agent"
+version = "0.1.0"
+description = "可控、自进化的 AI 编程智能体 - A controllable, self-evolving AI coding agent"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    {name = "Li Wei", email = "liwei@example.com"}
+]
+dependencies = [
+    "openai>=1.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "prompt_toolkit>=3.0.0",
+    "httpx>=0.25.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "numpy>=1.24.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+tui = ["textual>=0.50.0"]
+dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0"]
+
+[project.scripts]
+coding-agent = "ui.cli:main"
+coding-agent-server = "agent.server:run_server"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "fallback_mode: tests for regex/heuristic fallback paths (PR-15 refactor)",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent*", "ui*", "index*"]
+exclude = ["tests*", "workspace*", "skills*"]

@@ -1,0 +1,22 @@
+"""Shared text utilities — stopwords, token counting helpers."""
+
+# Common stopwords for project name generation and other NLP tasks
+_STOPWORDS = frozenset({
+    # English
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
+    'build', 'create', 'make', 'write', 'using', 'with',
+    'please', 'task', 'project', 'application',
+    # Chinese
+    '用', '写', '一', '个', '和', '与', '在', '是', '了', '有',
+    '为', '上', '会', '来', '也', '这', '那', '你', '他',
+    '她', '它', '们', '的', '地', '得', '着', '过', '看', '好',
+    '还', '到', '说', '什么', '怎么', '如果', '因为', '所以',
+    '帮我', '请', '构建', '创建', '开发', '一个',
+})
+
+
+def is_stopword(word: str) -> bool:
+    """Check if a word is in the stopword list."""
+    return word.lower() in _STOPWORDS

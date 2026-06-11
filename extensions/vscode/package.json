@@ -1,0 +1,93 @@
+{
+  "name": "coding-agent",
+  "displayName": "Coding Agent",
+  "description": "AI coding agent with inline completion - powered by local Coding Agent server",
+  "version": "0.1.0",
+  "publisher": "coding-agent",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "AI",
+    "Snippets"
+  ],
+  "activationEvents": [
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:java",
+    "onLanguage:go",
+    "onLanguage:rust",
+    "onLanguage:cpp",
+    "onCommand:coding-agent.startServer",
+    "onCommand:coding-agent.stopServer"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "coding-agent.startServer",
+        "title": "Coding Agent: Start Server",
+        "category": "Coding Agent"
+      },
+      {
+        "command": "coding-agent.stopServer",
+        "title": "Coding Agent: Stop Server",
+        "category": "Coding Agent"
+      },
+      {
+        "command": "coding-agent.restartServer",
+        "title": "Coding Agent: Restart Server",
+        "category": "Coding Agent"
+      },
+      {
+        "command": "coding-agent.inlineCompletion",
+        "title": "Coding Agent: Get Inline Completion",
+        "category": "Coding Agent"
+      }
+    ],
+    "configuration": {
+      "title": "Coding Agent",
+      "properties": {
+        "codingAgent.serverPort": {
+          "type": "number",
+          "default": 18792,
+          "description": "Port for the local Coding Agent server"
+        },
+        "codingAgent.serverKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the local server (if configured)"
+        },
+        "codingAgent.inlineTriggerMode": {
+          "type": "string",
+          "enum": ["manual", "auto"],
+          "default": "manual",
+          "description": "When to trigger inline completion"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "coding-agent.inlineCompletion",
+        "key": "ctrl+alt+.",
+        "mac": "cmd+alt+.",
+        "when": "editorTextFocus && !editorHasSelection",
+        "description": "Trigger inline completion"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "echo \"Error: no tests specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {}
+}

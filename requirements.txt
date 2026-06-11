@@ -1,0 +1,11 @@
+# Core dependencies
+openai>=1.0.0
+pyyaml>=6.0
+
+# Optional: tree-sitter for better code indexing
+# tree-sitter>=0.21.0
+# Optional: Textual TUI
+# textual>=0.50.0
+
+# Development
+pytest>=7.0.0
