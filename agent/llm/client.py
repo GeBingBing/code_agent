@@ -76,6 +76,14 @@ class LLMClient:
                 )
             except ImportError as err:
                 raise ImportError("Please install openai: pip install openai") from err
+        elif self.provider == "mock":
+            # Mock provider: no real API calls; openai>=2.41 refuses api_key=None.
+            try:
+                from openai import OpenAI
+
+                self.client = OpenAI(api_key="mock", base_url=self.base_url)
+            except ImportError as err:
+                raise ImportError("Please install openai: pip install openai") from err
         else:
             try:
                 from openai import OpenAI
