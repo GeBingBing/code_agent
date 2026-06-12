@@ -45,4 +45,5 @@ jobs:
         env:
           CODING_AGENT_TESTING: "1"
         run: |
-          pytest tests/ -q --ignore=tests/test_integration_all_tools.py
+          python -c "import openai,numpy,sys; print(f'python={sys.version.split()[0]} openai={openai.__version__} numpy={numpy.__version__}')"
+          pytest tests/ -q --ignore=tests/test_integration_all_tools.py --tb=short 2>&1 | tail -30
