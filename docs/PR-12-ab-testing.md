@@ -1,6 +1,6 @@
 # PR-12: AB Testing 框架
 
-> 关联：SPECS.md Phase 14-3 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 14-3 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §11 治理与持续进化](../1.md) | [docs/参考.md 持续进化 Hermes Agent](../参考.md)
 
 ---
@@ -340,3 +340,15 @@ Step 8: pytest tests/ 验证                     (0.5h)
 - 与 PR-09 Evaluator：AB winner 用 Evaluator 评分
 - 与 PR-08 Audit：实验创建/结束决策进入 audit
 - 与 PR-07 Orchestrator：Orchestrator 子任务可参与 AB 实验
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/governance/ab_test.py` | `ABTestFramework` — 流量分配 + 结果聚合 |
+| 适用对象 | 技能 prompt 模板、system prompt 段、工具默认参数 |
+| 流量切分 | 哈希 user_id → 桶 A / 桶 B |
+| 指标 | task 成功率、token 效率、用户满意度 |
+| 决策 | 胜出方自动全量上线，落败方归档到 `skills/.archive/` |

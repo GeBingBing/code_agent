@@ -1,6 +1,6 @@
 # PR-07: Orchestrator PM Agent（编排-执行者模式）
 
-> 关联：SPECS.md Phase 13-3 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 13-3 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §7.1 编排-执行者模式](../1.md) | [docs/参考.md 多 Agent 协作 OpenManus / MoAI-ADK](../参考.md)
 
 ---
@@ -340,3 +340,13 @@ Step 10: pytest tests/ 验证                   (0.5h)
 - 与 PR-09 Evaluator：Orchestrator 完成调 Evaluator 评分
 - 与 PR-06 SDD Parser：Orchestrator 用 SDD 拆 AC 为子任务
 - 与 PR-13 Progress Anchor：Orchestrator 写"当前在执行哪个子任务"到 progress.txt
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/agents/orchestrator.py` | `OrchestratorAgent` — 任务分解、4 角色 DAG 调度、结果合并 |
+| 角色 | `CodeGenerator` / `TestEngineer` / `Reviewer` / `DevOps`（`agent/agents/roles.py`） |
+| 通信 | `TaskRequest` / `TaskResponse` dataclass，通过 EventBus（PR-01）传递 |

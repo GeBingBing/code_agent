@@ -1,6 +1,6 @@
 # PR-01: EventBus + Hook 系统
 
-> 关联：SPECS.md Phase 12-1 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 12-1 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §3.1 事件驱动的插件化核心循环](../1.md) | [docs/参考.md 工程骨架 codex-agent-framework](../参考.md)
 
 ---
@@ -197,3 +197,13 @@ Step 7: 跑 pytest tests/ 验证          (0.5h)
 - **PR-10 OpenTelemetry** 通过 `before_llm_call` / `after_tool_execution` hook 发送 span
 - **PR-13 进度锚点** 通过 `after_tool_execution` hook 写 progress.txt
 - **本 PR 是基础设施**，先于其他 PR 实施
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/core/event_bus.py` | `EventBus.emit()` / `EventBus.on()` — 简单 pub/sub（`asyncio.Queue`） |
+| `agent/core/hooks.py` | 11 个标准 hook 点：`before_perceive` / `before_llm_call` / `after_llm_call` / `before_decide` / `before_tool_execution` / `after_tool_execution` / `on_error` / `on_token` / `before_compact` / `after_compact` / `on_session_end` |
+| `agent/core/engine.py` | `run_stream` 重构为事件驱动：`emit("before_llm_call") → llm.chat() → emit("after_llm_call") → ...` |

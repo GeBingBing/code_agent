@@ -1,6 +1,6 @@
 # PR-03: 任务状态机（INIT→PLAN→EXEC→TEST→REVIEW→DONE）
 
-> 关联：SPECS.md Phase 12-3 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 12-3 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §10 长时任务与断点续传](../1.md) | [docs/参考.md 长链路任务的状态追踪](../参考.md)
 
 ---
@@ -235,3 +235,13 @@ Step 7: pytest tests/ 验证                  (0.5h)
 - 与 PR-13 进度锚点：PR-13 是**人类可读**的 `claude-progress.txt`，本 PR 是**结构化**的 `task_state.json`。两者并行存在
 - 与 PR-02 TDD 状态机：PR-03 管任务 phase（粗粒度），PR-02 管单个 phase 内的 TDD 循环（细粒度）
 - 与 PR-07 Orchestrator：Orchestrator 内部使用 TaskStateMachine 追踪每个子任务的 phase
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/core/task_state_machine.py` | `TaskState` 枚举（INIT / PLAN / EXEC / TEST / REVIEW / DONE）、状态转移函数 |
+| `agent/core/progress_anchor.py` | 持久化到 `~/.coding-agent/task_state.json`、断点续传支持 |
+| CLI | `coding-agent --resume` 读取 `task_state.json` 恢复 |

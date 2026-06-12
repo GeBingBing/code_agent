@@ -1,6 +1,6 @@
 # PR-13: `claude-progress.txt` 进度锚点
 
-> 关联：SPECS.md Phase 14-4 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 14-4 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §10 长时任务与断点续传](../1.md) | [docs/参考.md 长链路任务的状态追踪](../参考.md)
 
 ---
@@ -299,3 +299,15 @@ Step 8: pytest tests/ 验证                    (0.5h)
 - 与 PR-05 repomap：两者都注入 system-reminder
 - 与 PR-06 SDD Parser：progress 段可加 `[current_ac]` 字段追踪当前 acceptance criterion
 - 与 PR-07 Orchestrator：Orchestrator 写"当前子任务"到 progress
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/core/progress_anchor.py` | `ProgressAnchor` — 链式 hash 的人类可读进度文件读写 |
+| 路径 | `WORKSPACE/.claude-progress.txt`（项目级，可 git 追踪） |
+| 格式 | `[current_task]` / `[current_step]` / `[next_step]` / `[op_hash]` / `[known_issues]` / `[updated_at]` |
+| 强制时机 | 每轮 LLM call 前自动 read，每轮 tool execution 后自动 write |
+| 断点续传 | 进程崩溃后，新会话读 progress.txt 立即恢复上下文 |

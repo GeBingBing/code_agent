@@ -1,6 +1,6 @@
 # PR-09: Evaluator Agent（独立评估器 + SCORE.md）
 
-> 关联：SPECS.md Phase 13-5 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 13-5 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §9 评估器 Agent](../1.md) | [docs/参考.md 可观测性与评估 Opik/Langfuse](../参考.md)
 
 ---
@@ -311,3 +311,13 @@ Step 8: pytest tests/ 验证                    (0.5h)
 - 与 PR-06 SDD Parser：Evaluator 用 AC 检查完成度
 - 与 PR-07 Orchestrator：Orchestrator 完成后调 Evaluator
 - 与 PR-13 Progress Anchor：SCORE.md 路径记录在 progress.txt
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/agents/evaluator.py` | `EvaluatorAgent` — 独立 LLM agent，对完成任务多维评分 |
+| 评分维度 | 完成度（0-10）/ 代码质量（0-10）/ 安全性（0-10）/ 性能（0-10） |
+| 输出 | `SCORE.md` — Markdown 格式评分报告 |

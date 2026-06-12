@@ -1,6 +1,6 @@
 # PR-11: Dual-agent 互审（高风险操作）
 
-> 关联：SPECS.md Phase 14-2 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 14-2 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §8 全生命周期权限](../1.md) | [docs/参考.md 纵深防御](../参考.md)
 
 ---
@@ -304,3 +304,14 @@ Step 7: pytest tests/ 验证                     (0.5h)
 - 与 PR-10 OpenTelemetry：双审耗时计入 OTel metrics
 - 与 PR-09 Evaluator：Evaluator 评分时检查"是否走双审"
 - 与 PR-07 Orchestrator：Orchestrator 高风险子任务也可走双审
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/core/dual_review.py` | `DualReviewer` — 主 Agent 提议 → 第二个独立 Agent 复审 → 一致则放行 |
+| 适用范围 | CRITICAL 风险操作（写文件、Shell、Git push、PR 创建） |
+| Reviewer pool | 复审 Agent 来自不同 provider（OpenAI + Anthropic 互审） |
+| 失败处理 | 上报用户并附两个 Agent 的分歧分析 |

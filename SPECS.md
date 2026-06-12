@@ -1,3 +1,6 @@
+> **文档状态**：最后与代码同步 2026-06-13 | 测试收集 1528 个，当前 1519 passed / 1 failed / 6 skipped / 2 xfailed
+> **注意**：本文档同时被人类和 `agent/core/spec_loader.py` 解析，修改时请保持 `## Phase N` / `### P0-1` 格式稳定。
+
 # Coding Agent - SPECS.md
 
 ## 项目概述
@@ -67,9 +70,15 @@
 
 ---
 
-## Phase 9: P0 核心体验达标 ✅
+## P0: 核心体验达标 ✅
 
-> 详细规格: [docs/SPEC-P0.md](docs/SPEC-P0.md)
+> 旧 Phase 9 | 详细规格: [docs/SPEC-P0.md](docs/SPEC-P0.md)
+
+- [x] `AC-P0-1` CODING_AGENT.md 项目指令加载与注入
+- [x] `AC-P0-2` Plan-then-Execute 流程闭环
+- [x] `AC-P0-3` TDD 引导与 run_tests 工具
+- [x] `AC-P0-4` Slash 命令系统
+- [x] `AC-P0-5` Undo/回退能力
 
 ### P0-1: CODING_AGENT.md 项目指令加载 ✅
 
@@ -103,7 +112,15 @@
 
 ---
 
-## Phase 10: P1 显著提升能力（待实施）
+## P1: 显著提升能力 ⚠️
+
+> 旧 Phase 10 | 详细规格: 见 `docs/SPEC-P1.md` | [docs/SPEC-ARCHITECTURE.md](docs/SPEC-ARCHITECTURE.md)
+
+- [x] `AC-P1-1` specDD 解析与 Phase 追踪
+- [x] `AC-P1-2` 子 Agent 并行执行
+- [x] `AC-P1-3` tree-sitter 代码索引（含跨文件引用）
+- [x] `AC-P1-4` Textual TUI 基础框架
+- [x] `AC-P1-5` 语境管理与 Token 预算压缩
 
 ### P1-1: specDD 集成
 
@@ -145,24 +162,31 @@
 
 ---
 
-## Phase 11: P2 差异化竞争力（规划中）
+## P2: 差异化竞争力 ⚠️
+
+> 旧 Phase 11 | 详细规格: 见 `docs/SPEC-P1.md` / `docs/PR-05..PR-09`
+
+- [x] `AC-P2-1` Agent 自我进化（EvolutionEngine）
+- [x] `AC-P2-2` 多文件重构感知
+- [x] `AC-P2-3` Git 深度集成（commit/PR/branch 策略）
+- [x] `AC-P2-4` MCP 工具扩展
 
 ### P2-1: Agent 自我进化 ✅
 
-- ✅ 成功任务自动转化为 skills
-- ✅ 失败模式学习
-- ✅ EvolutionEngine 集成到 AgentEngine
-- ✅ 失败上下文注入 system prompt
-- ✅ 11 项测试覆盖
+- [x] 成功任务自动转化为 skills
+- [x] 失败模式学习
+- [x] EvolutionEngine 集成到 AgentEngine
+- [x] 失败上下文注入 system prompt
+- [x] 11 项测试覆盖
 
 ### P2-2: 多文件重构感知 ✅
 
-- ✅ 跨文件引用分析（基于 code_indexer）
-- ✅ 安全的批量重命名（safe_rename + get_refactor_preview）
-- ✅ dry_run 预览模式
-- ✅ Python 语法验证
-- ✅ 作用域限制（path 参数）
-- ✅ 10 项测试覆盖
+- [x] 跨文件引用分析（基于 code_indexer）
+- [x] 安全的批量重命名（safe_rename + get_refactor_preview）
+- [x] dry_run 预览模式
+- [x] Python 语法验证
+- [x] 作用域限制（path 参数）
+- [x] 10 项测试覆盖
 
 ### P2-3: Git 深度集成 ✅
 
@@ -172,13 +196,13 @@
 
 ### P2-4: MCP 工具扩展 ✅
 
-- ✅ Model Context Protocol 集成（JSON-RPC over stdio）
-- ✅ MCPToolAdapter（将 MCP 工具桥接为 BaseTool）
-- ✅ MCPServerManager（多服务器生命周期管理）
-- ✅ register_mcp_tools_from_config（配置驱动注册）
-- ✅ AgentEngine 集成（延迟初始化 + shutdown）
-- ✅ 环境变量展开（$VAR 在 env 配置中）
-- ✅ 40 项测试覆盖
+- [x] Model Context Protocol 集成（JSON-RPC over stdio）
+- [x] MCPToolAdapter（将 MCP 工具桥接为 BaseTool）
+- [x] MCPServerManager（多服务器生命周期管理）
+- [x] register_mcp_tools_from_config（配置驱动注册）
+- [x] AgentEngine 集成（延迟初始化 + shutdown）
+- [x] 环境变量展开（$VAR 在 env 配置中）
+- [x] 40 项测试覆盖
 
 ---
 
@@ -191,18 +215,23 @@
 | M3 | Phase 4–5：精确编辑 + 子 Agent | ✅ |
 | M4 | Phase 6–8：代码索引 + 沙箱 + CLI | ⚠️ |
 | M5 | Phase 9：P0 核心体验达标 | ✅ |
-| M6 | Phase 10：P1 显著提升能力 | 🔜 |
-| M7 | Phase 11：P2 差异化竞争力 | 📋 |
-| M8 | Phase 12：P0 Foundation（七层架构核心） | 🔜 |
+| M6 | Phase 10：P1 显著提升能力 | ⚠️ |
+| M7 | Phase 11：P2 差异化竞争力 | ⚠️ |
+| M8 | Phase 12：P0 Foundation（七层架构核心） | ⚠️ |
 | M9 | Phase 13：P1 Differentiation（差异化竞争力） | 📋 |
 | M10 | Phase 14：P2 Observability（可观测与治理） | 📋 |
 
 ---
 
-## Phase 12: P0 Foundation — 补齐七层架构核心 🔜
+## Phase 12: P0 Foundation — 补齐七层架构核心 ⚠️
 
 > 详细规格：见 `docs/PR-01..PR-04` 四份 PR 文档
 > 依据：[docs/1.md §3 核心 Harness 引擎设计](../docs/1.md) | [docs/参考.md 工程骨架](../docs/参考.md)
+
+- [x] `AC-P12-1` EventBus + Hook 系统
+- [ ] `AC-P12-2` TDD 状态机（强制 Red→Green→Refactor）
+- [ ] `AC-P12-3` 任务状态机与断点续传
+- [ ] `AC-P12-4` 真实语义记忆
 
 ### P12-1: EventBus + Hook 系统
 
@@ -242,6 +271,12 @@
 
 > 详细规格：见 `docs/PR-05..PR-09` 五份 PR 文档
 > 依据：[docs/1.md §5.2 上下文工程管道](../docs/1.md) | [docs/参考.md Aider repomap / MoAI-ADK codmap](../docs/参考.md)
+
+- [ ] `AC-P13-1` repomap 注入（Aider codmap 风格）
+- [ ] `AC-P13-2` SDD 解析器（Acceptance Criteria 提取）
+- [ ] `AC-P13-3` Orchestrator PM Agent（编排-执行者模式）
+- [ ] `AC-P13-4` 不可变审计日志
+- [ ] `AC-P13-5` Evaluator Agent
 
 ### P13-1: repomap 注入（Aider codmap 风格）
 
@@ -310,6 +345,11 @@
 > 详细规格：见 `docs/PR-10..PR-13` 四份 PR 文档
 > 依据：[docs/1.md §9 全链路可观测性 / §8 纵深防御 / §11 治理与持续进化 / §10 长时任务与断点续传](../docs/1.md)
 
+- [ ] `AC-P14-1` OpenTelemetry 集成
+- [ ] `AC-P14-2` Dual-agent 互审
+- [ ] `AC-P14-3` AB Testing 框架
+- [ ] `AC-P14-4` `claude-progress.txt` 进度锚点
+
 ### P14-1: OpenTelemetry 集成
 
 - 实现 1.md §9 三大支柱
@@ -357,11 +397,10 @@
 ## 当前状态
 
 ```
-已完成: Phase 0–11 (基础建设 + P0 体验 + P1 提升 + P2 差异化)
-       398+ 测试全部通过
+已完成:   Phase 0–9 (基础建设 + P0 核心体验)
+部分实现: Phase 10–12 (P1 提升 + P2 差异化 + P0 Foundation)
+计划中:   Phase 13–14 (P1 Differentiation + P2 Observability)
 
-进行中: Phase 12 (P0 Foundation — EventBus/Hook/TDD/State Machine/Semantic Memory)
-
-计划中: Phase 13 (P1 Differentiation)
-        Phase 14 (P2 Observability)
+测试: 1528 collected，当前 1519 passed / 1 failed / 6 skipped / 2 xfailed
+      唯一失败：test_integration_all_tools — 测试用 `verify_acs(phase_id="P0")`，但 SPECS.md 阶段 ID 为 `P0-1` / `P0-2` / ...（id 解析问题待定；详见 PR-TEST-REPORT.md）
 ```

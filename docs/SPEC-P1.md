@@ -148,13 +148,13 @@ async def spawn_parallel(tasks: List[SubTask]) -> List[Result]:
 ### 改动文件
 
 - `ui/tui.py` — **新** — Textual 实现
-- `pyproject.toml` — textual 依赖提升为必需
+- `pyproject.toml` — textual 保留为可选 extra（`tui = ["textual>=0.50.0"]`），通过 `pip install -e .[tui]` 安装
 
 ### 验收
 
-- [ ] Textual TUI 可正常启动和交互
-- [ ] 保留所有快捷键
-- [ ] 原 CLI 保留（`--cli` 参数）
+- [x] Textual TUI 可正常启动和交互
+- [x] 保留所有快捷键
+- [x] 原 CLI 保留（`--cli` 参数）
 
 ---
 

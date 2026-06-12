@@ -1,6 +1,6 @@
 # PR-06: SDD 解析器（Acceptance Criteria 提取）
 
-> 关联：SPECS.md Phase 13-2 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 13-2 | 状态：⚠️ 部分实现 | 决策：已确认
 > 依据：[docs/1.md §4.1 规约驱动开发 SDD](../1.md) | [docs/参考.md MoAI-ADK / OpenSpec](../参考.md)
 
 ---
@@ -278,3 +278,15 @@ Step 9: pytest tests/ 验证                    (0.5h)
 - 与 PR-09 Evaluator：Evaluator 调用 `verify_against_spec` 做评分
 - 与 PR-07 Orchestrator：Orchestrator 用 SDD 解析结果拆分任务
 - 与 PR-13 progress anchor：progress.txt 写"当前 AC"段
+
+---
+
+## 实现参考
+
+> ⚠️ 当前为**部分实现**：`AcceptanceCriterion` dataclass 与 `_AC_RE` 正则解析已就位，`load_spec_document()` 返回 `SpecDocument` 含 AC 列表、`mark_ac_done()` 持久化到 JSON sidecar。但 `verify_acs(phase_id="P0")` 形式的 id 解析未对齐到现有 `P0-1` / `P0-2` 子阶段命名（详见 `tests/test_integration_all_tools.py` 失败用例、SPECS.md 文档状态 banner）。
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/core/spec_loader.py` | `AcceptanceCriterion` dataclass、`ACSpecPhase`、`load_spec_document()` 返回 `SpecDocument` |
+| 正则 | `_PHASE_RE`（Phase 标题）、`_AC_RE`（`- [ ]` / `- [x]` AC 行） |
+| 工具 | `mark_ac_done(ac_id)`、`verify_acs(phase_id)`、`get_spec_status()` |

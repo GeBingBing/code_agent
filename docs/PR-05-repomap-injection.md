@@ -1,6 +1,6 @@
 # PR-05: repomap 注入（Aider codmap 风格）
 
-> 关联：SPECS.md Phase 13-1 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 13-1 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §5.2 上下文工程管道](../1.md) | [docs/参考.md 上下文管理 Aider repomap / MoAI-ADK codmap](../参考.md)
 
 ---
@@ -205,3 +205,13 @@ Step 6: pytest tests/ 验证                    (0.5h)
 - 与 PR-04 semantic memory：repomap 注入**当前项目结构**（静态），semantic memory 注入**历史经验**（动态）
 - 与 PR-13 progress anchor：codmap 在 system-reminder，progress 在 WORKSPACE/.claude-progress.txt
 - 与 PR-06 SDD parser：codmap 是"代码地图"，SDD 是"规格地图"——两者一起注入 LLM
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `index/codmap.py` | `CodmapGenerator` — 生成文件路径 + 行数 + mtime + 顶层符号签名的项目代码地图 |
+| 触发时机 | 每次 LLM call 前重新生成（mtime 变化时） |
+| 输出格式 | `src/auth/login.py (340 lines, mod 2d ago)\n  class AuthService: ...\n  def verify_token(token: str) -> bool: ...` |

@@ -1,6 +1,6 @@
 # PR-08: 不可变审计日志
 
-> 关联：SPECS.md Phase 13-4 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 13-4 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §8 安全审计](../1.md) | [docs/参考.md 纵深防御 ClawAegis](../参考.md)
 
 ---
@@ -301,3 +301,14 @@ Step 8: pytest tests/ 验证                    (0.5h)
 - 与 PR-09 Evaluator：Evaluator 从 audit 提取数据做评分
 - 与 PR-10 OpenTelemetry：OTel 关注"性能/追踪"，audit 关注"合规/取证"——两者并存
 - 与 PR-11 Dual-agent review：双 Agent 互审的决策进入 audit
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/core/audit_log.py` | `AuditLog.append()` / `AuditLog.query()` — append-only JSONL 写入器 |
+| 路径 | `~/.coding-agent/audit/{date}.jsonl`（按天滚动） |
+| 记录字段 | `{ts, session_id, agent_id, action, tool, args_hash, result_hash, permission_decision}` |
+| 工具 | `audit_query` 支持时间范围 + agent_id 过滤 |

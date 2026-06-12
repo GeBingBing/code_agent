@@ -1,5 +1,7 @@
 # Code Agent 问题诊断报告
 
+> **状态：历史快照（2026-05-22），不再维护。** 下文列出的大部分问题已在后续 Phase 0–8 / P0–P2 实施中修复（参见 SPECS.md 文档状态 banner）。本文件保留作为历史审查记录，不逐条核对每条 issue 的修复状态——最新正确性以代码与 `pytest tests/ -q` 为准。
+
 > 审查日期：2026-05-22
 > 审查范围：全量代码（agent/core、agent/tools、agent/llm、agent/prompts、ui、index、server）
 

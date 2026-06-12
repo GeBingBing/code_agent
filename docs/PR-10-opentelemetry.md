@@ -1,6 +1,6 @@
 # PR-10: OpenTelemetry 集成
 
-> 关联：SPECS.md Phase 14-1 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 14-1 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §9 全链路可观测性](../1.md) | [docs/参考.md OpenAI Codex / Opik/Langfuse](../参考.md)
 
 ---
@@ -330,3 +330,15 @@ Step 11: pytest tests/ 验证                     (0.5h)
 - 与 PR-08 Audit：OTel 关注性能/追踪，Audit 关注合规/取证
 - 与 PR-09 Evaluator：Evaluator 可用 OTel metrics 评分
 - 与 PR-07 Orchestrator：每个子 agent span 关联到父 span（context propagation）
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/observability/tracing.py` | OTel Tracer 包装 — Span 覆盖每个 LLM call / tool execution / Hook execute |
+| `agent/observability/metrics.py` | Metrics — tool 调用次数 / 平均耗时 / 失败率 / token 消耗 |
+| `agent/observability/logging.py` | 结构化 JSON log（区别于 audit log：audit 是合规记录，otel log 是调试记录） |
+| `agent/hooks/otel.py` | 通过 `before_llm_call` / `after_tool_execution` hook 埋点 |
+| 导出 | 本地 OTLP endpoint（`localhost:4317`）+ 控制台 fallback |

@@ -1,6 +1,6 @@
 # PR-04: 真实语义记忆（本地 Embedding 替换 TF-IDF）
 
-> 关联：SPECS.md Phase 12-4 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 12-4 | 状态：⚠️ 部分实现 | 决策：已确认
 > 依据：[docs/1.md §5.2 上下文工程管道](../1.md) | [docs/参考.md 上下文管理 Aider repomap](../参考.md)
 
 ---
@@ -206,3 +206,15 @@ Step 10: pytest tests/ 验证                    (0.5h)
 - 与 PR-05 repomap：repomap 注入文件结构，semantic memory 注入历史经验
 - 与 PR-07 Orchestrator：Orchestrator 子 agent 可调用 `semantic_search` 检索过往相似任务
 - 与 PR-09 Evaluator：Evaluator 评分时调用 `semantic_search` 找"类似任务的处理方式"
+
+---
+
+## 实现参考
+
+> ⚠️ 当前为**部分实现**：`embeddings.py` 提供 `SentenceTransformerProvider`（`all-MiniLM-L6-v2` 384 维）作为 `auto` 模式下的首选，但当 `sentence-transformers` 未安装时降级为 `HashingEmbeddingProvider`。完整替换 TF-IDF 默认行为需要在依赖中固定 `sentence-transformers`。
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/core/embeddings.py` | `EmbeddingProvider` 协议；`HashingEmbeddingProvider` / `SentenceTransformerProvider` / `TfidfEmbeddingProvider` |
+| `agent/core/vector_memory.py` | 复用现有 SQLite + numpy 索引；调用 `embeddings.get_default_provider().encode()` |
+| 工厂函数 | `get_default_provider()` — `EMBEDDING_PROVIDER=auto\|sentence-transformers\|tfidf\|hashing` |

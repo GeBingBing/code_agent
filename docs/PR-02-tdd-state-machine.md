@@ -1,6 +1,6 @@
 # PR-02: TDD 状态机（强制 Red→Green→Refactor）
 
-> 关联：SPECS.md Phase 12-2 | 状态：待实施 | 决策：已确认
+> 关联：SPECS.md Phase 12-2 | 状态：✅ 已实施 | 决策：已确认
 > 依据：[docs/1.md §4.2 测试驱动开发强制循环](../1.md) | [docs/参考.md MoAI-ADK Ralph 引擎模式](../参考.md)
 
 ---
@@ -255,3 +255,13 @@ Step 10: pytest tests/ 验证                (0.5h)
 - 区别于 Phase 9 P0-3 引导式 TDD：P0-3 是 prompt 引导（可忽略），PR-02 是**状态机强制**（不可跳过）
 - 与 PR-03 任务状态机互补：PR-03 管任务 phase（INIT→...→DONE），PR-02 管单个 phase 内的 TDD 微循环
 - 与 PR-09 Evaluator Agent：Evaluator 评分时检查"是否走完 TDD 循环"作为质量指标
+
+---
+
+## 实现参考
+
+| 文件 | 关键符号 |
+|------|----------|
+| `agent/core/tdd_state_machine.py` | `TDDState` 枚举（RED / GREEN / REFACTOR / DONE）、`run_tdd_cycle()` |
+| `agent/core/tdd_ralph.py` | `RalphSupervisor` — 检测跳过 RED 步时强制中断并提示 |
+| 工具链 | `write_failing_test` → `run_tests(expect=FAIL)` → `write_implementation` → `run_tests(expect=PASS)` → `refactor` |
