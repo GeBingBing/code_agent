@@ -1658,11 +1658,17 @@ class SimpleCLI:
         """Agent handler — LLM decides when to plan via enter_plan_mode/exit_plan_mode tools."""
         return await self._run_task(task)
 
-    async def _run_task(self, task: str) -> str:
+    async def _run_task(self, task: str, evaluate: bool = False) -> str:
         """Run task with single-phase execution.
 
         The LLM can call enter_plan_mode/exit_plan_mode tools to explore
         and plan before making changes — no hardcoded plan phase.
+
+        Args:
+            task: Task description.
+            evaluate: P13-5 — when True, wraps the run with an Evaluator
+                Agent that writes SCORE.md + .score.json to the workspace
+                after completion.
         """
         from agent.core.engine import AgentConfig, AgentEngine
 
@@ -1935,6 +1941,12 @@ def main():
     parser.add_argument("--cli", dest="cli_mode", action="store_true", help="Use raw CLI (default)")
     parser.add_argument("--resume", dest="resume", action="store_true", help="Resume last session")
     parser.add_argument(
+        "--evaluate",
+        dest="evaluate",
+        action="store_true",
+        help="P13-5: run agent + emit SCORE.md evaluation report after completion",
+    )
+    parser.add_argument(
         "--list-sessions", dest="list_sessions", action="store_true", help="List saved sessions"
     )
     args, _ = parser.parse_known_args()
@@ -1967,7 +1979,19 @@ def main():
             return
         task = s.get("task", "")
         print(f"Resuming: {task[:80]}")
-        args.task = f"[Resumed session]\n{task}"
+        # P12-3: also pull context from the task state machine (carries
+        # completed_steps, known_issues, current_step across crashes).
+        try:
+            from agent.core.task_state_machine import TaskStateMachine
+
+            tsm = TaskStateMachine()
+            reminder = tsm.format_reminder()
+            if reminder:
+                args.task = f"[Resumed session]\n{task}\n\n{reminder}"
+            else:
+                args.task = f"[Resumed session]\n{task}"
+        except Exception:
+            args.task = f"[Resumed session]\n{task}"
         # Fall through to single-task mode below
 
     if args.task:
@@ -1982,7 +2006,7 @@ def main():
             if cli._router:
                 result = loop.run_until_complete(cli._router.route(args.task))
             else:
-                result = loop.run_until_complete(cli._run_task(args.task))
+                result = loop.run_until_complete(cli._run_task(args.task, evaluate=args.evaluate))
             if args.print_mode:
                 print(result)
         finally:

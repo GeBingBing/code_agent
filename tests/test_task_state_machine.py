@@ -251,3 +251,68 @@ class TestDelete:
         sm.delete()
         assert not tmp_state_file.exists()
         assert sm.state == TaskState.INIT
+
+
+# ── P12-3: Engine integration — verify run_stream transitions FSM ──
+
+
+class TestEngineFSMIntegration:
+    """P12-3: AgentEngine should drive the FSM through PLAN→EXEC→TEST→REVIEW→DONE."""
+
+    def test_helper_swallows_invalid_transition(self, tmp_path, monkeypatch):
+        """_task_state_transition must not raise on illegal moves."""
+        from agent.core.engine import AgentConfig, AgentEngine
+
+        # Point task state machine at a tmp file
+        from agent.core.task_state_machine import TaskStateMachine
+
+        monkeypatch.setattr(TaskStateMachine, "DEFAULT_STATE_FILE", tmp_path / "task_state.json")
+        cfg = AgentConfig(model="mock", provider="mock", tdd_mode="off")
+        e = AgentEngine(cfg)
+        # INIT → DONE is illegal (must go through PLAN/EXEC/TEST/REVIEW)
+        # The helper must swallow this without raising.
+        e._task_state_transition(TaskState.DONE)
+
+    def test_review_state_hook_transitions_only_for_high_risk(self, tmp_path, monkeypatch):
+        """_review_state_transition_hook fires only on high-risk tools."""
+        from agent.core.engine import AgentConfig, AgentEngine
+        from agent.core.task_state_machine import TaskStateMachine
+
+        monkeypatch.setattr(TaskStateMachine, "DEFAULT_STATE_FILE", tmp_path / "task_state.json")
+        cfg = AgentConfig(model="mock", provider="mock", tdd_mode="off")
+        e = AgentEngine(cfg)
+        # Force-enable dual review (mock mode disables it by default)
+        if e.dual_review is None:
+            # Inject a minimal dual_review with a high-risk predicate
+            from agent.core.dual_review import DualReviewManager
+
+            e.dual_review = DualReviewManager()
+        e.task_state_machine.start_task(task="x", session_id="test")
+        # Walk through legal transitions to reach EXEC.
+        e.task_state_machine.transition(TaskState.PLAN)
+        e.task_state_machine.transition(TaskState.EXEC)
+        # Low-risk tool → no transition
+        import asyncio as _asyncio
+
+        _asyncio.run(e._review_state_transition_hook({"tool": "read_file"}))
+        assert e.task_state_machine.state == TaskState.EXEC
+        # High-risk tool → transition to REVIEW
+        _asyncio.run(e._review_state_transition_hook({"tool": "write_file"}))
+        assert e.task_state_machine.state == TaskState.REVIEW
+
+
+class TestResumeRestoresContext:
+    """P12-3: --resume must restore completed_steps + known_issues context."""
+
+    def test_format_reminder_includes_completed_count(self, tmp_state_file):
+        """The reminder should mention the completed-step count so the LLM
+        has continuity across a resume."""
+        sm = TaskStateMachine(state_file=tmp_state_file)
+        sm.start_task(task="implement fib", session_id="s1")
+        sm.transition(TaskState.PLAN)
+        sm.transition(TaskState.EXEC)
+        sm.record_completed_step("write_file", {"path": "fib.py"}, "h1")
+        sm.record_completed_step("run_tests", {"path": "fib_test.py"}, "h2")
+        reminder = sm.format_reminder()
+        assert "Completed: 2 steps" in reminder
+        assert "implement fib" in reminder

@@ -443,13 +443,13 @@ class TestAllToolsIntegration:
 
             # 47. verify_acs (PR-06)
             tool = registry.get("verify_acs")
-            r = await tool.execute(phase_id="P0")
+            r = await tool.execute(phase_id="P1")
             tool_results["verify_acs"] = r.success
             assert r.success
 
             # 48. mark_ac_done (PR-06) — mark an AC and check persistence
             tool = registry.get("mark_ac_done")
-            r = await tool.execute(ac_id="P0-1")
+            r = await tool.execute(ac_id="P1-1")
             tool_results["mark_ac_done"] = r.success
             assert r.success
 

@@ -108,6 +108,11 @@ def init_meter(otlp_endpoint: Optional[str] = None) -> Any:
     if _meter is not None:
         return _meter
     if not OTEL_METRICS_AVAILABLE:
+        # P14-1 W1: explicit warning, no longer silent no-op
+        logger.warning(
+            "opentelemetry-sdk is not installed; metrics collection is disabled. "
+            "Install with `pip install -e .[observability]` to enable counter/histogram export."
+        )
         _meter = _NoOpMeter()
         return _meter
     try:

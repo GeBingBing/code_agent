@@ -230,8 +230,8 @@
 
 - [x] `AC-P12-1` EventBus + Hook 系统
 - [ ] `AC-P12-2` TDD 状态机（强制 Red→Green→Refactor）
-- [ ] `AC-P12-3` 任务状态机与断点续传
-- [ ] `AC-P12-4` 真实语义记忆
+- [x] `AC-P12-3` 任务状态机与断点续传
+- [x] `AC-P12-4` 真实语义记忆
 
 ### P12-1: EventBus + Hook 系统
 
@@ -273,10 +273,10 @@
 > 依据：[docs/1.md §5.2 上下文工程管道](../docs/1.md) | [docs/参考.md Aider repomap / MoAI-ADK codmap](../docs/参考.md)
 
 - [ ] `AC-P13-1` repomap 注入（Aider codmap 风格）
-- [ ] `AC-P13-2` SDD 解析器（Acceptance Criteria 提取）
+- [x] `AC-P13-2` SDD 解析器（Acceptance Criteria 提取）
 - [ ] `AC-P13-3` Orchestrator PM Agent（编排-执行者模式）
 - [ ] `AC-P13-4` 不可变审计日志
-- [ ] `AC-P13-5` Evaluator Agent
+- [x] `AC-P13-5` Evaluator Agent
 
 ### P13-1: repomap 注入（Aider codmap 风格）
 
@@ -345,7 +345,7 @@
 > 详细规格：见 `docs/PR-10..PR-13` 四份 PR 文档
 > 依据：[docs/1.md §9 全链路可观测性 / §8 纵深防御 / §11 治理与持续进化 / §10 长时任务与断点续传](../docs/1.md)
 
-- [ ] `AC-P14-1` OpenTelemetry 集成
+- [x] `AC-P14-1` OpenTelemetry 集成
 - [x] `AC-P14-2` Dual-agent 互审
 - [ ] `AC-P14-3` AB Testing 框架
 - [ ] `AC-P14-4` `claude-progress.txt` 进度锚点

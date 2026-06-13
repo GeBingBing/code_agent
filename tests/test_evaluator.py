@@ -391,3 +391,68 @@ class TestParseScoreResponse:
         text = 'Here is the result: {"scores":[{"dimension":"x","score":8}]} thanks!'
         d = _parse_score_response(text)
         assert "scores" in d
+
+
+# ── P13-5: Engine integration — run_with_evaluator + cross-family judge ──
+
+
+class TestRunWithEvaluator:
+    """P13-5: engine.run_with_evaluator() wraps run_stream() + writes SCORE.md."""
+
+    def test_picks_alternate_model_for_gpt_main(self):
+        """When main is GPT, evaluator defaults to Claude (cross-family)."""
+        from agent.agents.evaluator import EvaluatorAgent
+
+        engine = MagicMock()
+        engine.config.model = "gpt-4o"
+        engine.llm = None
+        ev = EvaluatorAgent(engine)
+        assert "claude" in ev.model.lower()
+
+    def test_picks_alternate_model_for_claude_main(self):
+        """When main is Claude, evaluator defaults to GPT (cross-family)."""
+        from agent.agents.evaluator import EvaluatorAgent
+
+        engine = MagicMock()
+        engine.config.model = "claude-sonnet-4-6"
+        engine.llm = None
+        ev = EvaluatorAgent(engine)
+        assert "gpt" in ev.model.lower()
+
+    def test_engine_has_run_with_evaluator_method(self):
+        """AgentEngine.run_with_evaluator() must be a public method."""
+        import inspect
+
+        from agent.core.engine import AgentEngine
+
+        assert hasattr(AgentEngine, "run_with_evaluator")
+        sig = inspect.signature(AgentEngine.run_with_evaluator)
+        assert "task" in sig.parameters
+        assert "plan_context" in sig.parameters
+
+    @pytest.mark.asyncio
+    async def test_run_with_evaluator_writes_score_md(self, tmp_path):
+        """End-to-end: stub run_stream → verify SCORE.md written to workspace."""
+        from agent.core.engine import AgentConfig, AgentEngine
+
+        async def fake_run_stream(task, plan_context=""):
+            yield {"type": "tool_call", "tool_name": "read_file", "tool_args": {"path": "x"}}
+            yield {"type": "tool_result", "tool_name": "read_file", "success": True}
+            yield {
+                "type": "final",
+                "content": "done",
+            }
+
+        e = AgentEngine(AgentConfig(model="mock", provider="mock", tdd_mode="off"))
+        e.run_stream = fake_run_stream  # stub
+        report = await e.run_with_evaluator(task="hello", workspace=tmp_path)
+        # When evaluator can't load an LLM, it falls back to heuristic which
+        # always returns 4 scores. So `report` should not be None.
+        assert report is not None
+        # Files written
+        score_md = tmp_path / "SCORE.md"
+        score_json = tmp_path / ".score.json"
+        assert score_md.exists()
+        assert score_json.exists()
+        # Content sanity
+        assert "hello" in score_md.read_text()

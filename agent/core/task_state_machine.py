@@ -41,7 +41,12 @@ class TaskState(Enum):
 _ALLOWED_TRANSITIONS = {
     TaskState.INIT: {TaskState.PLAN, TaskState.FAILED},
     TaskState.PLAN: {TaskState.EXEC, TaskState.INIT, TaskState.FAILED},
-    TaskState.EXEC: {TaskState.TEST, TaskState.PLAN, TaskState.FAILED},
+    TaskState.EXEC: {
+        TaskState.TEST,
+        TaskState.REVIEW,  # P12-3: high-risk tool → dual review → REVIEW
+        TaskState.PLAN,
+        TaskState.FAILED,
+    },
     TaskState.TEST: {TaskState.REVIEW, TaskState.EXEC, TaskState.FAILED},
     TaskState.REVIEW: {TaskState.DONE, TaskState.EXEC, TaskState.FAILED},
     TaskState.DONE: set(),  # terminal

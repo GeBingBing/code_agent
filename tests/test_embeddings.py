@@ -216,3 +216,62 @@ class TestGetDefaultProvider:
     def test_empty_name_falls_back_to_auto(self):
         p = get_default_provider("")
         assert p is not None
+
+
+# ── P12-4: explicit downgrade notice + semantic acceptance ─────────
+
+
+class TestP12AutoDowngradeNotice:
+    """P12-4: when sentence-transformers is missing, the auto factory must
+    emit an explicit info log (no longer silent)."""
+
+    def test_auto_emits_info_log_when_st_missing(self, monkeypatch, caplog):
+        """Force 'auto' + ST unavailable → info log mentioning pip install."""
+        import logging
+
+        # Force the missing-ST path
+        monkeypatch.setattr("agent.core.embeddings._sentence_transformers_available", lambda: False)
+        with caplog.at_level(logging.INFO, logger="agent.core.embeddings"):
+            p = get_default_provider("auto")
+        assert isinstance(p, HashingEmbeddingProvider)
+        msgs = [r.message for r in caplog.records]
+        assert any(
+            "pip install" in m for m in msgs
+        ), f"expected 'pip install' in info logs, got: {msgs}"
+
+
+class TestP12SemanticAcceptance:
+    """P12-4 acceptance test: search "并发" must find "asyncio.gather"-related
+    memory when SBERT is available. Skipped when ST not installed."""
+
+    HAS_ST = _sentence_transformers_available()
+
+    @pytest.mark.skipif(not HAS_ST, reason="sentence-transformers not installed")
+    def test_semantic_search_finds_async_concepts(self):
+        """With SBERT, semantically related text should rank together."""
+        from agent.core.vector_memory import VectorMemory
+
+        mem = VectorMemory()
+        mem.add("处理并发用 threading 库", {"src": "doc1"})
+        mem.add("asyncio.gather 并行执行多个协程", {"src": "doc2"})
+        mem.add("Redis 是内存数据库", {"src": "doc3"})
+
+        results = mem.search("如何处理并发", top_k=2)
+        # Both并发-related docs should be in top 2 with SBERT
+        assert len(results) >= 2
+        # The asyncio.gather one must rank above Redis
+        sources = [
+            r[1].get("src") if isinstance(r, tuple) else r.metadata.get("src") for r in results[:2]
+        ]
+        # Order: doc2 (asyncio.gather) should be ranked higher than doc3 (Redis)
+        assert "doc2" in sources, f"expected asyncio.gather doc in top-2, got: {sources}"
+
+    def test_hashing_baseline_serves_as_sanity_check(self):
+        """When SBERT isn't installed, hashing mode still runs without crash.
+        The semantic acceptance test above is skipped — that's the
+        industry-standard fallback expectation."""
+        p = get_default_provider("hashing")
+        assert isinstance(p, HashingEmbeddingProvider)
+        # Just verify it can encode
+        vec = p.encode("hello world")
+        assert len(vec) == p.dim

@@ -85,7 +85,7 @@ from .permissions import PermissionManager
 from .plan import ExecutionPlan
 from .plan_workflow import PlanWorkflow
 from .progress_anchor import ProgressAnchor
-from .task_state_machine import TaskStateMachine
+from .task_state_machine import InvalidStateTransition, TaskState, TaskStateMachine
 from .tdd_ralph import RalphSupervisor
 from .tdd_state_machine import TDDStateMachine
 from .tool_dispatcher import ToolDispatcher
@@ -613,6 +613,11 @@ class AgentEngine:
                 self.dual_review = self._build_dual_review_manager()
                 if self.dual_review is not None:
                     self.hooks.register(BEFORE_TOOL_EXECUTION, self.dual_review_hook)
+                    # P12-3: register a sibling hook that transitions the task
+                    # state machine to REVIEW when dual review fires. The
+                    # dual review hook itself never touches state; this keeps
+                    # the cross-cutting concern isolated.
+                    self.hooks.register(BEFORE_TOOL_EXECUTION, self._review_state_transition_hook)
             except Exception:
                 # Never let dual-review init break the engine
                 self.dual_review = None
@@ -951,6 +956,23 @@ class AgentEngine:
         """PR-19: Back-compat shim — see TaskStateRecordStepHook."""
         return await self.task_state_hook(payload)
 
+    def _task_state_transition(self, new_state: "TaskState", **kwargs) -> None:
+        """P12-3: Wire task state transitions into the engine's control flow.
+
+        Swallows InvalidStateTransition so a state machine error never breaks
+        the agent — the state machine is a recovery aid, not a hard gate.
+        """
+        if not getattr(self, "task_state_machine", None):
+            return
+        try:
+            self.task_state_machine.transition(new_state, **kwargs)
+        except InvalidStateTransition:
+            # Allow re-entry / illegal transition silently — the FSM is an
+            # observability/recovery tool, not a control-flow gate.
+            pass
+        except Exception:
+            pass
+
     async def _audit_before_tool(self, payload):  # back-compat shim
         """PR-08: Audit log — record every tool_call with hashed args.
 
@@ -1209,6 +1231,22 @@ class AgentEngine:
         """PR-19: Back-compat shim — see DualReviewHook."""
         return await self.dual_review_hook(payload)
 
+    async def _review_state_transition_hook(self, payload):
+        """P12-3: Transition to REVIEW when a high-risk tool triggers dual review.
+
+        Registered alongside ``_dual_review_hook`` on BEFORE_TOOL_EXECUTION.
+        Only triggers the state transition when dual review would actually
+        fire (high-risk tool + dual_review enabled). Never blocks the payload.
+        """
+        if not isinstance(payload, dict):
+            return payload
+        if self.dual_review is None:
+            return payload
+        tool_name = payload.get("tool", "")
+        if self.dual_review.is_high_risk(tool_name):
+            self._task_state_transition(TaskState.REVIEW)
+        return payload
+
     async def _ab_apply_variants_hook(self, payload):  # back-compat shim
         """PR-19: Back-compat shim — see ABTestApplyHook."""
         if self.ab_apply_hook is None:
@@ -1354,14 +1392,33 @@ class AgentEngine:
                 # Never let auto-extract failure block the run
                 pass
 
+        # P12-3: Initialize task state machine for this task. Resets the record
+        # so a fresh start doesn't carry over completed_steps from a prior task.
+        try:
+            self.task_state_machine.start_task(task=task, session_id=self.trace_id)
+        except Exception:
+            pass
+        # Transition INIT → PLAN at session start (planning phase begins).
+        self._task_state_transition(TaskState.PLAN, current_step={"description": "planning"})
+
         # Build system prompt
         plan_ctx = plan_context if plan_context else ""
         failure_ctx = self.evolution.get_failure_context(task) if self.config.auto_evolve else ""
+        # P12-3: inject task-state reminder so the LLM knows the current phase
+        # and the count of completed steps. Helps long-running tasks stay on
+        # track (50+ steps easily drift without this anchor).
+        task_reminder = ""
+        try:
+            task_reminder = self.task_state_machine.format_reminder()
+        except Exception:
+            pass
         system = self._get_system_prompt(
             skill_prompt=skill_prompt,
             plan_context=plan_ctx,
             failure_context=failure_ctx,
         )
+        if task_reminder:
+            system = system + "\n\n" + task_reminder
 
         self.memory.add("system", system)
         self.memory.add("user", task)
@@ -1375,7 +1432,11 @@ class AgentEngine:
         try:
             async for event in self._run_stream_loop(task, system):
                 yield event
+            # P12-3: loop exited without exception → mark task DONE.
+            self._task_state_transition(TaskState.DONE)
         except Exception as exc:
+            # P12-3: exception → mark task FAILED (recoverable via INIT/PLAN).
+            self._task_state_transition(TaskState.FAILED)
             # PR-01: ON_ERROR hook for global exception handling
             try:
                 await self.hooks.execute(ON_ERROR, {"exception": exc, "context": {"task": task}})
@@ -1658,6 +1719,13 @@ class AgentEngine:
             # Tool calls?
             tool_calls = list(accumulated_tool_calls.values()) if accumulated_tool_calls else None
             if tool_calls:
+                # P12-3: first tool execution → transition PLAN → EXEC. This
+                # anchors the state machine to actual execution activity.
+                self._task_state_transition(TaskState.EXEC)
+                # P12-3: detect run_tests up front so a single batch can
+                # transition PLAN → EXEC → TEST cleanly.
+                if any(tc.get("name") == "run_tests" for tc in tool_calls):
+                    self._task_state_transition(TaskState.TEST)
                 parsed = []
                 for tc in tool_calls:
                     tc_id = tc.get("id")
@@ -1793,6 +1861,13 @@ class AgentEngine:
             # Tool calls?
             tool_calls = list(accumulated_tool_calls.values()) if accumulated_tool_calls else None
             if tool_calls:
+                # P12-3: first tool execution → transition PLAN → EXEC. This
+                # anchors the state machine to actual execution activity.
+                self._task_state_transition(TaskState.EXEC)
+                # P12-3: detect run_tests up front so a single batch can
+                # transition PLAN → EXEC → TEST cleanly.
+                if any(tc.get("name") == "run_tests" for tc in tool_calls):
+                    self._task_state_transition(TaskState.TEST)
                 parsed = []
                 for tc in tool_calls:
                     tc_id = tc.get("id")
@@ -1982,6 +2057,82 @@ class AgentEngine:
 
     async def run_plan(self, task: str) -> ExecutionPlan:
         """PR-21: thin shim — delegates to PlanWorkflow.plan()."""
+        return await PlanWorkflow(self).plan(task)
+
+    async def run_with_evaluator(
+        self,
+        task: str,
+        plan_context: str = "",
+        workspace: "Optional[Path]" = None,
+    ):
+        """P13-5: Run the agent and write an evaluation report (SCORE.md).
+
+        Wraps ``run_stream()`` — collects events, lets the loop finish, then
+        instantiates an EvaluatorAgent and writes ``SCORE.md`` + ``.score.json``
+        to the workspace. Returns the EvaluationReport for programmatic use.
+
+        Args:
+            task: The task description.
+            plan_context: Optional plan context (passed to run_stream).
+            workspace: Directory to write SCORE.md into. Defaults to cwd.
+
+        Notes:
+            - Failures from the evaluator are logged but never block the
+              agent run — evaluation is an observability tool, not a gate.
+            - The evaluator picks a cross-family judge automatically when
+              self.llm is set (GPT primary → Claude judge and vice versa).
+        """
+        import logging as _logging
+        from pathlib import Path
+
+        log = _logging.getLogger(__name__)
+        # 1. Run the agent to completion (collect events; we don't re-emit)
+        final_content = ""
+        audit_records: list = []
+        async for event in self.run_stream(task=task, plan_context=plan_context):
+            # Capture the final content + tool audit for the evaluator
+            if event.get("type") == "final":
+                final_content = event.get("content", "")
+            if event.get("type") == "tool_call":
+                audit_records.append(
+                    {
+                        "action": "tool_call",
+                        "tool": event.get("tool_name"),
+                        "args": event.get("tool_args"),
+                    }
+                )
+            if event.get("type") == "tool_result":
+                audit_records.append(
+                    {
+                        "action": "tool_result",
+                        "tool": event.get("tool_name"),
+                        "success": event.get("success"),
+                        "error": event.get("error"),
+                    }
+                )
+
+        # 2. Build evaluator with cross-family judge
+        from agent.agents.evaluator import EvaluatorAgent
+
+        evaluator = EvaluatorAgent(self)
+        # 3. Run evaluation
+        try:
+            report = await evaluator.evaluate(
+                task=task, agent_id="main", audit_records=audit_records
+            )
+        except Exception as e:
+            log.warning("P13-5: evaluator.evaluate() failed: %s", e)
+            return None
+
+        # 4. Write SCORE.md + .score.json to workspace
+        target_workspace = Path(workspace) if workspace else Path.cwd()
+        try:
+            md_path, json_path = EvaluatorAgent.write_report(report, workspace=target_workspace)
+            log.info("P13-5: evaluation written to %s", md_path)
+        except Exception as e:
+            log.warning("P13-5: write_report failed: %s", e)
+
+        return report
         return await self.plan_workflow.plan(task)
 
     async def run_execute(self, plan: ExecutionPlan) -> str:

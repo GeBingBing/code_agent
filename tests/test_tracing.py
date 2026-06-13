@@ -109,3 +109,87 @@ class TestOtelAvailability:
         span.set_attribute("a", 1)
         span.end()
         # No exception = success
+
+
+# ── P14-1: W1 warning + JSONL file exporter + dual-export behavior ──
+
+
+class TestP14Warning:
+    """P14-1 W1: SDK-missing path must emit a clear warning, not silently no-op."""
+
+    def test_warning_when_sdk_missing(self, caplog):
+        """When opentelemetry is not installed, init_tracer should log a warning."""
+        import logging
+
+        import agent.observability.tracing as tracing_mod
+        from agent.observability.tracing import init_tracer, reset_tracer
+
+        # Force the SDK-missing path
+        reset_tracer()
+        original = tracing_mod.OTEL_AVAILABLE
+        try:
+            tracing_mod.OTEL_AVAILABLE = False
+            with caplog.at_level(logging.WARNING, logger="agent.observability.tracing"):
+                t = init_tracer(service_name="test")
+            # The warning must mention pip install
+            msgs = [r.message for r in caplog.records]
+            assert any(
+                "pip install" in m for m in msgs
+            ), f"expected 'pip install' in warnings, got: {msgs}"
+            assert t is not None  # still returns a tracer (no-op)
+        finally:
+            tracing_mod.OTEL_AVAILABLE = original
+            reset_tracer()
+
+
+class TestP14JsonlFileExporter:
+    """P14-1 X3: JSONL file exporter writes spans to a daily-rotated file."""
+
+    def test_jsonl_exporter_class_exists(self):
+        from agent.observability.tracing import JsonlFileSpanExporter
+
+        assert JsonlFileSpanExporter is not None
+
+    def test_jsonl_exporter_writes_valid_json(self, tmp_path):
+        """When SDK is installed, the exporter should write valid JSONL."""
+        from agent.observability.tracing import OTEL_AVAILABLE, JsonlFileSpanExporter
+
+        if not OTEL_AVAILABLE:
+            pytest.skip("opentelemetry-sdk not installed")
+
+        # Build a real span via the SDK (without touching the global provider,
+        # which OTel disallows overriding).
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        mem = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(mem))
+        tracer = provider.get_tracer("test")
+
+        with tracer.start_as_current_span("test_span") as span:
+            span.set_attribute("key", "value")
+
+        # Now export those spans through our JsonlFileSpanExporter
+        exporter = JsonlFileSpanExporter(output_dir=tmp_path)
+        result = exporter.export(mem.get_finished_spans())
+        assert result.name == "SUCCESS"
+
+        # Verify file was written
+        files = list(tmp_path.glob("*.jsonl"))
+        assert len(files) == 1
+        content = files[0].read_text().strip().splitlines()
+        assert len(content) >= 1
+        # Each line must be valid JSON
+        import json
+
+        for line in content:
+            rec = json.loads(line)
+            assert "name" in rec
+            assert "trace_id" in rec
+            assert "span_id" in rec
+            assert "timestamp" in rec
+        exporter.shutdown()

@@ -232,6 +232,10 @@ def get_default_provider(name: str = "auto", **kwargs) -> EmbeddingProvider:
     - "sentence-transformers" → raises ImportError if missing (caller decides)
     - "tfidf" → TfidfEmbeddingProvider
     - "hashing" → HashingEmbeddingProvider
+
+    P12-4: when "auto" is selected and sentence-transformers is not installed,
+    emit an explicit info log so users know they're getting a degraded
+    semantic-search experience (hash-based, not real embeddings).
     """
     name = (name or "auto").lower()
     if name == "auto":
@@ -242,6 +246,14 @@ def get_default_provider(name: str = "auto", **kwargs) -> EmbeddingProvider:
                 )
             except Exception as e:
                 logger.warning("sentence-transformers load failed (%s); falling back to hashing", e)
+        else:
+            # P12-4: explicit downgrade notice — no longer silent. Helps
+            # users understand why their "并发" search won't find "async/await".
+            logger.info(
+                "sentence-transformers is not installed; using HashingEmbeddingProvider fallback. "
+                "Install with `pip install -e .[semantic]` (~90MB model download) "
+                "for true semantic search."
+            )
         return HashingEmbeddingProvider(dim=kwargs.get("dim", 128))
 
     if name in ("sentence-transformers", "st", "minilm"):
