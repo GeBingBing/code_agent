@@ -1294,3 +1294,55 @@ class TestInstantResponse:
         src = inspect.getsource(SimpleCLI._read_line)
         assert "bottom_toolbar" in src
         assert "_build_toolbar" in src
+
+
+# --- PR-fix: main() single-task path delegates to _run_async ---
+
+
+class TestMainSingleTaskCleanup:
+    """PR-fix: main() single-task path delegates to _run_async cleanup helper."""
+
+    def test_main_uses_run_async_helper(self, monkeypatch):
+        """main() with a --task must call _run_async exactly once."""
+        from ui import cli
+
+        captured: list = []
+
+        def fake_run_async(coro):
+            captured.append(coro)
+            coro.close()
+            return "stub-result"
+
+        monkeypatch.setattr(cli, "_run_async", fake_run_async)
+
+        class _FakeCLI:
+            _router = None
+
+            def _setup_router(self, model, provider):
+                pass
+
+            async def _run_task(self, task, evaluate=False):
+                return f"done: {task}"
+
+        monkeypatch.setattr(cli, "SimpleCLI", _FakeCLI)
+        monkeypatch.setattr("agent.core.config.config.get", lambda k, d=None: "mock")
+        monkeypatch.setattr("sys.argv", ["coding-agent", "hello", "-p"])
+
+        cli.main()
+
+        assert len(captured) == 1, (
+            f"main() should call _run_async exactly once, got {len(captured)}"
+        )
+
+    def test_main_does_not_use_raw_loop_close(self):
+        """main() must not contain a raw loop.close() in its single-task branch."""
+        import inspect
+
+        from ui import cli
+
+        src = inspect.getsource(cli.main)
+        task_branch_start = src.find("if args.task:")
+        task_branch_end = src.find("return", task_branch_start)
+        snippet = src[task_branch_start:task_branch_end]
+        assert "asyncio.new_event_loop" not in snippet
+        assert "loop.close()" not in snippet
