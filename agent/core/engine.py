@@ -370,6 +370,12 @@ class AgentConfig:
     otel_enabled: bool = True  # PR-10: emit OTel spans/metrics for tool+LLM calls
     enable_dual_review: bool = True  # PR-11: dual-agent review for high-risk tools
     dual_review_model: str = ""  # PR-11: override the alternate reviewer model (empty = auto)
+    # P14-2: when True, secondary reviewer uses a SECOND, different LLM client
+    # (cross-provider — e.g. GPT primary, DashScope secondary). When False
+    # (default), both reviewers share self.llm (single-client mode, backward
+    # compatible). D3 增强: defaults to False so single-provider users are
+    # unaffected; users opt in via config or DUAL_REVIEW_PROVIDER env.
+    dual_review_strict_cross_provider: bool = False
     ab_test_enabled: bool = True  # PR-12: A/B test engine integration
     ab_user_id: str = ""  # PR-12: stable user identifier for bucketing (empty = auto-derive)
     progress_anchor_enabled: bool = True  # PR-13: write/read .claude-progress.txt
@@ -1127,11 +1133,21 @@ class AgentEngine:
     def _build_dual_review_manager(self) -> Optional[DualReviewManager]:
         """Create a DualReviewManager using self.llm as primary.
 
-        The secondary reviewer is created with a different model name so
-        the cross-judging story is plausible even when only one client
-        is wired up. The actual cross-judging behavior depends on the
-        LLM client honoring the model name; tests can inject their own
-        DualReviewManager via `engine.dual_review = ...`.
+        Secondary reviewer behavior (P14-2):
+        - ``dual_review_strict_cross_provider=False`` (default): secondary uses
+          the same client as primary (backward compatible — single-provider
+          users are unaffected). The model name differs via
+          ``_pick_alternate_model``, so the cross-judging story is plausible
+          when the underlying LLM honors model names.
+        - ``dual_review_strict_cross_provider=True``: secondary uses a SECOND
+          LLMClient constructed via ``create_alternate_provider_client()``,
+          which picks a different-family provider based on env API keys
+          (e.g. OpenAI primary → DashScope secondary). When only one provider
+          is available in the environment, secondary silently falls back to
+          the primary client (no error — single-provider users are not
+          punished).
+
+        Tests can inject their own DualReviewManager via ``engine.dual_review``.
         """
         primary_chat = None
         if self.llm is not None:
@@ -1147,12 +1163,44 @@ class AgentEngine:
         # Pick an alternate model. Default to a sibling of the primary.
         primary_model = self.config.model or "primary"
         alternate = self.config.dual_review_model or _pick_alternate_model(primary_model)
-        # Secondary also uses the same LLM client; cross-judging is
-        # advisory (same client) but the model name differs. A real
-        # multi-provider setup would wire a second client here.
+
+        # P14-2: optionally wire a SECOND, different-family LLM client.
+        secondary_chat = primary_chat  # default: same client (backward compat)
+        if (
+            getattr(self.config, "dual_review_strict_cross_provider", False)
+            and self.llm is not None
+        ):
+            try:
+                from ..llm.client import create_alternate_provider_client
+
+                alt_client = create_alternate_provider_client(self.llm)
+            except Exception:
+                alt_client = None
+            if alt_client is not None:
+                alt_llm = alt_client
+
+                async def _alt_chat(messages, stream: bool = False):
+                    resp, _meta = await alt_llm.chat(messages, stream=stream)
+                    return resp, _meta
+
+                secondary_chat = _alt_chat
+                # Override model name with the alternate's actual model so the
+                # review manager calls the correct endpoint.
+                if alt_client.model:
+                    alternate = alt_client.model
+                import logging as _logging
+
+                _logging.getLogger(__name__).info(
+                    "P14-2 dual-review: primary=%s (%s) | secondary=%s (%s)",
+                    primary_model,
+                    getattr(self.llm, "provider", "?"),
+                    alternate,
+                    getattr(alt_client, "provider", "?"),
+                )
+
         return DualReviewManager(
             primary_chat=primary_chat,
-            secondary_chat=primary_chat,  # same client; different model name
+            secondary_chat=secondary_chat,
             primary_model=primary_model,
             secondary_model=alternate,
         )

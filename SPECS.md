@@ -346,7 +346,7 @@
 > 依据：[docs/1.md §9 全链路可观测性 / §8 纵深防御 / §11 治理与持续进化 / §10 长时任务与断点续传](../docs/1.md)
 
 - [ ] `AC-P14-1` OpenTelemetry 集成
-- [ ] `AC-P14-2` Dual-agent 互审
+- [x] `AC-P14-2` Dual-agent 互审
 - [ ] `AC-P14-3` AB Testing 框架
 - [ ] `AC-P14-4` `claude-progress.txt` 进度锚点
 

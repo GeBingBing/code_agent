@@ -190,3 +190,135 @@ class LLMClient:
 def count_tokens(text: str) -> int:
     """Rough token estimation"""
     return len(text) // 4
+
+
+# ── P14-2: Alternate provider factory (cross-family dual-agent) ──
+
+
+# Family taxonomy used to enforce cross-family strict matching:
+# when strict_cross_provider=True, secondary MUST come from a different family.
+_FAMILY_OF_PROVIDER = {
+    "openai": "openai",
+    "kimi": "kimi",
+    "moonshot": "kimi",
+    "dashscope": "dashscope",
+    "qwen": "dashscope",
+    "zhipu": "zhipu",
+    "glm": "zhipu",
+    "minimax": "minimax",
+    "abab": "minimax",
+    "ollama": "ollama",
+}
+
+
+def _detect_family(provider: str, model) -> str:
+    """Return the family name for a provider/model pair.
+
+    Falls back to the provider name if model is empty/unknown. Used to enforce
+    cross-family strict matching in dual-review.
+    """
+    p = (provider or "").lower()
+    if p in _FAMILY_OF_PROVIDER:
+        return _FAMILY_OF_PROVIDER[p]
+    m = (model or "").lower()
+    for token, fam in _FAMILY_OF_PROVIDER.items():
+        if token in m:
+            return fam
+    return p or "unknown"
+
+
+def _pick_alternate_provider_name(primary_provider: str, primary_model: str):
+    """Pick a provider name that is in a DIFFERENT family from the primary.
+
+    Strategy (industry-standard preference order):
+    1. Honor explicit ``DUAL_REVIEW_PROVIDER`` env var if set and family differs.
+    2. Otherwise, prefer the highest-priority different-family provider for which
+       an API key is available in the environment.
+    3. Return None if no other family has an available key.
+
+    Priority (cross-family preference order): openai → dashscope → zhipu → minimax → kimi
+    This matches what humans actually configure (e.g. OpenAI primary, DashScope
+    secondary is a very common pattern in CN teams).
+    """
+    import logging as _logging
+    import os
+
+    explicit = os.getenv("DUAL_REVIEW_PROVIDER")
+    if explicit:
+        explicit_lower = explicit.lower()
+        if _detect_family(explicit_lower, "") != _detect_family(primary_provider, primary_model):
+            return explicit_lower
+        # Explicit but same family — warn and fall through
+        _logging.getLogger(__name__).warning(
+            "DUAL_REVIEW_PROVIDER=%s is same-family as primary %s; ignoring.",
+            explicit,
+            primary_provider,
+        )
+
+    primary_family = _detect_family(primary_provider, primary_model)
+    # Preference order — pick the first provider with a key and a different family.
+    for cand in ("openai", "dashscope", "zhipu", "minimax", "kimi"):
+        if cand == primary_provider:
+            continue
+        if _detect_family(cand, "") == primary_family:
+            continue
+        if config.get_api_key(cand):
+            return cand
+    return None
+
+
+def create_alternate_provider_client(primary_client):
+    """Construct a SECOND LLMClient from a different provider family.
+
+    Used by the dual-agent review manager to honor the P14-2 spec:
+    "复审 Agent 来自不同 provider (OpenAI + Anthropic 互审)".
+
+    Returns None when:
+    - Only one provider has an API key in the environment (single-provider users
+      see no effect — no error, no fallback to same family).
+    - No alternate provider can be selected.
+
+    The returned client is fully constructed (constructor ran), so callers can
+    use it exactly like ``primary_client``. Selection of an appropriate model
+    name for the alternate family follows sensible defaults.
+    """
+    import logging as _logging
+    import os
+
+    primary_provider = primary_client.provider if primary_client else None
+    primary_model = primary_client.model if primary_client else None
+
+    alt_provider = _pick_alternate_provider_name(primary_provider or "openai", primary_model or "")
+    if alt_provider is None:
+        return None
+
+    # Default model name per family
+    family_defaults = {
+        "openai": "gpt-4o-mini",
+        "dashscope": "qwen-plus",
+        "zhipu": "glm-4-plus",
+        "minimax": "abab6.5s-chat",
+        "kimi": "moonshot-v1-8k",
+    }
+    alt_family = _detect_family(alt_provider, "")
+    alt_model = family_defaults.get(alt_family, "")
+
+    env_model = os.getenv("DUAL_REVIEW_MODEL")
+    if env_model:
+        alt_model = env_model
+
+    try:
+        new_client = LLMClient(model=alt_model, provider=alt_provider)
+        _logging.getLogger(__name__).info(
+            "P14-2 dual-review: secondary client ready (provider=%s, model=%s)",
+            new_client.provider,
+            new_client.model,
+        )
+        return new_client
+    except Exception as e:
+        _logging.getLogger(__name__).warning(
+            "P14-2 dual-review: failed to construct alternate client (%s) — "
+            "falling back to single-client mode",
+            e,
+        )
+        return None

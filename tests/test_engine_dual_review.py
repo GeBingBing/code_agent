@@ -607,6 +607,246 @@ class TestHookPassesPayloadUnchangedOnApprove:
         assert out["tool"] == "write_file"
 
 
+# ── P14-2: cross-family strict dual-agent review ────────────────────
+
+
+class TestDetectFamily:
+    """P14-2: provider/model → family taxonomy."""
+
+    def test_openai_family(self):
+        from agent.llm.client import _detect_family
+
+        assert _detect_family("openai", "gpt-4o") == "openai"
+        assert _detect_family("openai", "o1-preview") == "openai"
+
+    def test_dashscope_family(self):
+        from agent.llm.client import _detect_family
+
+        assert _detect_family("dashscope", "qwen-plus") == "dashscope"
+
+    def test_zhipu_family(self):
+        from agent.llm.client import _detect_family
+
+        assert _detect_family("zhipu", "glm-4-plus") == "zhipu"
+
+    def test_minimax_family(self):
+        from agent.llm.client import _detect_family
+
+        assert _detect_family("minimax", "abab6.5s-chat") == "minimax"
+
+    def test_kimi_family(self):
+        from agent.llm.client import _detect_family
+
+        assert _detect_family("kimi", "moonshot-v1-8k") == "kimi"
+        # Moonshot alias
+        assert _detect_family("moonshot", "v1") == "kimi"
+
+    def test_inferred_from_model(self):
+        """When provider is unknown, family can be inferred from model name."""
+        from agent.llm.client import _detect_family
+
+        assert _detect_family("auto", "qwen-max") == "dashscope"
+        assert _detect_family("auto", "glm-4") == "zhipu"
+        assert _detect_family("auto", "abab6.5s-chat") == "minimax"
+
+    def test_unknown_returns_provider_or_unknown(self):
+        from agent.llm.client import _detect_family
+
+        assert _detect_family("random-provider", "") == "random-provider"
+        assert _detect_family("", "") == "unknown"
+
+
+class TestPickAlternateProviderName:
+    """P14-2: cross-family provider selection based on env API keys."""
+
+    def test_returns_none_when_no_other_keys(self, monkeypatch):
+        from agent.llm.client import _pick_alternate_provider_name
+
+        # Strip all provider keys
+        for k in (
+            "OPENAI_API_KEY",
+            "KIMI_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "ZHIPU_API_KEY",
+            "MINIMAX_API_KEY",
+        ):
+            monkeypatch.delenv(k, raising=False)
+        result = _pick_alternate_provider_name("openai", "gpt-4o")
+        assert result is None
+
+    def test_picks_first_available_other_family(self, monkeypatch):
+        from agent.llm.client import _pick_alternate_provider_name
+
+        # Primary is OpenAI. Available alternate families: dashscope + zhipu
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-test")
+        monkeypatch.setenv("ZHIPU_API_KEY", "zhipu-test")
+        # Should pick dashscope (higher priority than zhipu)
+        result = _pick_alternate_provider_name("openai", "gpt-4o")
+        assert result == "dashscope"
+
+    def test_skips_same_family_provider(self, monkeypatch):
+        from agent.llm.client import _pick_alternate_provider_name
+
+        # Primary is dashscope/qwen. OpenAI is a different family — should pick it.
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.delenv("KIMI_API_KEY", raising=False)
+        monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        result = _pick_alternate_provider_name("dashscope", "qwen-plus")
+        assert result == "openai"
+
+    def test_honors_explicit_env_override(self, monkeypatch):
+        from agent.llm.client import _pick_alternate_provider_name
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("ZHIPU_API_KEY", "zhipu-test")
+        monkeypatch.setenv("DUAL_REVIEW_PROVIDER", "zhipu")
+        # Override picks zhipu even though dashscope isn't available
+        result = _pick_alternate_provider_name("openai", "gpt-4o")
+        assert result == "zhipu"
+
+    def test_ignores_same_family_explicit_override(self, monkeypatch):
+        from agent.llm.client import _pick_alternate_provider_name
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-test")
+        monkeypatch.setenv("DUAL_REVIEW_PROVIDER", "openai")  # same family — ignored
+        result = _pick_alternate_provider_name("openai", "gpt-4o")
+        # Should fall through to picking dashscope (next available different family)
+        assert result == "dashscope"
+
+    def test_returns_none_when_only_one_provider_available(self, monkeypatch):
+        from agent.llm.client import _pick_alternate_provider_name
+
+        # Only OpenAI available
+        for k in (
+            "KIMI_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "ZHIPU_API_KEY",
+            "MINIMAX_API_KEY",
+        ):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        result = _pick_alternate_provider_name("openai", "gpt-4o")
+        assert result is None
+
+
+class TestCreateAlternateProviderClient:
+    """P14-2: factory returns a second, different-family LLMClient."""
+
+    def test_returns_none_when_no_keys_at_all(self, monkeypatch):
+        from agent.llm.client import (
+            LLMClient,
+            create_alternate_provider_client,
+        )
+
+        # No keys anywhere → returns None (no alternate available)
+        for k in (
+            "OPENAI_API_KEY",
+            "KIMI_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "ZHIPU_API_KEY",
+            "MINIMAX_API_KEY",
+        ):
+            monkeypatch.delenv(k, raising=False)
+        primary = LLMClient(model="mock", provider="mock", api_key="mock")
+        result = create_alternate_provider_client(primary)
+        assert result is None
+
+    def test_returns_different_provider(self, monkeypatch):
+        from agent.llm.client import (
+            LLMClient,
+            create_alternate_provider_client,
+        )
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-test")
+        primary = LLMClient(model="gpt-4o", provider="openai", api_key="sk-test")
+        result = create_alternate_provider_client(primary)
+        assert result is not None
+        assert result.provider != primary.provider
+
+
+class TestBuildDualReviewManagerCrossProvider:
+    """P14-2: AgentEngine._build_dual_review_manager honors the cross-provider flag."""
+
+    def test_disabled_uses_same_client(self):
+        """Backward compat: dual_review_strict_cross_provider=False → same client."""
+        from unittest.mock import MagicMock
+
+        e = AgentEngine(_config(dual_review_strict_cross_provider=False))
+        # Force-inject a known llm (mock)
+        e.llm = MagicMock()
+        e.llm.provider = "mock"
+        e.llm.model = "mock"
+        mgr = e._build_dual_review_manager()
+        assert mgr is not None
+        # Backward compat: both reviewers use the same chat function
+        assert mgr.primary_chat is mgr.secondary_chat
+
+    def test_enabled_multi_provider_uses_different_client(self, monkeypatch):
+        """With strict flag + multi-provider env, secondary chat must differ."""
+        from agent.llm.client import LLMClient
+
+        # Set up multi-provider env
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-test")
+
+        e = AgentEngine(
+            _config(
+                model="gpt-4o",
+                provider="openai",
+                dual_review_strict_cross_provider=True,
+            )
+        )
+        # Bypass engine's full init and inject the primary client directly.
+        primary = LLMClient(model="gpt-4o", provider="openai", api_key="sk-test")
+        e.llm = primary
+
+        mgr = e._build_dual_review_manager()
+        assert mgr is not None
+        # Different clients!
+        assert mgr.primary_chat is not mgr.secondary_chat
+        # And the secondary model is the alternate family's model
+        assert mgr.secondary_model != primary.model
+
+    def test_enabled_single_provider_falls_back_to_primary(self, monkeypatch):
+        """With strict flag + only one provider key, secondary falls back to primary."""
+        from agent.llm.client import LLMClient
+
+        # Strip everything except openai
+        for k in (
+            "KIMI_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "ZHIPU_API_KEY",
+            "MINIMAX_API_KEY",
+        ):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        e = AgentEngine(
+            _config(
+                model="gpt-4o",
+                provider="openai",
+                dual_review_strict_cross_provider=True,
+            )
+        )
+        primary = LLMClient(model="gpt-4o", provider="openai", api_key="sk-test")
+        e.llm = primary
+
+        mgr = e._build_dual_review_manager()
+        assert mgr is not None
+        # Falls back to primary — single-provider users see no breakage
+        assert mgr.primary_chat is mgr.secondary_chat
+
+    def test_config_field_default_is_false(self):
+        """Default config should NOT enable strict mode (backward compat)."""
+        cfg = _config()
+        assert cfg.dual_review_strict_cross_provider is False
+
+
 # ── TestAuditFailureDoesNotBreakHook ───────────────────────────
 
 
