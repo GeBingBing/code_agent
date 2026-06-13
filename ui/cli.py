@@ -1995,22 +1995,20 @@ def main():
         # Fall through to single-task mode below
 
     if args.task:
-        # Single task mode — use intent routing (same as interactive mode)
+        # Single task mode — delegate to _run_async for set_debug(False) +
+        # slow_callback_duration + _silent_handler cleanup (matches cli.py:1220, :1238).
         cli = SimpleCLI()
         from agent.core.config import config
 
         cli._setup_router(config.get("model"), config.get("provider"))
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            if cli._router:
-                result = loop.run_until_complete(cli._router.route(args.task))
-            else:
-                result = loop.run_until_complete(cli._run_task(args.task, evaluate=args.evaluate))
-            if args.print_mode:
-                print(result)
-        finally:
-            loop.close()
+        coro = (
+            cli._router.route(args.task)
+            if cli._router
+            else cli._run_task(args.task, evaluate=args.evaluate)
+        )
+        result = _run_async(coro)
+        if args.print_mode:
+            print(result)
         return
 
     if args.show_help or not sys.stdin.isatty():
