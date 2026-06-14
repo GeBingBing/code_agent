@@ -190,12 +190,18 @@ async def run_execute(self, plan: ExecutionPlan) -> str:
 
 #### 验收标准
 
-- [ ] Plan mode 下 Agent 只做分析，可用 read-only 工具，不可写/执行
-- [ ] `run_plan()` 返回结构化 ExecutionPlan（markdown + JSON）
-- [ ] CLI 展示 plan 后等待用户确认
-- [ ] `run_execute()` 按步骤顺序执行，每步更新状态
-- [ ] 步骤失败时不自动跳到下一步，先尝试修复
-- [ ] `/plan accept/edit/reject` 命令正常工作
+- [x] Plan mode 下 Agent 只做分析，可用 read-only 工具，不可写/执行  
+  *M1 P0 (2026-06-14): `ToolDispatcher` 新增 stage 0 `PlanToolFilter`，白名单 = {read_file, grep, glob, code_search, lsp, web_*, spec_*, plan-mode transitions}；非白名单工具在 dispatcher 层 `raise PlanModeViolation` 并返回 `ToolResult(success=False, error="Plan mode blocks ...", metadata={"plan_blocked": True})`。*
+- [ ] `run_plan()` 返回结构化 ExecutionPlan（markdown + JSON）  
+  *Markdown 已支持 (`ExecutionPlan.to_markdown`)；JSON 序列化（`plan_id / risks / alternatives / acceptance_criteria / parent_plan_id` 等字段）推迟到 M2，见 `agent/core/plan.py` 字段扩展。*
+- [x] CLI 展示 plan 后等待用户确认  
+  *`ui/cli.py:1779` 用 Rich Panel 渲染 plan 前 15 行，TUI 路径 `ui/tui.py:175-185` 用 InfoPanel。*
+- [x] `run_execute()` 按步骤顺序执行，每步更新状态  
+  *`agent/core/plan_workflow.py:185-280` `execute()` 顺序执行并 `step.status` 切换。*
+- [ ] 步骤失败时不自动跳到下一步，先尝试修复  
+  *未实现；当前 step 失败后继续。挪到 M3。*
+- [x] `/plan accept/edit/reject` 命令正常工作  
+  *M1 P0 (2026-06-14): `/plan edit` 修成真改 `ExecutionPlan.steps`（`agent/commands/builtin.py:73-150`），支持结构化 `edit <N> <field> <value>` + 兼容旧 `edit <N> <description>`；`persistence_path` 已知时同步落盘到 `~/.coding-agent/plans/<plan_id>.md`。`accept` 切回 default mode，`reject` 打印消息。*
 
 ---
 

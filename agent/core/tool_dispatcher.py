@@ -2,6 +2,7 @@
 
 A single tool call goes through several stages:
 
+  0. PlanToolFilter (M1 P0) — hard read-only gate when in plan mode
   1. BEFORE_TOOL_EXECUTION hook  (Ralph TDD, dual-review, audit, OTel)
   2. cwd / parent_run_id injection
   3. Top-level permission check
@@ -33,6 +34,62 @@ from ..tools.base import ToolResult, registry
 from .dual_review import PermissionDenied, ReviewRequiresUser
 from .permissions import PermissionMode
 from .tdd_state_machine import InvalidTDDTransition
+
+# ── Plan-only tool whitelist (M1 P0) ──────────────────────────────────────────
+# When PermissionManager.mode == PLAN, the dispatcher rejects every tool not in
+# this set with PlanModeViolation — bypassing the RiskLevel-based filter in
+# PermissionManager (which is too coarse: e.g. `grep` defaults to MEDIUM and
+# would be wrongly blocked).  Plan transitions (enter/exit) are always allowed
+# so the LLM can enter AND exit the mode.  This is the Claude Code behaviour:
+# a hard, dispatcher-level gate rather than LLM-impersonated docstrings.
+
+PLAN_ONLY_TOOLS: frozenset = frozenset(
+    {
+        # ── file / code reads ──────────────────────────────────────────
+        "read_file",
+        "list_files",
+        "grep",
+        "glob",
+        "code_search",
+        "find_references",
+        "get_call_graph",
+        "lsp",
+        # ── spec / docs reads ─────────────────────────────────────────
+        "get_spec_status",
+        "spec_status",
+        "verify_against_spec",
+        "verify_spec_acs",
+        "web_search",
+        "web_fetch",
+        # ── project introspection ─────────────────────────────────────
+        "git",  # the LLM can use `git status / log / diff / branch --list`
+        "list_skills",
+        "search_skills",
+        "semantic_search",
+        "audit_query",
+        "metrics_query",
+        "logs_query",
+        "list_sub_agents",
+        # ── plan-mode transitions (always allowed) ────────────────────
+        "enter_plan_mode",
+        "exit_plan_mode",
+        # ── forward-compat: M2 will add ask_user_question here ───────
+    }
+)
+
+
+class PlanModeViolation(Exception):
+    """Raised by PlanToolFilter when a tool is called outside the plan-only whitelist.
+
+    ToolDispatcher catches this in stage 1 (hook payload) and converts it into
+    a ToolResult the LLM can adapt to.  Tests can also assert the exception
+    directly when the filter is invoked in isolation.
+    """
+
+    def __init__(self, tool_name: str, mode: str):
+        self.tool_name = tool_name
+        self.mode = mode
+        super().__init__(f"Plan mode blocks {tool_name}: not in plan-only whitelist")
 
 
 def _format_confirm_message(tool_name: str, args: dict) -> str:
@@ -116,6 +173,32 @@ class ToolDispatcher:
                 serial.append(tc)
         return concurrent, serial
 
+    def _check_plan_whitelist(self, func_name: str) -> None:
+        """Stage 0: dispatcher-level read-only gate for plan mode.
+
+        In plan mode, only the tools in ``PLAN_ONLY_TOOLS`` are permitted.
+        Anything else is rejected with ``PlanModeViolation`` BEFORE we
+        spend cycles on hooks, audit, dual-review, or OTel spans.
+
+        Why dispatcher-level rather than relying on
+        ``PermissionManager.check()``:
+          * The RiskLevel-based filter (``RiskLevel.LOW`` for read tools)
+            is too coarse — ``grep``/``glob``/``web_search`` default to
+            ``MEDIUM`` and would be wrongly blocked.
+          * Docstring-level instructions ("you cannot write files") are
+            honoured only by LLM goodwill. The dispatcher is the
+            fail-closed enforcement point.
+
+        Plan-mode transitions (``enter_plan_mode``/``exit_plan_mode``) are
+        included in the whitelist so the LLM can both enter AND exit the
+        mode without bouncing through defaults.
+        """
+        if self._permissions.mode != PermissionMode.PLAN:
+            return
+        if func_name in PLAN_ONLY_TOOLS:
+            return
+        raise PlanModeViolation(func_name, self._permissions.mode.value)
+
     async def execute(
         self,
         func_name: str,
@@ -129,6 +212,22 @@ class ToolDispatcher:
         stage failures are converted into tool errors so the LLM can adapt
         rather than the whole run crashing.
         """
+        # Stage 0: PlanToolFilter (M1 P0) — hard read-only gate.
+        # Reject any tool outside PLAN_ONLY_TOOLS when in plan mode. Runs
+        # BEFORE the BEFORE_TOOL_EXECUTION hook so dual-review / audit /
+        # OTel don't pay the cost for calls the dispatcher is going to
+        # block anyway. The hook layer remains the right place for
+        # plan-mode-aware observability (it sees the ToolResult we return).
+        try:
+            self._check_plan_whitelist(func_name)
+        except PlanModeViolation as exc:
+            return ToolResult(
+                success=False,
+                content="",
+                error=str(exc),
+                metadata={"plan_blocked": True, "tool": func_name},
+            )
+
         # Stage 1: BEFORE_TOOL_EXECUTION hook (Ralph, dual-review, audit, OTel)
         tool_payload = {"tool": func_name, "args": args, "tc_id": tc_id}
         try:

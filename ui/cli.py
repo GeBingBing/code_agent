@@ -882,6 +882,7 @@ class SimpleCLI:
         self.file_context = []
         self._last_engine = None
         self._last_plan = None
+        self._last_plan_persistence_path = None  # M1 P0: tracked so /plan edit can rewrite
         self._router = None
         self._should_quit = False
         self._last_todo = None  # Last TodoWrite state for persistent panel
@@ -1778,6 +1779,13 @@ class SimpleCLI:
                             print(f"  {RED}✗{RESET} {event.get('error')[:120]}")
                     elif ok and tool_name == "exit_plan_mode" and event.get("content"):
                         plan_content = event.get("content", "")
+                        # M1 P0: capture the structured metadata so
+                        # /plan edit can persist changes back to the
+                        # same file. The ExitPlanModeTool now returns
+                        # {plan_id, persistence_path, ...} in metadata.
+                        meta = event.get("metadata") or {}
+                        if meta.get("persistence_path"):
+                            self._last_plan_persistence_path = meta["persistence_path"]
                         if RICH_AVAILABLE:
                             from rich.box import ROUNDED
                             from rich.panel import Panel
@@ -1939,7 +1947,27 @@ def main():
     parser.add_argument("-h", "--help", dest="show_help", action="store_true")
     parser.add_argument("--tui", dest="tui_mode", action="store_true", help="Launch Textual TUI")
     parser.add_argument("--cli", dest="cli_mode", action="store_true", help="Use raw CLI (default)")
-    parser.add_argument("--resume", dest="resume", action="store_true", help="Resume last session")
+    # M1 P0: --resume now accepts an optional plan_id. With no argument it
+    # resumes the latest SESSION (legacy behaviour, unchanged). With a
+    # plan_id argument it resumes a saved PLAN file from
+    # ~/.coding-agent/plans/<plan_id>.md and skips the planning phase.
+    parser.add_argument(
+        "--resume",
+        dest="resume",
+        nargs="?",
+        const="__latest_session__",
+        default=None,
+        help="Resume last session (no arg) or a saved plan (--resume <plan_id>)",
+    )
+    parser.add_argument(
+        "--plan",
+        dest="plan_mode",
+        action="store_true",
+        help="Enter plan mode (read-only) on launch. Equivalent to AGENT_MODE=plan",
+    )
+    parser.add_argument(
+        "--list-plans", dest="list_plans", action="store_true", help="List saved plan files"
+    )
     parser.add_argument(
         "--evaluate",
         dest="evaluate",
@@ -1950,6 +1978,20 @@ def main():
         "--list-sessions", dest="list_sessions", action="store_true", help="List saved sessions"
     )
     args, _ = parser.parse_known_args()
+
+    # M1 P0: --plan flag is equivalent to AGENT_MODE=plan. Set BEFORE the
+    # engine reads it so any subsequent code path sees the right mode.
+    # We touch os.environ (in addition to the engine's mode arg) so the
+    # child processes spawned by the dispatcher also inherit it.
+    if args.plan_mode or os.environ.get("CODING_AGENT_PLAN") == "1":
+        os.environ["AGENT_MODE"] = "plan"
+        args.plan_mode = True  # keep flag consistent for downstream code
+
+    # M1 P0: env var shortcut for --resume <plan_id> (handy in CI / scripts
+    # where a CLI arg would be awkward). CLI arg wins if both are set.
+    env_resume = os.environ.get("CODING_AGENT_RESUME_PLAN")
+    if env_resume and args.resume is None:
+        args.resume = env_resume
 
     if args.tui_mode:
         from ui.tui import run_tui
@@ -1970,29 +2012,73 @@ def main():
                 print(f"  {s['_file']}  {updated}  {task_preview}")
         return
 
-    if args.resume:
-        from agent.core.session import get_latest_session
+    if args.list_plans:
+        from agent.tools.plan_mode import _plan_dir
 
-        s = get_latest_session()
-        if not s:
-            print("No session to resume.")
-            return
-        task = s.get("task", "")
-        print(f"Resuming: {task[:80]}")
-        # P12-3: also pull context from the task state machine (carries
-        # completed_steps, known_issues, current_step across crashes).
-        try:
-            from agent.core.task_state_machine import TaskStateMachine
-
-            tsm = TaskStateMachine()
-            reminder = tsm.format_reminder()
-            if reminder:
-                args.task = f"[Resumed session]\n{task}\n\n{reminder}"
+        plan_dir = _plan_dir()
+        if not plan_dir.exists():
+            print("No saved plans.")
+        else:
+            files = sorted(plan_dir.glob("*.md"), reverse=True)
+            if not files:
+                print("No saved plans.")
             else:
+                for f in files:
+                    print(f"  {f.name}")
+        return
+
+    if args.resume is not None:
+        # Two resume modes:
+        #   --resume                  → latest SESSION (P12-3 behaviour)
+        #   --resume <plan_id>        → a specific saved PLAN
+        if args.resume == "__latest_session__":
+            from agent.core.session import get_latest_session
+
+            s = get_latest_session()
+            if not s:
+                print("No session to resume.")
+                return
+            task = s.get("task", "")
+            print(f"Resuming: {task[:80]}")
+            # P12-3: also pull context from the task state machine (carries
+            # completed_steps, known_issues, current_step across crashes).
+            try:
+                from agent.core.task_state_machine import TaskStateMachine
+
+                tsm = TaskStateMachine()
+                reminder = tsm.format_reminder()
+                if reminder:
+                    args.task = f"[Resumed session]\n{task}\n\n{reminder}"
+                else:
+                    args.task = f"[Resumed session]\n{task}"
+            except Exception:
                 args.task = f"[Resumed session]\n{task}"
-        except Exception:
-            args.task = f"[Resumed session]\n{task}"
-        # Fall through to single-task mode below
+            # Fall through to single-task mode below
+        else:
+            # --resume <plan_id>: read the saved plan file and re-enter
+            # the run flow with the plan injected as context. The engine
+            # sees `args.task` containing the approved plan and skips
+            # the planning phase (we also pre-flip the engine out of
+            # plan mode so execute-time tools are allowed).
+            from agent.tools.plan_mode import _plan_dir
+
+            plan_path = _plan_dir() / f"{args.resume}.md"
+            if not plan_path.exists():
+                print(f"No saved plan with id: {args.resume}")
+                print(f"  (looked at {plan_path})")
+                print("Run `coding-agent --list-plans` to see available plans.")
+                return
+            plan_body = plan_path.read_text(encoding="utf-8")
+            # Flip out of plan mode so execute-phase tools are allowed.
+            os.environ["AGENT_MODE"] = "default"
+            print(f"Resuming plan: {args.resume}")
+            args.task = (
+                f"[Resumed plan: {args.resume}]\n\n"
+                f"Approved plan to execute:\n\n{plan_body}\n\n"
+                f"Proceed to implement the plan above. Skip the planning "
+                f"phase — the plan is already approved."
+            )
+            # Fall through to single-task mode below
 
     if args.task:
         # Single task mode — delegate to _run_async for set_debug(False) +
@@ -2013,11 +2099,15 @@ def main():
 
     if args.show_help or not sys.stdin.isatty():
         print_banner()
-        print(f"{DIM}Usage: coding-agent [task] [-p] [--help]")
+        print(f"{DIM}Usage: coding-agent [task] [-p] [--help] [--plan] [--resume [plan_id]]")
         print("Examples:")
-        print("  coding-agent                    # Interactive mode")
-        print('  coding-agent "write hello.py"  # Single task')
-        print('  coding-agent -p "task"         # Print result only')
+        print("  coding-agent                              # Interactive mode")
+        print('  coding-agent "write hello.py"             # Single task')
+        print('  coding-agent -p "task"                     # Print result only')
+        print('  coding-agent --plan "implement feature X"  # Start in plan mode')
+        print("  coding-agent --resume                      # Resume last session")
+        print("  coding-agent --resume plan-foo-123-abc     # Resume saved plan")
+        print("  coding-agent --list-plans                 # List saved plans")
         print()
         print(f"{BOLD}Slash commands:{RESET}")
         print(f"  {CYAN}/help{RESET}             Show available commands")

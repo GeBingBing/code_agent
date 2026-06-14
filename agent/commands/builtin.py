@@ -9,6 +9,7 @@ ctx provides: engine, cli, model, provider, mode, workspace
 import asyncio
 import os
 from datetime import datetime
+from pathlib import Path
 
 from .base import SlashCommand, registry
 
@@ -65,36 +66,128 @@ registry._commands["clear"]._handler = _handle_clear
 # ── /plan ───────────────────────────────────────────────────────────────────
 
 
+# Fields that /plan edit is allowed to mutate. Anything else is rejected
+# to keep the command surface tight — wildcards would let a typo silently
+# create a new attribute.
+_PLAN_EDITABLE_FIELDS = ("description", "tool_hint", "expected_outcome")
+
+
+def _apply_plan_edit(plan, step_num: int, field: str, new_value: str) -> tuple[bool, str]:
+    """Mutate ``plan.steps[step_num-1].<field> = new_value``.
+
+    Returns (ok, message). The caller decides how to render the message.
+
+    Why return a tuple instead of raising: the slash-command handler is
+    already a string-in / string-out pipeline, and tests want to assert on
+    both branches without dealing with exceptions.
+    """
+    if not (1 <= step_num <= len(plan.steps)):
+        return False, f"Step {step_num} does not exist (plan has {len(plan.steps)} steps)."
+
+    if field not in _PLAN_EDITABLE_FIELDS:
+        allowed = ", ".join(_PLAN_EDITABLE_FIELDS)
+        return False, f"Field '{field}' is not editable. Allowed: {allowed}."
+
+    step = plan.steps[step_num - 1]
+    setattr(step, field, new_value)
+    return True, f"Step {step_num}.{field} updated to: {new_value}"
+
+
 async def _handle_plan(args: str, ctx: dict) -> str:
     """Switch to or manage plan mode."""
     engine = ctx.get("engine")
-    sub = args.strip().lower()
+    sub = args.strip()
+    # Lowercase only the leading token so we don't mangle user content
+    # like "edit 3 Implement FEATURE X" (description case matters).
+    first_token, _, rest = sub.partition(" ")
+    first_token_lc = first_token.lower()
 
-    if sub == "accept":
+    if first_token_lc == "accept":
         # Accept pending plan (only meaningful after plan is generated)
         os.environ["AGENT_MODE"] = "default"
         if engine:
             engine.permissions.mode = type(engine.permissions.mode)("default")
         return f"{_green('✓')} Plan accepted. Execute with next task or switch mode: {_dim('/mode default')}"
 
-    if sub == "reject":
+    if first_token_lc == "reject":
         return f"{_dim('Plan discarded. Type a new task to re-plan.')}"
 
-    if sub.startswith("edit"):
-        # /plan edit 3 new description
-        parts = sub.split(maxsplit=2)
-        if len(parts) >= 3:
-            step_num = int(parts[1]) if parts[1].isdigit() else 0
-            new_desc = parts[2]
-            return f"{_green('✓')} Step {step_num} updated to: {new_desc}"
-        return f"Usage: {_dim('/plan edit <step> <new description>')}"
-
-    if sub == "show":
+    if first_token_lc == "show":
         # Show last plan if available
         cli = ctx.get("cli")
         if cli and cli._last_plan:
             return cli._last_plan.to_markdown()
         return f"{_dim('No plan yet. Type a task to generate one.')}"
+
+    if first_token_lc == "edit":
+        # Two forms are accepted:
+        #   /plan edit <N> <new description>           (legacy, free-form)
+        #   /plan edit <N> <field> <new value>         (structured)
+        # where <field> ∈ {description, tool_hint, expected_outcome}.
+        # The structured form takes precedence when the second token is a
+        # known field name; otherwise the second token is treated as the
+        # start of the description (legacy behaviour, preserved for users
+        # who learnt the original command in earlier versions).
+        cli = ctx.get("cli")
+        if not cli or not cli._last_plan:
+            return f"{_dim('No plan to edit. Generate one first.')}"
+        plan = cli._last_plan
+
+        # Split the args (rest) into up to 3 parts.
+        parts = rest.split(maxsplit=2) if rest else []
+        if len(parts) < 2:
+            return (
+                f"Usage: {_dim('/plan edit <step> <new description>')}\n"
+                f"       {_dim('/plan edit <step> <field> <new value>')}  "
+                f"(field ∈ {', '.join(_PLAN_EDITABLE_FIELDS)})"
+            )
+
+        try:
+            step_num = int(parts[0])
+        except ValueError:
+            return f"{_dim('First argument must be a step number.')}"
+
+        # Decide between legacy and structured form
+        if len(parts) == 2:
+            # Legacy: edit <N> <description>
+            field, new_value = "description", parts[1]
+        else:
+            candidate_field = parts[1].lower()
+            if candidate_field in _PLAN_EDITABLE_FIELDS:
+                field, new_value = candidate_field, parts[2]
+            else:
+                # Treat the entire tail as the description (preserves
+                # legacy behaviour for users with spaces in descriptions).
+                field, new_value = "description", " ".join(parts[1:])
+
+        ok, msg = _apply_plan_edit(plan, step_num, field, new_value)
+        if not ok:
+            return f"{_dim(msg)}"
+
+        # Re-persist to the on-disk file when we know which one. M2 will
+        # wire ExecutionPlan.plan_id properly; for now we just track via
+        # the CLI's last persistence_path (set by the ExitPlanModeTool
+        # metadata in the new design).
+        persistence_path = getattr(cli, "_last_plan_persistence_path", None)
+        if persistence_path and Path(persistence_path).exists():
+            try:
+                # Rewrite the body section under the existing frontmatter
+                body = plan.to_markdown()
+                existing = Path(persistence_path).read_text(encoding="utf-8")
+                if "\n---\n" in existing:
+                    head, _, _ = existing.partition("\n---\n")
+                    Path(persistence_path).write_text(
+                        head + "\n---\n\n" + body + "\n", encoding="utf-8"
+                    )
+                else:
+                    Path(persistence_path).write_text(body + "\n", encoding="utf-8")
+                return f"{_green('✓')} {msg}\n{_dim(f'Persisted to {persistence_path}')}"
+            except Exception as exc:
+                # Persistence is best-effort; the in-memory plan is updated
+                # regardless so the next /plan show reflects the change.
+                return f"{_green('✓')} {msg}\n{_dim(f'(disk write failed: {exc})')}"
+
+        return f"{_green('✓')} {msg}"
 
     # Default: switch to plan mode
     new_mode = "plan"
