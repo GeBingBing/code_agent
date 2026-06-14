@@ -1330,9 +1330,9 @@ class TestMainSingleTaskCleanup:
 
         cli.main()
 
-        assert len(captured) == 1, (
-            f"main() should call _run_async exactly once, got {len(captured)}"
-        )
+        assert (
+            len(captured) == 1
+        ), f"main() should call _run_async exactly once, got {len(captured)}"
 
     def test_main_does_not_use_raw_loop_close(self):
         """main() must not contain a raw loop.close() in its single-task branch."""
