@@ -77,6 +77,47 @@ def print_banner():
     print()
 
 
+# ── M4 P0: plan-approval auto-detect ─────────────────────────────────────
+# After LLM outputs a plan in plan mode, user says '是/需要/yes/ok'. The
+# LLM doesn't know to call exit_plan_mode and burns 30+ write attempts
+# in a loop. This detector catches the approval and auto-accepts the
+# plan BEFORE the LLM sees the message.
+_PLAN_APPROVAL_WORDS = frozenset({
+    "y", "yes", "ok", "okay", "do it", "go", "go ahead", "proceed",
+    "approve", "ship it", "lgtm", "sure", "yep", "yup", "yeah",
+    "confirm", "execute", "run it", "looks good",
+    "是", "好", "可以", "需要", "对", "行", "好的", "确认", "执行", "同意",
+    "是是", "做吧", "开始", "继续", "搞起", "干", "弄", "来", "上", "好哒", "好嘞",
+    "okk", "ja", "oui", "si",
+})
+
+
+def _looks_like_plan_approval(user_input: str) -> bool:
+    """True if the user's message is a clear plan-approval signal."""
+    s = user_input.strip().lower()
+    if not s or len(s) > 20:
+        return False
+    if "?" in s or "？" in s:
+        return False
+    if s.startswith("/"):
+        return False
+    if s in _PLAN_APPROVAL_WORDS:
+        return True
+    first_word = s.split(maxsplit=1)[0]
+    if first_word in _PLAN_APPROVAL_WORDS:
+        return True
+    return False
+
+
+def cli_has_pending_plan(cli) -> bool:
+    """True if the CLI has a plan awaiting user approval."""
+    plan = getattr(cli, "_last_plan", None)
+    if plan is None:
+        return False
+    status = getattr(plan, "status", "")
+    return status in ("pending", "confirmed", "")
+
+
 SPINNERS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 
@@ -1189,6 +1230,24 @@ class SimpleCLI:
                     self._print_session_total()
                     print(f"{DIM}Goodbye.{RESET}")
                     break
+
+                # ── M4 P0: auto-approve plan on user "yes" ──
+                if (
+                    self.engine
+                    and getattr(self.engine.permissions, "mode", None)
+                    and self.engine.permissions.mode.value == "plan"
+                    and cli_has_pending_plan(self)
+                    and _looks_like_plan_approval(user_input)
+                ):
+                    result = _run_async(self._handle_command("/plan accept"))
+                    print(f"{GREEN}✓ Auto-accepted plan (user said: {user_input!r}){RESET}")
+                    print(result)
+                    print()
+                    if self._should_quit:
+                        self._print_session_total()
+                        print(f"{DIM}Goodbye.{RESET}")
+                        break
+                    continue
 
                 # ── Slash command routing ──
                 if user_input.startswith("/"):
