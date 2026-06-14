@@ -93,6 +93,58 @@ def _apply_plan_edit(plan, step_num: int, field: str, new_value: str) -> tuple[b
     return True, f"Step {step_num}.{field} updated to: {new_value}"
 
 
+async def _handle_plan_from_spec(rest: str, ctx: dict) -> str:
+    """M2 P0: bridge SPECS.md → ExecutionPlan via SpecPlanAdapter.
+
+    Two modes:
+      * no phase_id argument → list eligible phases from SPECS.md
+      * phase_id argument → build the plan, stash it on cli._last_plan
+        so /plan show / /plan edit work on it
+    """
+    from agent.core.spec_plan_adapter import (
+        SpecPlanAdapterError,
+        from_spec,
+        list_eligible_phases,
+    )
+
+    cli = ctx.get("cli")
+    workspace = ctx.get("workspace") or "."
+    phase_id = rest.strip()
+
+    if not phase_id:
+        try:
+            eligible = list_eligible_phases(Path(workspace))
+        except Exception as exc:  # pragma: no cover
+            return f"{_dim(f'Failed to read SPECS.md: {exc}')}"
+        if not eligible:
+            return (
+                f"{_dim('No eligible phases in SPECS.md.')}\n"
+                f"{_dim('A phase is eligible when its status is planned or partial.')}"
+            )
+        lines = [f"{_green('Eligible phases:')} {', '.join(eligible)}"]
+        lines.append(
+            f"{_dim('Usage: /plan from-spec <phase_id>   e.g. /plan from-spec {eligible[0]}')}"
+        )
+        return "\n".join(lines)
+
+    try:
+        plan = from_spec(Path(workspace), phase_id)
+    except SpecPlanAdapterError as exc:
+        return f"{_dim(str(exc))}"
+
+    if cli is not None:
+        cli._last_plan = plan
+
+    pending = sum(1 for s in plan.steps if s.status != "done")
+    return (
+        f"{_green('✓')} Built plan from SPECS.md phase {phase_id}: "
+        f"{_bold(plan.title or plan.summary or plan.task)}\n"
+        f"  {len(plan.steps)} steps ({pending} pending), "
+        f"{len(plan.acceptance_criteria)} ACs, plan_id={_cyan(plan.plan_id)}\n"
+        f"  {_dim('Use /plan show to view, /plan edit to refine, /plan accept to execute.')}"
+    )
+
+
 async def _handle_plan(args: str, ctx: dict) -> str:
     """Switch to or manage plan mode."""
     engine = ctx.get("engine")
@@ -118,6 +170,10 @@ async def _handle_plan(args: str, ctx: dict) -> str:
         if cli and cli._last_plan:
             return cli._last_plan.to_markdown()
         return f"{_dim('No plan yet. Type a task to generate one.')}"
+
+    if first_token_lc == "from-spec":
+        # M2 P0: bridge SPECS.md → ExecutionPlan via SpecPlanAdapter.
+        return await _handle_plan_from_spec(rest, ctx)
 
     if first_token_lc == "edit":
         # Two forms are accepted:
