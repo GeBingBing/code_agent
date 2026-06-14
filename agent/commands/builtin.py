@@ -186,7 +186,15 @@ async def _handle_plan_from_spec(rest: str, ctx: dict) -> str:
 
 
 def _default_plan_refiner(plan, focus):
-    return plan.to_markdown()
+    """No-op refiner — returns the plan as a clean checklist for round-trip.
+
+    Uses ``- [ ]`` format so ``from_llm_response`` parses it correctly.
+    This is a pure pass-through — no LLM call, no structure changes.
+    """
+    lines = [f"## Plan: {plan.summary or plan.task}", ""]
+    for s in plan.steps:
+        lines.append(f"- [ ] {s.description}")
+    return "\n".join(lines)
 
 
 async def _handle_plan_refine(rest, ctx):

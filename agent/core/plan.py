@@ -384,10 +384,22 @@ class ExecutionPlan:
 
         for line in body_text.split("\n"):
             stripped = line.strip()
-            match = re.match(r"-\s*\[([ xX])\]\s+(.+)", stripped)
+            # Match checklist items with standard checkboxes OR the
+            # unicode status icons that to_markdown() emits (○ ◉ ✓ − ✗).
+            # This makes the no-op refiner round-trip correctly.
+            match = re.match(
+                r"-\s*\["
+                r"(?:[ xX]|[○◉✓−✗])"
+                r"\]\s+(.+)",
+                stripped,
+            )
             if match:
                 step_id += 1
-                desc = match.group(2).strip()
+                desc = match.group(1).strip()
+                # Strip bold markers from the description
+                desc = re.sub(r"\*\*(.+?)\*\*", r"\1", desc)
+                # Strip trailing tags like `tdd:red,size:S`
+                desc = re.sub(r"\s*`[^`]+`\s*$", "", desc)
                 tool_hint = ""
                 tool_match = re.search(r"`(\w+)`", desc)
                 if tool_match:
@@ -396,7 +408,7 @@ class ExecutionPlan:
                 steps.append(
                     PlanStep(
                         id=step_id,
-                        description=desc,
+                        description=desc.strip(),
                         tool_hint=tool_hint,
                     )
                 )
