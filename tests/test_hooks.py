@@ -215,7 +215,7 @@ class TestInspection:
 class TestStandardHookConstants:
     def test_all_standard_hooks_in_constant(self):
         """All 12 standard hooks should be defined as constants (PR-14: +1)."""
-        assert len(STANDARD_HOOKS) == 12
+        assert len(STANDARD_HOOKS) == 17
 
     def test_critical_hooks_present(self):
         """The most commonly used hooks must be exported."""

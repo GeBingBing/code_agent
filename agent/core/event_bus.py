@@ -15,6 +15,14 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+PLAN_GENERATE_START = "plan_generate_start"
+PLAN_GENERATE_COMPLETE = "plan_generate_complete"
+PLAN_APPROVE_REQUESTED = "plan_approve_requested"
+PLAN_APPROVE = "plan_approve"
+PLAN_REJECT = "plan_reject"
+PLAN_REFINE_EVENT = "plan_refine"
+PLAN_RESUME_EVENT = "plan_resume"
+
 
 @dataclass
 class Event:

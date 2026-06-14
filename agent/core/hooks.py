@@ -56,6 +56,12 @@ AFTER_COMPACT = "after_compact"  # payload: {"summary": str}
 ON_SESSION_START = "on_session_start"  # payload: {"session_id": str, "task": str|None}
 ON_SESSION_END = "on_session_end"  # payload: {"final_state": dict, "result": Any}
 
+BEFORE_PLAN_GENERATE = "before_plan_generate"
+AFTER_PLAN_GENERATE = "after_plan_generate"
+BEFORE_PLAN_APPROVE = "before_plan_approve"
+AFTER_PLAN_APPROVE = "after_plan_approve"
+ON_PLAN_REJECT = "on_plan_reject"
+
 
 # All standard hook names — useful for listing in /status or docs
 STANDARD_HOOKS = frozenset(
@@ -72,6 +78,11 @@ STANDARD_HOOKS = frozenset(
         AFTER_COMPACT,
         ON_SESSION_START,
         ON_SESSION_END,
+        BEFORE_PLAN_GENERATE,
+        AFTER_PLAN_GENERATE,
+        BEFORE_PLAN_APPROVE,
+        AFTER_PLAN_APPROVE,
+        ON_PLAN_REJECT,
     }
 )
 

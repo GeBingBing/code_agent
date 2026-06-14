@@ -142,7 +142,7 @@ class TestHookConstants:
         """PR-14: ON_SESSION_START was added → 11 → 12."""
         from agent.core.hooks import STANDARD_HOOKS
 
-        assert len(STANDARD_HOOKS) == 12
+        assert len(STANDARD_HOOKS) == 17
 
     def test_hooks_exported_from_core(self):
         from agent.core import (
