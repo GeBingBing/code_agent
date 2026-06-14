@@ -101,6 +101,7 @@ async def _handle_plan_from_spec(rest: str, ctx: dict) -> str:
       * phase_id argument → build the plan, stash it on cli._last_plan
         so /plan show / /plan edit work on it
     """
+    from agent.core.plan_review import review_plan
     from agent.core.spec_plan_adapter import (
         SpecPlanAdapterError,
         from_spec,
@@ -132,6 +133,12 @@ async def _handle_plan_from_spec(rest: str, ctx: dict) -> str:
     except SpecPlanAdapterError as exc:
         return f"{_dim(str(exc))}"
 
+    # M2 P0: run the static plan review and surface its summary inline.
+    # Full report is attached to plan.review_notes so /plan show renders
+    # it. We don't block on reject findings — user retains final say.
+    report = review_plan(plan)
+    plan.review_notes = report.to_markdown()
+
     if cli is not None:
         cli._last_plan = plan
 
@@ -141,6 +148,7 @@ async def _handle_plan_from_spec(rest: str, ctx: dict) -> str:
         f"{_bold(plan.title or plan.summary or plan.task)}\n"
         f"  {len(plan.steps)} steps ({pending} pending), "
         f"{len(plan.acceptance_criteria)} ACs, plan_id={_cyan(plan.plan_id)}\n"
+        f"  {_dim(f'Review: {report.summary}')}\n"
         f"  {_dim('Use /plan show to view, /plan edit to refine, /plan accept to execute.')}"
     )
 

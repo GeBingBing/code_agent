@@ -15,13 +15,10 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from agent.commands.builtin import _handle_plan
-from agent.core.spec_plan_adapter import from_spec as spec_from_spec
-
 
 SAMPLE_SPEC = """\
 # Project Spec
@@ -86,9 +83,7 @@ class TestFromSpecList:
 class TestFromSpecBuilds:
     def test_builds_plan_for_valid_phase(self, workspace_with_spec):
         cli = _FakeCli()
-        result = asyncio.run(
-            _handle_plan("from-spec P1", _ctx(workspace_with_spec, cli))
-        )
+        result = asyncio.run(_handle_plan("from-spec P1", _ctx(workspace_with_spec, cli)))
         # Summary line present
         assert "Built plan" in result
         # Plan stashed on CLI
@@ -101,9 +96,7 @@ class TestFromSpecBuilds:
         assert cli._last_plan.plan_id in result
 
     def test_unknown_phase_renders_dimmed_error(self, workspace_with_spec):
-        result = asyncio.run(
-            _handle_plan("from-spec P99", _ctx(workspace_with_spec))
-        )
+        result = asyncio.run(_handle_plan("from-spec P99", _ctx(workspace_with_spec)))
         # Error path — dimmed (no green check)
         assert "P99" in result
         # Lists available phases
@@ -112,9 +105,7 @@ class TestFromSpecBuilds:
     def test_phase_with_no_acs_still_builds(self, workspace_with_spec):
         # All of P0's ACs are done — the plan still builds, with all steps
         # marked status="done" (per the adapter contract)
-        result = asyncio.run(
-            _handle_plan("from-spec P0", _ctx(workspace_with_spec))
-        )
+        result = asyncio.run(_handle_plan("from-spec P0", _ctx(workspace_with_spec)))
         assert "Built plan" in result
 
     def test_plan_id_is_stable_across_repeated_calls(self, workspace_with_spec):
@@ -131,6 +122,16 @@ class TestFromSpecBuilds:
         assert first_id.startswith("spec-P1-")
         assert second_id.startswith("spec-P1-")
         # Both look like spec-P1-<ts>-<uuid>
+
+    def test_review_summary_appears_in_output(self, workspace_with_spec):
+        """M2 P0: review_plan runs after SpecPlanAdapter and its summary
+        appears in the /plan from-spec output. The full report is
+        attached to plan.review_notes so /plan show renders it."""
+        cli = _FakeCli()
+        result = asyncio.run(_handle_plan("from-spec P1", _ctx(workspace_with_spec, cli)))
+        assert "Review:" in result
+        assert "/100" in result
+        assert "## Review" in cli._last_plan.review_notes
 
 
 # ── Integration with /plan show and /plan edit ──────────────────────────
@@ -152,7 +153,9 @@ class TestFromSpecIntegratesWithOtherPlanCommands:
         # Edit step 1's description via the M1 path — proves the two
         # flows share the same in-memory plan
         result = asyncio.run(
-            _handle_plan("edit 1 new description from /plan from-spec", _ctx(workspace_with_spec, cli))
+            _handle_plan(
+                "edit 1 new description from /plan from-spec", _ctx(workspace_with_spec, cli)
+            )
         )
         assert "Step 1.description updated" in result
         assert cli._last_plan.steps[0].description == "new description from /plan from-spec"
@@ -166,9 +169,7 @@ class TestFromSpecIntegratesWithOtherPlanCommands:
         # in-memory). So persistence_path remains None and the edit is
         # in-memory only. Verify that.
         assert cli._last_plan_persistence_path is None
-        result = asyncio.run(
-            _handle_plan("edit 1 only in memory", _ctx(workspace_with_spec, cli))
-        )
+        result = asyncio.run(_handle_plan("edit 1 only in memory", _ctx(workspace_with_spec, cli)))
         assert "Persisted" not in result
         assert "updated" in result.lower()
 
@@ -186,9 +187,7 @@ class TestFromSpecErrorPaths:
     def test_works_without_cli(self, workspace_with_spec):
         """If the CLI is None (e.g. invoked from a non-CLI context), the
         command should still succeed — just skip the stash step."""
-        result = asyncio.run(
-            _handle_plan("from-spec P1", _ctx(workspace_with_spec, cli=None))
-        )
+        result = asyncio.run(_handle_plan("from-spec P1", _ctx(workspace_with_spec, cli=None)))
         assert "Built plan" in result
         # No crash, no traceback
 
