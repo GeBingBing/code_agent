@@ -388,9 +388,7 @@ class ExecutionPlan:
             # unicode status icons that to_markdown() emits (○ ◉ ✓ − ✗).
             # This makes the no-op refiner round-trip correctly.
             match = re.match(
-                r"-\s*\["
-                r"(?:[ xX]|[○◉✓−✗])"
-                r"\]\s+(.+)",
+                r"-\s*\[" r"(?:[ xX]|[○◉✓−✗])" r"\]\s+(.+)",
                 stripped,
             )
             if match:
