@@ -549,47 +549,21 @@ def _clear_two_lines():
 
 
 async def _async_input(prompt: str) -> str:
-    """Read a line from stdin asynchronously — cancellable via Ctrl+C.
+    """Read a line from stdin asynchronously.
 
-    Uses prompt_toolkit when available (true async coroutine, signal-safe).
-    Falls back to run_in_executor(input, ...) only when no terminal is
-    attached (e.g. piped stdin), where cancellation doesn't matter.
+    Uses ``run_in_executor(input, ...)`` — the simplest path that does
+    NOT create a second prompt_toolkit ``PromptSession``.  The main CLI
+    loop already owns a PromptSession on the terminal; nesting a second
+    one inside a confirm dialog causes the two sessions to fight over
+    stdin — the user sees the prompt but keyboard input is silently
+    swallowed by the outer session.
 
     Returns:
         Stripped user input. Empty string on Ctrl+D or Ctrl+C.
     """
-    # Piped stdin / no TTY — use the executor (cancellation not relevant)
-    if not sys.stdin.isatty():
-        try:
-            loop = asyncio.get_event_loop()
-            return (await loop.run_in_executor(None, lambda: input(prompt))).strip()
-        except (EOFError, KeyboardInterrupt):
-            return ""
-
-    # Interactive terminal — prefer prompt_toolkit for clean cancellation
     try:
-        from prompt_toolkit import PromptSession
-        from prompt_toolkit.output import DummyOutput
-    except ImportError:
-        # No prompt_toolkit — fall back to executor (with the original leak)
-        try:
-            loop = asyncio.get_event_loop()
-            return (await loop.run_in_executor(None, lambda: input(prompt))).strip()
-        except (EOFError, KeyboardInterrupt):
-            return ""
-
-    # When stdout is not a TTY (e.g. piped), DummyOutput avoids prompt_toolkit
-    # trying to manage a terminal it doesn't own.
-    output = None
-    try:
-        if not sys.stdout.isatty():
-            output = DummyOutput()
-    except Exception:
-        output = None
-
-    session = PromptSession(output=output) if output else PromptSession()
-    try:
-        return (await session.prompt_async(prompt)).strip()
+        loop = asyncio.get_event_loop()
+        return (await loop.run_in_executor(None, lambda: input(prompt))).strip()
     except (EOFError, KeyboardInterrupt):
         return ""
 
