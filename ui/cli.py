@@ -82,14 +82,54 @@ def print_banner():
 # LLM doesn't know to call exit_plan_mode and burns 30+ write attempts
 # in a loop. This detector catches the approval and auto-accepts the
 # plan BEFORE the LLM sees the message.
-_PLAN_APPROVAL_WORDS = frozenset({
-    "y", "yes", "ok", "okay", "do it", "go", "go ahead", "proceed",
-    "approve", "ship it", "lgtm", "sure", "yep", "yup", "yeah",
-    "confirm", "execute", "run it", "looks good",
-    "是", "好", "可以", "需要", "对", "行", "好的", "确认", "执行", "同意",
-    "是是", "做吧", "开始", "继续", "搞起", "干", "弄", "来", "上", "好哒", "好嘞",
-    "okk", "ja", "oui", "si",
-})
+_PLAN_APPROVAL_WORDS = frozenset(
+    {
+        "y",
+        "yes",
+        "ok",
+        "okay",
+        "do it",
+        "go",
+        "go ahead",
+        "proceed",
+        "approve",
+        "ship it",
+        "lgtm",
+        "sure",
+        "yep",
+        "yup",
+        "yeah",
+        "confirm",
+        "execute",
+        "run it",
+        "looks good",
+        "是",
+        "好",
+        "可以",
+        "需要",
+        "对",
+        "行",
+        "好的",
+        "确认",
+        "执行",
+        "同意",
+        "是是",
+        "做吧",
+        "开始",
+        "继续",
+        "搞起",
+        "干",
+        "弄",
+        "来",
+        "上",
+        "好哒",
+        "好嘞",
+        "okk",
+        "ja",
+        "oui",
+        "si",
+    }
+)
 
 
 def _looks_like_plan_approval(user_input: str) -> bool:
