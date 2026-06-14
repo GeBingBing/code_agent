@@ -30,7 +30,6 @@ from agent.core.spec_plan_adapter import (
 )
 from agent.core.tdd_state_machine import TDDState
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 
@@ -74,8 +73,7 @@ class TestListEligiblePhases:
         """A phase marked with ✅ should be excluded — it's read-only."""
         spec = tmp_path / "SPECS.md"
         spec.write_text(
-            "## Phase 0: Done ✅\n- [x] done thing\n"
-            "## Phase 1: Active 🔜\n- [ ] todo thing\n",
+            "## Phase 0: Done ✅\n- [x] done thing\n" "## Phase 1: Active 🔜\n- [ ] todo thing\n",
             encoding="utf-8",
         )
         phases = list_eligible_phases(tmp_path)
@@ -101,9 +99,9 @@ class TestFromSpecHappyPath:
         plan = from_spec(workspace_with_spec, "P1")
         # ACs are auto-numbered P1-1, P1-2, P1-3
         for step, expected_id in zip(plan.steps, ["P1-1", "P1-2", "P1-3"]):
-            assert expected_id in step.description, (
-                f"Step {step.id} should reference AC {expected_id}: {step.description}"
-            )
+            assert (
+                expected_id in step.description
+            ), f"Step {step.id} should reference AC {expected_id}: {step.description}"
 
     def test_plan_id_format(self, workspace_with_spec):
         plan = from_spec(workspace_with_spec, "P1")
@@ -189,9 +187,7 @@ class TestFromSpecErrors:
 
 class TestFromSpecMetadata:
     def test_parent_plan_id_round_trips(self, workspace_with_spec):
-        plan = from_spec(
-            workspace_with_spec, "P1", parent_plan_id="spec-P0-1700000000-abc123"
-        )
+        plan = from_spec(workspace_with_spec, "P1", parent_plan_id="spec-P0-1700000000-abc123")
         assert plan.parent_plan_id == "spec-P0-1700000000-abc123"
 
     def test_default_parent_plan_id_empty(self, workspace_with_spec):
@@ -218,9 +214,7 @@ class TestFromSpecFallbacks:
         # A phase that has plain list items (raw_tasks) but no ACs
         spec = tmp_path / "SPECS.md"
         spec.write_text(
-            "## Phase 5: Tasks-Only Phase\n"
-            "- Plain task one\n"
-            "- Plain task two with detail\n",
+            "## Phase 5: Tasks-Only Phase\n" "- Plain task one\n" "- Plain task two with detail\n",
             encoding="utf-8",
         )
         plan = from_spec(tmp_path, "P5")
