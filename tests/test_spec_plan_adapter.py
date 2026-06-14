@@ -16,13 +16,11 @@ These pin down the bridge from SPECS.md → ExecutionPlan:
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from agent.core.plan import ExecutionPlan, PlanStep
+from agent.core.plan import ExecutionPlan
 from agent.core.spec_plan_adapter import (
     SpecPlanAdapterError,
     from_spec,
@@ -98,7 +96,7 @@ class TestFromSpecHappyPath:
     def test_step_descriptions_match_ac_ids(self, workspace_with_spec):
         plan = from_spec(workspace_with_spec, "P1")
         # ACs are auto-numbered P1-1, P1-2, P1-3
-        for step, expected_id in zip(plan.steps, ["P1-1", "P1-2", "P1-3"]):
+        for step, expected_id in zip(plan.steps, ["P1-1", "P1-2", "P1-3"], strict=False):
             assert (
                 expected_id in step.description
             ), f"Step {step.id} should reference AC {expected_id}: {step.description}"
@@ -124,7 +122,7 @@ class TestFromSpecHappyPath:
     def test_acceptance_criteria_mirrored(self, workspace_with_spec):
         plan = from_spec(workspace_with_spec, "P1")
         assert len(plan.acceptance_criteria) == 3
-        for ac, step in zip(plan.acceptance_criteria, plan.steps):
+        for ac, step in zip(plan.acceptance_criteria, plan.steps, strict=False):
             # Each AC's id appears in the step description
             assert ac.id in step.description
             # Each AC has a description
@@ -270,7 +268,7 @@ class TestAdapterRoundTrips:
         assert len(restored.steps) == len(plan.steps)
         assert len(restored.acceptance_criteria) == len(plan.acceptance_criteria)
         # TDD phase round-trips (it lives in a step field)
-        for s, rs in zip(plan.steps, restored.steps):
+        for s, rs in zip(plan.steps, restored.steps, strict=False):
             assert s.tdd_phase == rs.tdd_phase
             assert s.verify_command == rs.verify_command
             assert s.estimated_complexity == rs.estimated_complexity
