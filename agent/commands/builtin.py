@@ -11,7 +11,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from ..core.plan import ExecutionPlan
 from .base import SlashCommand, registry
 
 # ── Helper ──────────────────────────────────────────────────────────────────
@@ -108,6 +107,7 @@ def _emit_plan_event(ctx, event_type, **payload):
     if hooks:
         try:
             import asyncio as _aio
+
             _aio.ensure_future(hooks.execute(event_type, payload))
         except Exception:
             pass
@@ -163,8 +163,13 @@ async def _handle_plan_from_spec(rest: str, ctx: dict) -> str:
         cli._last_plan = plan
 
     _emit_plan_event(ctx, "plan_generate_start", plan_id=plan.plan_id, mode="spec")
-    _emit_plan_event(ctx, "plan_generate_complete", plan_id=plan.plan_id,
-                     step_count=len(plan.steps), ac_count=len(plan.acceptance_criteria))
+    _emit_plan_event(
+        ctx,
+        "plan_generate_complete",
+        plan_id=plan.plan_id,
+        step_count=len(plan.steps),
+        ac_count=len(plan.acceptance_criteria),
+    )
 
     pending = sum(1 for s in plan.steps if s.status != "done")
     return (
@@ -177,8 +182,8 @@ async def _handle_plan_from_spec(rest: str, ctx: dict) -> str:
     )
 
 
-
 # /plan refine
+
 
 def _default_plan_refiner(plan, focus):
     return plan.to_markdown()
@@ -187,14 +192,15 @@ def _default_plan_refiner(plan, focus):
 async def _handle_plan_refine(rest, ctx):
     from agent.core.plan_review import review_plan
     from agent.ui.plan_renderer import PlainTextRenderer
+
     cli = ctx.get("cli")
     focus = rest.strip()
     if not cli or not cli._last_plan:
-        return f"\033[2mNo plan to refine. Build one first.\033[0m"
+        return "\033[2mNo plan to refine. Build one first.\033[0m"
     parent = cli._last_plan
     hp = _archive_plan_for_history(parent)
     if hp is None:
-        return f"\033[2mFailed to archive current plan.\033[0m"
+        return "\033[2mFailed to archive current plan.\033[0m"
     refiner = ctx.get("plan_refiner") or _default_plan_refiner
     try:
         refined_md = refiner(parent, focus)
@@ -206,15 +212,20 @@ async def _handle_plan_refine(rest, ctx):
     report = review_plan(new_plan)
     new_plan.review_notes = report.to_markdown()
     cli._last_plan = new_plan
-    _emit_plan_event(ctx, "plan_refine", plan_id=new_plan.plan_id,
-                     parent_plan_id=parent.plan_id, new_revision=new_plan.revision)
+    _emit_plan_event(
+        ctx,
+        "plan_refine",
+        plan_id=new_plan.plan_id,
+        parent_plan_id=parent.plan_id,
+        new_revision=new_plan.revision,
+    )
     diff = PlainTextRenderer().render_diff(parent, new_plan)
     out = [
         f"\033[32m\u2713\033[0m Refined plan \u2192 r{new_plan.revision} (parent: {parent.plan_id or '(no id)'})",
         f"  {len(new_plan.steps)} steps, {len(new_plan.acceptance_criteria)} ACs",
         f"  Archived parent: {hp}",
         f"  Review: {report.summary}",
-        f"\033[2m--- Diff ---\033[0m",
+        "\033[2m--- Diff ---\033[0m",
         str(diff),
     ]
     return "\n".join(out)
@@ -222,17 +233,22 @@ async def _handle_plan_refine(rest, ctx):
 
 def _archive_plan_for_history(plan):
     from agent.tools.plan_mode import _plan_dir, _slugify
+
     try:
-        d = _plan_dir(); d.mkdir(parents=True, exist_ok=True)
+        d = _plan_dir()
+        d.mkdir(parents=True, exist_ok=True)
         s = _slugify(plan.title or plan.summary or plan.task or "plan")
         fn = f"{plan.plan_id}-r{plan.revision}.md" if plan.plan_id else f"{s}-r{plan.revision}.md"
-        p = d / fn; p.write_text(plan.to_markdown(), encoding="utf-8"); return p
+        p = d / fn
+        p.write_text(plan.to_markdown(), encoding="utf-8")
+        return p
     except Exception:
         return None
 
 
 def _safe_parse_refined(parent, refined_md, focus):
     from agent.core.plan import ExecutionPlan
+
     if refined_md and "- [ ]" in refined_md:
         np = ExecutionPlan.from_llm_response(refined_md, task=parent.task)
         np.title = np.title or parent.title
@@ -241,33 +257,45 @@ def _safe_parse_refined(parent, refined_md, focus):
             np.summary = f"{np.summary} [focus: {focus}]" if np.summary else f"focus: {focus}"
         return np
     if refined_md and refined_md.strip():
-        return ExecutionPlan(task=parent.task, steps=list(parent.steps),
-                             summary=refined_md.strip().split("\n")[0][:120],
-                             title=parent.title, parent_plan_id=parent.plan_id,
-                             allowed_prompts=list(parent.allowed_prompts),
-                             risks=list(parent.risks), alternatives=list(parent.alternatives),
-                             acceptance_criteria=list(parent.acceptance_criteria))
-    return ExecutionPlan(task=parent.task, steps=list(parent.steps), summary=parent.summary,
-                         title=parent.title, parent_plan_id=parent.plan_id,
-                         allowed_prompts=list(parent.allowed_prompts),
-                         risks=list(parent.risks), alternatives=list(parent.alternatives),
-                         acceptance_criteria=list(parent.acceptance_criteria))
+        return ExecutionPlan(
+            task=parent.task,
+            steps=list(parent.steps),
+            summary=refined_md.strip().split("\n")[0][:120],
+            title=parent.title,
+            parent_plan_id=parent.plan_id,
+            allowed_prompts=list(parent.allowed_prompts),
+            risks=list(parent.risks),
+            alternatives=list(parent.alternatives),
+            acceptance_criteria=list(parent.acceptance_criteria),
+        )
+    return ExecutionPlan(
+        task=parent.task,
+        steps=list(parent.steps),
+        summary=parent.summary,
+        title=parent.title,
+        parent_plan_id=parent.plan_id,
+        allowed_prompts=list(parent.allowed_prompts),
+        risks=list(parent.risks),
+        alternatives=list(parent.alternatives),
+        acceptance_criteria=list(parent.acceptance_criteria),
+    )
 
 
 # /plan comment
 
+
 def _handle_plan_comment(rest, ctx):
     cli = ctx.get("cli")
     if not cli or not cli._last_plan:
-        return f"\033[2mNo plan to comment on.\033[0m"
+        return "\033[2mNo plan to comment on.\033[0m"
     plan = cli._last_plan
     parts = rest.split(maxsplit=1) if rest else []
     if len(parts) < 2:
-        return f"\033[2mUsage: /plan comment <step_id> <text...>\033[0m"
+        return "\033[2mUsage: /plan comment <step_id> <text...>\033[0m"
     try:
         sn = int(parts[0])
     except ValueError:
-        return f"\033[2mFirst argument must be a step number.\033[0m"
+        return "\033[2mFirst argument must be a step number.\033[0m"
     if not (1 <= sn <= len(plan.steps)):
         return f"\033[2mStep {sn} does not exist.\033[0m"
     text = parts[1]
@@ -295,7 +323,9 @@ async def _handle_plan(args: str, ctx: dict) -> str:
         cli = ctx.get("cli")
         plan_obj = cli._last_plan if cli else None
         if plan_obj:
-            _emit_plan_event(ctx, "plan_approve", plan_id=plan_obj.plan_id, revision=plan_obj.revision)
+            _emit_plan_event(
+                ctx, "plan_approve", plan_id=plan_obj.plan_id, revision=plan_obj.revision
+            )
         return f"{_green('✓')} Plan accepted. Execute with next task or switch mode: {_dim('/mode default')}"
 
     if first_token_lc == "reject":
@@ -315,6 +345,12 @@ async def _handle_plan(args: str, ctx: dict) -> str:
     if first_token_lc == "from-spec":
         # M2 P0: bridge SPECS.md → ExecutionPlan via SpecPlanAdapter.
         return await _handle_plan_from_spec(rest, ctx)
+
+    if first_token_lc == "refine":
+        return await _handle_plan_refine(rest, ctx)
+
+    if first_token_lc == "comment":
+        return _handle_plan_comment(rest, ctx)
 
     if first_token_lc == "edit":
         # Two forms are accepted:
