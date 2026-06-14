@@ -89,7 +89,10 @@ class PlanModeViolation(Exception):
     def __init__(self, tool_name: str, mode: str):
         self.tool_name = tool_name
         self.mode = mode
-        super().__init__(f"Plan mode blocks {tool_name}: not in plan-only whitelist")
+        super().__init__(
+            f"Plan mode blocks {tool_name}: not in plan-only whitelist. "
+            f"Call exit_plan_mode with your plan first, then execute."
+        )
 
 
 def _format_confirm_message(tool_name: str, args: dict) -> str:

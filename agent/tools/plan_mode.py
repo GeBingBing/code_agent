@@ -194,10 +194,14 @@ class ExitPlanModeTool(BaseTool):
 
     name = "exit_plan_mode"
     description = (
-        "Exit plan mode and present your plan. Provide a step-by-step plan "
-        "for the implementation. The user will review and approve before "
-        "execution begins. Include 'allowed_prompts' describing what categories "
-        "of actions are needed (e.g. 'edit files', 'run tests', 'install packages')."
+        "Exit plan mode and present your plan for approval. "
+        "MUST be called BEFORE executing any plan — write tools "
+        "(write_file, apply_diff, execute_command) are BLOCKED "
+        "in plan mode and will fail until you call this first. "
+        "Provide a step-by-step markdown plan. The user will review "
+        "and approve, then execution mode activates. "
+        "Include 'allowed_prompts' describing what action categories "
+        "are needed (e.g. 'edit files', 'run tests', 'install packages')."
     )
     is_read_only = True  # Doesn't execute the plan, just presents it
     is_concurrency_safe = False
