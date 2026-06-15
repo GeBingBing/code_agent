@@ -1412,6 +1412,26 @@ class SimpleCLI:
                 "- Keep answers concise.",
             ]
 
+            # Inject environment context so the LLM can answer questions
+            # about its own runtime (CWD, OS, Python version) without
+            # guessing or asking the user to run shell commands. Cheap and
+            # deterministic — answers like "当前目录是什么" become a one-line
+            # response instead of the LLM hallucinating "run pwd yourself".
+            import os as _os
+            import platform as _platform
+            import sys as _sys
+
+            from agent.core.workspace import WORKSPACE_ROOT
+
+            env_ctx_lines = [
+                "\n[Runtime context]",
+                f"- Current working directory: {WORKSPACE_ROOT}",
+                f"- OS: {_platform.system()} {_platform.release()}",
+                f"- Python: {_sys.version.split()[0]}",
+                f"- Shell PID: {_os.getpid()}",
+            ]
+            prompt_parts.append("\n".join(env_ctx_lines))
+
             # Inject user profile (persistent identity). If we've met this
             # user before, the LLM sees their name/preferences and can
             # address them properly instead of "sir" / "用户".
