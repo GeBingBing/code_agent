@@ -124,13 +124,22 @@ class TestDualReviewHookIsolated:
         assert "dangerous" in str(exc.value)
 
     @pytest.mark.asyncio
-    async def test_split_raises_review_requires_user(self):
+    async def test_split_primary_wins_on_abstain(self):
+        """APPROVE + ABSTAIN split → primary wins, no exception raised.
+
+        Behavior changed 2026-06-15: previously this raised
+        ReviewRequiresUser, causing the agent to retry the same edit
+        indefinitely. Now per P14-2 spirit, the user's primary LLM
+        wins on auditor silence. REJECT still wins absolutely — see
+        test_secondary_reject_blocks_primary_approve.
+        """
         e = _make_engine_with_reviewers(_approve_chat, _abstain_chat)
         payload = {"tool": "write_file", "args": {"path": "x.py"}, "tc_id": "t1"}
-        with pytest.raises(ReviewRequiresUser) as exc:
-            await e._dual_review_hook(payload)
-        assert exc.value.result is not None
-        assert exc.value.result.requires_user is True
+        # No exception raised — primary's APPROVE carries through.
+        result = await e._dual_review_hook(payload)
+        assert result is payload  # hook returns the payload unchanged
+        assert e.dual_review.reviews_approved == 1
+        assert e.dual_review.reviews_user_required == 0
 
     @pytest.mark.asyncio
     async def test_non_dict_payload_ignored(self):
@@ -393,11 +402,15 @@ class TestNoExceptionEscapesUnexpectedly:
             raise RuntimeError("LLM offline")
 
         e = _make_engine_with_reviewers(_approve_chat, bad_chat)
-        # One reviewer works, one fails → split → requires_user
-        with pytest.raises(ReviewRequiresUser):
-            await e._dual_review_hook(
-                {"tool": "write_file", "args": {"path": "x.py"}, "tc_id": "t1"}
-            )
+        # One reviewer works, one fails (→ ABSTAIN) → primary wins,
+        # no exception. Changed 2026-06-15: previously this raised
+        # ReviewRequiresUser (split = requires_user) causing stuck loops
+        # whenever secondary LLM had a transient error.
+        result = await e._dual_review_hook(
+            {"tool": "write_file", "args": {"path": "x.py"}, "tc_id": "t1"}
+        )
+        assert result is not None
+        assert e.dual_review.reviews_approved == 1
 
 
 # ── TestHighRiskToolSetEnumeration ──────────────────────────────
@@ -526,8 +539,13 @@ class TestHookMultipleHighRiskCallsInSequence:
 
     @pytest.mark.asyncio
     async def test_mixed_outcomes_counters(self):
-        """Approve, reject, split (abstain), low-risk — each goes to its
-        own counter."""
+        """Approve, reject, primary-wins-on-abstain, low-risk — each goes
+        to its own counter.
+
+        Updated 2026-06-15: previously the split case (APPROVE+ABSTAIN)
+        raised ReviewRequiresUser → reviews_user_required. Now primary
+        wins on abstain, so it counts toward reviews_approved instead.
+        """
         e = _make_engine_with_reviewers()
         # Approve
         e.dual_review.primary_chat = _approve_chat
@@ -538,18 +556,17 @@ class TestHookMultipleHighRiskCallsInSequence:
         e.dual_review.secondary_chat = _reject_chat
         with pytest.raises(PermissionDenied):
             await e._dual_review_hook({"tool": "write_file", "args": {"a": 2}})
-        # Split (abstain) → requires_user
+        # Split (abstain) → primary wins → APPROVE (no exception)
         e.dual_review.primary_chat = _approve_chat
         e.dual_review.secondary_chat = _abstain_chat
-        with pytest.raises(ReviewRequiresUser):
-            await e._dual_review_hook({"tool": "write_file", "args": {"a": 3}})
+        await e._dual_review_hook({"tool": "write_file", "args": {"a": 3}})
         # Low-risk → no review
         await e._dual_review_hook({"tool": "read_file", "args": {"a": 4}})
         # Verify counters
         assert e.dual_review.reviews_run == 3  # low-risk not counted
-        assert e.dual_review.reviews_approved == 1
+        assert e.dual_review.reviews_approved == 2  # approve + abstain-wins
         assert e.dual_review.reviews_rejected == 1
-        assert e.dual_review.reviews_user_required == 1
+        assert e.dual_review.reviews_user_required == 0
 
 
 # ── TestPickAlternateModelEdgeCases ─────────────────────────────

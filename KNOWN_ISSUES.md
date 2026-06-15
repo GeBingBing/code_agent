@@ -82,6 +82,17 @@
 - **修复**:仅在 `model="mock"` 但 `provider != "mock"` 的兼容路径下保留旧行为(为支持手动注入 `MockLLMClient`);`provider="mock"` 现在构造真 LLMClient。
 - **副作用修复**:`tests/test_engine_orchestrator.py` 两个 `test_no_llm_*` 测试断言 `e.llm is None`,改为显式 `e.llm = None` 模拟无 LLM 情况。
 
+### RES-007: dual-agent review 死循环 — primary 必须胜过 auditor 沉默(2026-06-15 修)
+
+- **历史触发**:用户跑 portfolio 项目改 `resume.ts`,每次 `apply_diff` 都抛 `Dual-agent review split — user adjudication required`,LLM 不停 retry 同一个 diff,same tool call 跑了 10+ 次。表象:agent 完全卡住。
+- **根因**:双 agent 评审聚合规则把"APPROVE + ABSTAIN"判为 ABSTAIN + `requires_user=True`,tool_dispatcher 把异常转成 `ToolResult(success=False)`,LLM 拿到错误后**重试同一个 tool call**。但引擎从未真正弹过 user prompt —— "user adjudication required"是个悬空信号,导致死循环。
+- **修复**:改 `_aggregate` 规则(dual_review.py:392):
+  - 旧:`Any REJECT → REJECT` / `All APPROVE → APPROVE` / `Otherwise → ABSTAIN`
+  - 新:`Any REJECT → REJECT` / `Any APPROVE + no REJECT → APPROVE` / `Otherwise → ABSTAIN`
+  - 关键差别:APPROVE + ABSTAIN 现在直接走 APPROVE。理由 per P14-2 精神:primary 是用户选的 LLM,secondary 是审计方;审计方的 parse 错误(ABSTAIN 的主要来源)不能否决 primary 的判断。**REJECT 仍绝对优先** —— secondary 真检测到风险仍然会 block。
+- **副作用**:更新 8 个旧测试断言(`tests/test_dual_review.py` + `tests/test_engine_dual_review.py`)反映新行为,新增 1 个回归测试覆盖"primary-wins-on-abstain"规则。
+- **影响**:agent 不会因 dual review 的次要 agent 抖动而卡住;真正有分歧(APPROVE + REJECT)仍走 user prompt。
+
 ### RES-006: git / refactor 写入路径绕过 self-source 保护(2026-06-15 修)
 
 - **历史触发**:RES-005 只堵了 `file_ops.py` 的 4 个写工具,但还存在另外两个回滚通道:

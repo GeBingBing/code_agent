@@ -200,12 +200,20 @@ class TestAggregation:
         assert r.requires_user is False
         assert r.consensus is True  # both rejected
 
-    def test_one_abstain_requires_user(self):
+    def test_one_abstain_primary_wins(self):
+        """APPROVE + ABSTAIN → APPROVE (primary wins on auditor silence).
+
+        Behavior changed 2026-06-15 to kill the dual-review stuck loop.
+        Previously this returned ABSTAIN + requires_user, which caused
+        the LLM to retry the same edit indefinitely (the error said
+        "user adjudication required" but no user was actually prompted,
+        so the LLM just re-applied the diff).
+        """
         decs = [_decision(ReviewVerdict.APPROVE, "p"), _decision(ReviewVerdict.ABSTAIN, "s")]
         r = DualReviewManager._aggregate(decs)
-        assert r.final_verdict == ReviewVerdict.ABSTAIN
-        assert r.requires_user is True
-        assert r.consensus is False
+        assert r.final_verdict == ReviewVerdict.APPROVE
+        assert r.requires_user is False
+        assert r.consensus is False  # not unanimous, but primary wins
 
     def test_both_abstain_requires_user(self):
         decs = [_decision(ReviewVerdict.ABSTAIN, "p"), _decision(ReviewVerdict.ABSTAIN, "s")]
@@ -362,11 +370,23 @@ class TestReviewOneReject:
 
 class TestReviewAbstain:
     @pytest.mark.asyncio
-    async def test_one_abstain_requires_user(self):
+    async def test_one_abstain_primary_wins(self):
+        """PRIMARY APPROVE + SECONDARY ABSTAIN → APPROVE (no user prompt).
+
+        Behavior changed 2026-06-15 to kill the dual-review stuck loop
+        (the agent used to retry the same edit indefinitely because the
+        error said "user adjudication required" but no user was actually
+        prompted). Per P14-2 spirit: primary is the user's chosen LLM
+        and the secondary's parse error must not veto it. REJECT still
+        wins absolutely (covered by test_reviewer_rejection_wins).
+        """
         mgr = DualReviewManager(primary_chat=_approve_chat, secondary_chat=_abstain_chat)
         r = await mgr.review("execute_command", {"command": "ls"})
-        assert r.requires_user is True
-        assert mgr.reviews_user_required == 1
+        assert r.final_verdict == ReviewVerdict.APPROVE
+        assert r.requires_user is False
+        # Counter is for "still needs user" — we now resolve inline, so 0.
+        assert mgr.reviews_user_required == 0
+        assert mgr.reviews_approved == 1
 
 
 # ── TestReviewError ────────────────────────────────────────────────
@@ -377,8 +397,10 @@ class TestReviewError:
     async def test_reviewer_error_becomes_abstain(self):
         mgr = DualReviewManager(primary_chat=_approve_chat, secondary_chat=_error_chat)
         r = await mgr.review("write_file", {"path": "x.py"})
-        # The errored reviewer abstains; the other approved → split → user
-        assert r.requires_user is True
+        # The errored reviewer abstains; the other approved → primary wins
+        # (changed 2026-06-15: previously this required user, causing stuck loop)
+        assert r.final_verdict == ReviewVerdict.APPROVE
+        assert r.requires_user is False
         # Find the abstaining decision
         abstains = [d for d in r.decisions if d.verdict == ReviewVerdict.ABSTAIN]
         assert len(abstains) == 1
@@ -471,7 +493,9 @@ class TestStubSecondary:
         mgr = DualReviewManager()  # No chat fns → primary=None, secondary=stub
         r = await mgr.review("write_file", {"path": "x.py", "content": "hi"})
         # primary returned ABSTAIN (no chat), secondary approved
-        assert r.requires_user is True  # mixed → user
+        # → primary wins on split (changed 2026-06-15)
+        assert r.requires_user is False
+        assert r.final_verdict == ReviewVerdict.APPROVE
 
     @pytest.mark.asyncio
     async def test_stub_rejects_destructive_command(self):
@@ -575,17 +599,23 @@ class TestAggregationEdgeCases:
         assert r.final_verdict == ReviewVerdict.REJECT
         assert r.consensus is True
 
-    def test_three_decisions_with_abstain_requires_user(self):
+    def test_three_decisions_with_abstain_primary_wins(self):
+        """APPROVE + ABSTAIN + APPROVE → APPROVE.
+
+        Changed 2026-06-15: previously any ABSTAIN in the mix forced
+        ABSTAIN + requires_user. Now any APPROVE + no REJECT → APPROVE.
+        `consensus=False` because the ABSTAIN is not unanimous — but the
+        call still proceeds.
+        """
         decs = [
             _decision(ReviewVerdict.APPROVE, "a"),
             _decision(ReviewVerdict.ABSTAIN, "b"),
             _decision(ReviewVerdict.APPROVE, "c"),
         ]
         r = DualReviewManager._aggregate(decs)
-        # 1 abstain in mix → must defer to user
-        assert r.requires_user is True
-        assert r.final_verdict == ReviewVerdict.ABSTAIN
-        assert r.consensus is False
+        assert r.requires_user is False
+        assert r.final_verdict == ReviewVerdict.APPROVE
+        assert r.consensus is False  # not unanimous (one ABSTAIN)
 
     def test_consensus_false_on_split_decision(self):
         # 1 approve + 1 reject → not unanimous on either side
@@ -699,8 +729,9 @@ class TestStubSecondaryEdgeCases:
         # Pass a "safe" tool with the prompt's drop table text nowhere in args
         r = await mgr.review("write_file", {"path": "x.py", "content": "hello"})
         # primary abstains (no chat), secondary (stub) approves
-        # → split (ABSTAIN + APPROVE) → requires_user
-        assert r.requires_user is True
+        # → split (ABSTAIN + APPROVE) → primary-wins-on-split (2026-06-15)
+        assert r.requires_user is False
+        assert r.final_verdict == ReviewVerdict.APPROVE
         # The stub's decision should be APPROVE
         stub_decisions = [d for d in r.decisions if d.reviewer_id == "secondary"]
         assert len(stub_decisions) == 1
@@ -725,8 +756,9 @@ class TestStubSecondaryEdgeCases:
     async def test_stub_handles_empty_args(self):
         mgr = DualReviewManager()
         r = await mgr.review("write_file", {})
-        # Empty args → stub approves → split with primary abstains → user
-        assert r.requires_user is True
+        # Empty args → stub approves → split with primary abstains → primary wins
+        assert r.requires_user is False
+        assert r.final_verdict == ReviewVerdict.APPROVE
 
 
 # ── TestHighConcurrency ───────────────────────────────────────────

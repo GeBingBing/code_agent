@@ -10,10 +10,17 @@ Design (per docs/1.md §8 + docs/参考.md 纵深防御):
   create_pr, web_fetch, install_package, uninstall_package.
 - Two reviewers (primary + secondary) are invoked **in parallel** via
   asyncio.gather. Each gets the same prompt and returns a verdict.
-- Aggregation rules:
-    * Any REJECT  → final REJECT (engine blocks the tool call)
-    * All APPROVE  → final APPROVE
-    * Otherwise    → ABSTAIN (requires_user=True, surfaced to CLI)
+- Aggregation rules (revised 2026-06-15 — kill the dual-review stuck loop):
+    1. Any REJECT                       → final REJECT (safety floor)
+    2. Any APPROVE and no REJECT        → final APPROVE
+    3. Otherwise (all ABSTAIN / empty)  → final ABSTAIN (requires_user)
+  Rule 2 is the change: previously "APPROVE + ABSTAIN → ABSTAIN" caused
+  the agent to retry the same edit forever (LLM saw "user adjudication
+  required" but no user was actually prompted, so it just re-applied
+  the diff). Per P14-2 spirit, primary is the user's chosen LLM and
+  secondary is an auditor; the auditor's parse error (the most common
+  source of ABSTAIN) must not veto the primary. REJECT still wins
+  absolutely — secondary catching a real risk still blocks the tool.
 - Rate limit: max 5 calls per minute (anti-abuse guard).
 - Privacy: args are summarized — full paths/commands/URLs visible to
   the LLM reviewers, but never persisted in audit (only the verdict
@@ -393,9 +400,18 @@ class DualReviewManager:
         """Aggregate reviewer decisions into a final verdict.
 
         Rules (in order):
-            1. Any REJECT  → final REJECT (consensus=False, requires_user=False)
-            2. All APPROVE → final APPROVE (consensus=True, requires_user=False)
-            3. Otherwise   → ABSTAIN (consensus=False, requires_user=True)
+            1. Any REJECT                          → final REJECT
+               (consensus=False iff primary also REJECTed; safety floor)
+            2. Any APPROVE and no REJECT           → final APPROVE
+               (covers: all-APPROVE consensus, AND APPROVE+ABSTAIN split)
+            3. Otherwise (all ABSTAIN / empty)     → final ABSTAIN
+               (consensus=False, requires_user=True)
+
+        Rule 2 change history: previously "APPROVE + ABSTAIN → ABSTAIN"
+        caused the agent to retry the same edit indefinitely. Per P14-2
+        spirit, primary is the user's chosen LLM and secondary is an
+        auditor — a parse error on the auditor side must not veto the
+        primary. REJECT still wins absolutely.
         """
         verdicts = [d.verdict for d in decisions]
         approves = verdicts.count(ReviewVerdict.APPROVE)
@@ -415,14 +431,17 @@ class DualReviewManager:
                 requires_user=False,
                 consensus=(rejects == len(decisions)),
             )
-        if approves == len(decisions):
+        if approves >= 1:
+            # At least one APPROVE, no REJECT. Includes all-APPROVE
+            # (consensus=True) and APPROVE+ABSTAIN (consensus=False but
+            # primary wins).
             return DualReviewResult(
                 decisions=decisions,
                 final_verdict=ReviewVerdict.APPROVE,
                 requires_user=False,
-                consensus=True,
+                consensus=(approves == len(decisions)),
             )
-        # At least one ABSTAIN (or split) → user must adjudicate
+        # All ABSTAIN → genuine uncertainty, surface to user.
         return DualReviewResult(
             decisions=decisions,
             final_verdict=ReviewVerdict.ABSTAIN,
