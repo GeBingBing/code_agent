@@ -1272,10 +1272,17 @@ class SimpleCLI:
                     break
 
                 # ── M4 P0: auto-approve plan on user "yes" ──
+                # Note: SimpleCLI stores the agent engine as `self._last_engine`
+                # (set lazily per task in `_run_edit` / `_run_agent`). The
+                # attribute was originally mistyped as `self.engine` here
+                # (commit 30e8dac), which made the CLI AttributeError on the
+                # very first user input. Use `_last_engine` + getattr so the
+                # guard is safe even when no task has run yet.
+                _engine = getattr(self, "_last_engine", None)
                 if (
-                    self.engine
-                    and getattr(self.engine.permissions, "mode", None)
-                    and self.engine.permissions.mode.value == "plan"
+                    _engine is not None
+                    and getattr(_engine.permissions, "mode", None)
+                    and _engine.permissions.mode.value == "plan"
                     and cli_has_pending_plan(self)
                     and _looks_like_plan_approval(user_input)
                 ):
