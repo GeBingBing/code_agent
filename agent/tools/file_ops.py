@@ -5,6 +5,7 @@ import difflib
 import os
 from pathlib import Path
 
+from ..core.protected_paths import deny_reason, is_protected_path
 from ..core.workspace import WORKSPACE_ROOT
 from .base import BaseTool, ToolResult, registry
 
@@ -33,13 +34,31 @@ def _is_within_workspace(path: str) -> bool:
 
 
 def _validate_write_path(path: str) -> ToolResult:
-    """Validate that a path is within workspace for write operations."""
+    """Validate that a path is within workspace AND not a protected source path.
+
+    Two-layer defense:
+      1. Workspace boundary: file must resolve under WORKSPACE_ROOT (otherwise
+         a relative ``../etc/passwd`` would slip through).
+      2. Self-source protection: even if within workspace, deny writes to the
+         agent's own ``agent/`` / ``ui/`` / ``index/`` / ``tests/`` / ``docs/``
+         / root-config paths — see ``protected_paths.py`` for rationale.
+         This is the gate that prevents "my manual edit got overwritten by
+         the agent's own write_file" — the rollback pain.
+
+    Returns:
+        None on success, ``ToolResult(success=False, error=...)`` on denial.
+    """
     if not _is_within_workspace(path):
         return ToolResult(
             success=False,
             content="",
             error=f"Write denied: path '{path}' is outside workspace '{WORKSPACE_ROOT}'",
         )
+    # Self-source protection: in test mode we still enforce this so the
+    # protection itself is covered by contract tests; only the workspace
+    # boundary is relaxed by _TESTING_MODE.
+    if is_protected_path(path, WORKSPACE_ROOT):
+        return ToolResult(success=False, content="", error=deny_reason(path, WORKSPACE_ROOT))
     return None
 
 

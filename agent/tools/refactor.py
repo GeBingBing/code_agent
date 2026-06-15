@@ -10,6 +10,7 @@ from typing import List, Optional, Tuple
 
 from index.code_indexer import CodeIndexer
 
+from ..core.protected_paths import deny_reason, is_protected_path
 from ..core.workspace import get_workspace_root
 from .base import BaseTool, ToolResult, registry
 
@@ -17,6 +18,12 @@ from .base import BaseTool, ToolResult, registry
 def _workspace() -> Path:
     """Re-resolve on each call so monkeypatched env vars take effect."""
     return get_workspace_root()
+
+
+# Self-source protection: SafeRenameTool writes via its own path (bypasses
+# file_ops._validate_write_path). Reuse the same gate so the rollback defense
+# is consistent across all write paths — and runs even in CODING_AGENT_TESTING
+# mode so the contract tests can verify it.
 
 
 def _validate_python_syntax(path: Path) -> Optional[str]:
@@ -175,6 +182,21 @@ class SafeRenameTool(BaseTool):
                     file_preview.append(f"    L{line_no:4d} {marker}  + {new_line.strip()[:60]}")
 
             if not modified:
+                continue
+
+            # Self-source protection (rollback defense): if this file lives in
+            # the agent's own source tree (agent/, ui/, tests/, docs/,
+            # pyproject.toml, etc.), refuse to apply the rename even with
+            # dry_run=False. We still list it in the preview so the LLM can
+            # see what *would* have changed — useful for the user to evaluate
+            # whether to opt in via CODING_AGENT_ALLOW_SELF_MODIFY=1.
+            workspace_root = _workspace()
+            fpath_abs = str(file_path.resolve())
+            if is_protected_path(fpath_abs, workspace_root):
+                preview_lines.extend(file_preview)
+                preview_lines.append(
+                    f"    ⛔ skipped (protected): {fpath} — {deny_reason(fpath_abs, workspace_root)}"
+                )
                 continue
 
             preview_lines.extend(file_preview)
