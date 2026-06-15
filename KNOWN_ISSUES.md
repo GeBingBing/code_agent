@@ -39,7 +39,12 @@
 ### ISSUE-004: `OPENAI_API_KEY=mock` 历史上不真 mock(已修)
 
 - **历史触发**:`agent/llm/client.py` 的 `provider="mock"` 分支只是创建 `OpenAI(api_key="mock", ...)`,实际仍会真打 API 网络。
-- **2026-06-14 已修复**:`provider="mock"` 现在走真 short-circuit(`_MockLLMBackend`),不创建 OpenAI client,不打网络。`tests/contracts/test_mock_llm_contract.py::test_no_network_socket_opened` 是回归保护。
+- **2026-06-15 实际修复**(原 2026-06-14 RES-002 声称已修但 `_MockLLMBackend` 实现从未落地,处于文档/实现脱节状态):
+  - `agent/llm/client.py` 新增 `_MockLLMBackend` 类(queue_response / queue_stream_chunks / reset_mock / chat),`_MockMessage` + `_MockMessageFactory` 用于脚本化工具调用响应。
+  - `LLMClient(provider="mock", ...)` 现在直接构造 `_MockLLMBackend`,不再创建 OpenAI client,完全不打开网络 socket。
+  - LLMClient 暴露 `queue_response` / `queue_stream_chunks` / `reset_mock` 委托方法,在非 mock provider 上调用会 raise,防止静默误用。
+  - `tests/conftest.py` 加 `mock_llm` / `mock_message_factory` fixture。
+- **回归保护**:`tests/contracts/test_mock_llm_contract.py`(10 cases)— 包含 `test_no_network_socket_opened`(用 socket.socket tripwire 拦截 AF_INET / AF_INET6)。
 - **保留这条**:为了让翻仓库的人知道这个常见误解已经修了。
 
 ### ISSUE-005: 系统 site-packages 内的过时 `agent` 包污染 import

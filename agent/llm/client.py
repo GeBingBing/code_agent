@@ -1,7 +1,18 @@
-"""LLM Client - Supports OpenAI, DashScope (Alibaba), Ollama, and more."""
+"""LLM Client - Supports OpenAI, DashScope (Alibaba), Ollama, and more.
 
-from dataclasses import dataclass
-from typing import List, Optional
+Mock provider (provider="mock")
+-------------------------------
+Implemented 2026-06-15 per KNOWN_ISSUES.md RES-002. The mock provider is an
+in-process stub: no OpenAI client is constructed, no API key required, and
+absolutely no network sockets are opened (see
+``tests/contracts/test_mock_llm_contract.py::test_no_network_socket_opened``
+for the regression guard).
+"""
+
+import json
+from dataclasses import dataclass, field
+from types import SimpleNamespace
+from typing import Any, List, Optional
 
 from ..core.config import config
 
@@ -11,6 +22,102 @@ class Message:
     role: str
     content: str
     tool_call_id: Optional[str] = None
+    tool_calls: Optional[str] = None  # JSON string (OpenAI wire format)
+
+
+# ── Mock provider (RES-002 implementation) ───────────────────────────
+#
+# provider="mock" must NEVER touch the network. Replaces the OpenAI client
+# with an in-process stub that returns canned responses (or queued ones
+# for scripted scenarios). Regression guard lives in
+# tests/contracts/test_mock_llm_contract.py::test_no_network_socket_opened.
+
+
+@dataclass
+class _MockMessage:
+    """Stand-in for OpenAI assistant message in mock responses.
+
+    Distinct from ``Message`` (the real wire type): ``tool_calls`` here is
+    a list of objects, not a JSON string, because the engine reads
+    ``msg.tool_calls[i].function.name`` directly when present.
+    """
+
+    role: str
+    content: str = ""
+    tool_calls: List[Any] = field(default_factory=list)
+    tool_call_id: Optional[str] = None
+
+
+class _MockMessageFactory:
+    """Build mock assistant messages for ``queue_response()`` scripts."""
+
+    def with_tool_call(self, call_id: str, name: str, arguments: dict) -> _MockMessage:
+        """Assistant message carrying a single tool_call."""
+        tc = SimpleNamespace(
+            id=call_id,
+            type="function",
+            function=SimpleNamespace(
+                name=name,
+                arguments=json.dumps(arguments),
+            ),
+        )
+        return _MockMessage(role="assistant", content="", tool_calls=[tc])
+
+    def with_text(self, text: str) -> _MockMessage:
+        return _MockMessage(role="assistant", content=text, tool_calls=[])
+
+
+def _make_default_chunk(content: str = "OK"):
+    """Build one OpenAI-shaped stream chunk (duck-typed via SimpleNamespace)."""
+    choice = SimpleNamespace(
+        delta=SimpleNamespace(content=content),
+        finish_reason="stop",
+    )
+    return SimpleNamespace(choices=[choice])
+
+
+class _MockLLMBackend:
+    """In-process LLM stub. No I/O, no sockets, no threads.
+
+    Public surface:
+      * queue_response(x) — FIFO; x can be str, _MockMessage, or any object.
+      * queue_stream_chunks([...]) — set chunks for the next stream chat().
+      * reset_mock() — clear queue + log.
+      * chat(messages, stream=False) — async; returns queued or "OK".
+      * mock_call_log — list of {"messages": [...], "stream": bool} dicts.
+    """
+
+    def __init__(self):
+        self._queue: List[Any] = []
+        self._stream_chunks: List[Any] = []
+        self.mock_call_log: List[dict] = []
+        self._default_text = "OK"
+
+    def queue_response(self, response: Any) -> None:
+        self._queue.append(response)
+
+    def queue_stream_chunks(self, chunks: List[Any]) -> None:
+        self._stream_chunks = list(chunks)
+
+    def reset_mock(self) -> None:
+        self._queue.clear()
+        self._stream_chunks.clear()
+        self.mock_call_log.clear()
+
+    async def chat(
+        self,
+        messages: List[Any],
+        tools: Optional[List[dict]] = None,
+        stream: bool = False,
+        **kwargs,
+    ):
+        self.mock_call_log.append({"messages": list(messages), "stream": stream})
+        if stream:
+            chunks = self._stream_chunks if self._stream_chunks else [_make_default_chunk()]
+            return iter(chunks), True
+        if self._queue:
+            return self._queue.pop(0)
+        return self._default_text
 
 
 class LLMClient:
@@ -43,13 +150,23 @@ class LLMClient:
         self.model = model
         self.provider = self._detect_provider(provider, model)
 
+        # Mock provider: real LLMClient with in-process _MockLLMBackend.
+        # No OpenAI client, no API key, no sockets. Fix for the
+        # "OPENAI_API_KEY=mock hits the network" bug (RES-002).
+        if self.provider == "mock":
+            self.api_key = None
+            self.base_url = None
+            self.client = None
+            self._mock = _MockLLMBackend()
+            return
+
         # Get API key based on provider
         if api_key:
             self.api_key = api_key
         else:
             self.api_key = config.get_api_key(self.provider) or config.get_api_key("openai")
 
-        if not self.api_key and self.provider not in ("ollama", "mock"):
+        if not self.api_key:
             raise ValueError(
                 f"No API key found for provider '{self.provider}'. "
                 "Set the API key in .env file or environment."
@@ -76,14 +193,6 @@ class LLMClient:
                 )
             except ImportError as err:
                 raise ImportError("Please install openai: pip install openai") from err
-        elif self.provider == "mock":
-            # Mock provider: no real API calls; openai>=2.41 refuses api_key=None.
-            try:
-                from openai import OpenAI
-
-                self.client = OpenAI(api_key="mock", base_url=self.base_url)
-            except ImportError as err:
-                raise ImportError("Please install openai: pip install openai") from err
         else:
             try:
                 from openai import OpenAI
@@ -91,6 +200,9 @@ class LLMClient:
                 self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
             except ImportError as err:
                 raise ImportError("Please install openai: pip install openai") from err
+
+        # Back-compat: real providers don't carry a mock backend.
+        self._mock = None
 
     def _detect_provider(self, provider: str, model: str) -> str:
         """Auto-detect provider from model name"""
@@ -121,6 +233,33 @@ class LLMClient:
 
         return "openai"
 
+    # ── Mock facade ────────────────────────────────────────────────────
+    # These three methods expose the backend's queue / stream / log API.
+    # They raise on non-mock providers so a misconfigured real client can't
+    # silently no-op (the original "provider=mock but went to network" bug
+    # relied on this kind of silent acceptance).
+
+    def queue_response(self, response: Any) -> None:
+        if self.provider != "mock":
+            raise RuntimeError(
+                f"queue_response() is only valid when provider='mock', got {self.provider!r}"
+            )
+        self._mock.queue_response(response)
+
+    def queue_stream_chunks(self, chunks: List[Any]) -> None:
+        if self.provider != "mock":
+            raise RuntimeError(
+                f"queue_stream_chunks() is only valid when provider='mock', got {self.provider!r}"
+            )
+        self._mock.queue_stream_chunks(chunks)
+
+    def reset_mock(self) -> None:
+        if self.provider != "mock":
+            raise RuntimeError(
+                f"reset_mock() is only valid when provider='mock', got {self.provider!r}"
+            )
+        self._mock.reset_mock()
+
     async def chat(
         self,
         messages: List[Message],
@@ -129,6 +268,9 @@ class LLMClient:
         **kwargs,
     ):
         """Send a chat request"""
+        if self.provider == "mock":
+            return await self._mock.chat(messages, tools=tools, stream=stream, **kwargs)
+
         import json
 
         msg_dicts = []
@@ -322,3 +464,7 @@ def create_alternate_provider_client(primary_client):
             e,
         )
         return None
+
+
+# TRIPWIRE_23 = 003208
+# TRIPWIRE_24 = 003209
