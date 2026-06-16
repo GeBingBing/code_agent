@@ -164,17 +164,43 @@ SPINNERS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
 def _render_markdown_token(text: str) -> str:
     """Apply ANSI styles to inline markdown — **bold**, `code`.
 
-    Also filters model-specific artifacts that shouldn't reach the user:
-    - <minimax:tool_call>...</minimax:tool_call> blocks (leaked protocol tags)
-    - <think>...</think> reasoning blocks
+    Also filters model-specific artifacts that shouldn't reach the user.
+    Different LLM backends emit tool calls as content text in slightly
+    different formats; some leave the block unclosed (truncated mid-call).
+    We strip any of these aggressively so a leaked protocol tag never
+    reaches the terminal:
+
+      * <minimax:tool_call>...</minimax:tool_call>   (closed, primary form)
+      * <minimax:tool_call>...                       (unclosed, mid-stream)
+      * <tool_call>...</tool_call>                      (closed, no namespace)
+      * <tool_call>...                                (unclosed)
+      * <invokename="..." ...>...</invoke>            (inner blocks)
+      * <parameter name="...">value</parameter>       (parameter blocks)
+      * </think>...</think>                            (chain-of-thought)
     """
     import re
 
     if not text:
         return text
-    # Filter leaked tool-call tags from models that emit them in content
+
+    # Closed namespace form (most common path)
     text = re.sub(r"<minimax:tool_call>.*?</minimax:tool_call>", "", text, flags=re.DOTALL)
+    # Unclosed namespace form — eat to end-of-string (defensive: a leaked
+    # unclosed block would otherwise pollute everything after it)
+    text = re.sub(r"<minimax:tool_call>.*$", "", text, flags=re.DOTALL)
+    # Closed bare form
     text = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL)
+    # Unclosed bare form
+    text = re.sub(r"<tool_call>.*$", "", text, flags=re.DOTALL)
+    # Inner protocol blocks (catches both closed and unclosed variants —
+    # `<parameter ...>...` without closing is also common in leaks).
+    text = re.sub(r"<invokename=.*?(?:</invoke>|$)", "", text, flags=re.DOTALL)
+    text = re.sub(r"<parameter\s+[^>]*>(?:.*?</parameter>.*?)?", "", text, flags=re.DOTALL)
+    text = re.sub(r"</invoke>", "", text)
+    # Chain-of-thought reasoning blocks (some models leak these)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL)
+
     # Inline markdown
     text = re.sub(r"\*\*(.+?)\*\*", f"{BOLD}{YELLOW}\\1{RESET}", text)
     text = re.sub(r"`([^`]+)`", f"{GREEN}\\1{RESET}", text)
