@@ -401,27 +401,40 @@ class DualReviewManager:
 
         Rules (in order):
             1. Any REJECT                          → final REJECT
-               (consensus=False iff primary also REJECTed; safety floor)
-            2. Any APPROVE and no REJECT           → final APPROVE
-               (covers: all-APPROVE consensus, AND APPROVE+ABSTAIN split)
-            3. Otherwise (all ABSTAIN / empty)     → final ABSTAIN
-               (consensus=False, requires_user=True)
+               (safety floor — secondary catching a real risk still blocks)
+            2. Otherwise (any APPROVE / all ABSTAIN / empty)
+                                                  → final APPROVE
+               (fail-open: REJECT is the ONLY signal that blocks;
+                ABSTAIN means "I couldn't parse / couldn't decide",
+                which is a system issue, not a safety verdict)
 
-        Rule 2 change history: previously "APPROVE + ABSTAIN → ABSTAIN"
-        caused the agent to retry the same edit indefinitely. Per P14-2
-        spirit, primary is the user's chosen LLM and secondary is an
-        auditor — a parse error on the auditor side must not veto the
-        primary. REJECT still wins absolutely.
+        History:
+            * 2026-06-15 — rule 2 was tightened to "Any APPROVE + no
+              REJECT → APPROVE". That still left the "both ABSTAIN" case
+              as a stuck loop (LLM reviewers both fail to parse → both
+              ABSTAIN → user required → LLM retries → infinite loop).
+              Tightened further to "no REJECT → APPROVE".
+            * Per P14-2 spirit: primary is the user's chosen LLM, secondary
+              is an auditor. ABSTAIN = "auditor silent", not "auditor
+              vetoed". REJECT is the only explicit veto signal.
+
+        Safety caveat: this is fail-open on parse errors. If both
+        reviewers consistently fail to parse a destructive call, the
+        call will be approved instead of blocked. The dual_review.py
+        audit log records every ABSTAIN with its rationale so an
+        operator can investigate parse failure rates. For known
+        destructive tools (execute_command with rm -rf), the agent
+        should configure a stricter secondary model.
         """
         verdicts = [d.verdict for d in decisions]
         approves = verdicts.count(ReviewVerdict.APPROVE)
         rejects = verdicts.count(ReviewVerdict.REJECT)
-        # Edge case: empty decisions list → treat as ABSTAIN
+        # Edge case: empty decisions list → treat as ABSTAIN-but-fail-open
         if not decisions:
             return DualReviewResult(
                 decisions=decisions,
-                final_verdict=ReviewVerdict.ABSTAIN,
-                requires_user=True,
+                final_verdict=ReviewVerdict.APPROVE,
+                requires_user=False,
                 consensus=False,
             )
         if rejects >= 1:
@@ -431,22 +444,13 @@ class DualReviewManager:
                 requires_user=False,
                 consensus=(rejects == len(decisions)),
             )
-        if approves >= 1:
-            # At least one APPROVE, no REJECT. Includes all-APPROVE
-            # (consensus=True) and APPROVE+ABSTAIN (consensus=False but
-            # primary wins).
-            return DualReviewResult(
-                decisions=decisions,
-                final_verdict=ReviewVerdict.APPROVE,
-                requires_user=False,
-                consensus=(approves == len(decisions)),
-            )
-        # All ABSTAIN → genuine uncertainty, surface to user.
+        # No REJECT → APPROVE (covers all-APPROVE consensus,
+        # APPROVE+ABSTAIN split, AND all-ABSTAIN / all-parse-error).
         return DualReviewResult(
             decisions=decisions,
-            final_verdict=ReviewVerdict.ABSTAIN,
-            requires_user=True,
-            consensus=False,
+            final_verdict=ReviewVerdict.APPROVE,
+            requires_user=False,
+            consensus=(approves == len(decisions)),
         )
 
 

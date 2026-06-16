@@ -215,16 +215,28 @@ class TestAggregation:
         assert r.requires_user is False
         assert r.consensus is False  # not unanimous, but primary wins
 
-    def test_both_abstain_requires_user(self):
+    def test_both_abstain_fail_open(self):
+        """Both reviewers ABSTAIN (e.g. both parse-failed) → APPROVE.
+
+        Changed 2026-06-15 (second tightening of rule 2): previously
+        both-ABSTAIN returned ABSTAIN + requires_user, which caused
+        the LLM to retry the same edit indefinitely when both
+        reviewers couldn't parse their response. REJECT is still an
+        absolute blocker; only the lack of REJECT fails open.
+        """
         decs = [_decision(ReviewVerdict.ABSTAIN, "p"), _decision(ReviewVerdict.ABSTAIN, "s")]
         r = DualReviewManager._aggregate(decs)
-        assert r.final_verdict == ReviewVerdict.ABSTAIN
-        assert r.requires_user is True
-        assert r.consensus is False
+        assert r.final_verdict == ReviewVerdict.APPROVE
+        assert r.requires_user is False
+        assert r.consensus is False  # not unanimous APPROVE
 
-    def test_empty_decisions_requires_user(self):
+    def test_empty_decisions_fail_open(self):
+        """Edge case: no decisions returned (e.g. both reviewers raised
+        before producing a verdict). Treat as fail-open APPROVE so the
+        agent doesn't loop on missing dual-review infrastructure."""
         r = DualReviewManager._aggregate([])
-        assert r.requires_user is True
+        assert r.final_verdict == ReviewVerdict.APPROVE
+        assert r.requires_user is False
         assert r.consensus is False
 
 
