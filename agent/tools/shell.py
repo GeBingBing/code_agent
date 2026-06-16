@@ -249,9 +249,28 @@ class ExecuteCommandTool(BaseTool):
         return None
 
     async def execute(
-        self, command: str, cwd: Optional[str] = None, timeout: int = 30, **kwargs
+        self,
+        command: str,
+        cwd: Optional[str] = None,
+        timeout: int = 30,
+        max_wait_seconds: int = 120,
+        **kwargs,
     ) -> ToolResult:
-        """Execute a shell command"""
+        """Execute a shell command.
+
+        Args:
+            command: shell command to run.
+            cwd: working directory.
+            timeout: idle timeout in seconds (kill if NO output for this long).
+                Distinct from `max_wait_seconds` — a build that streams progress
+                every few seconds won't hit this even if total runtime is
+                several minutes.
+            max_wait_seconds: hard wall-clock cap. The process is killed once
+                total elapsed time exceeds this, regardless of output activity.
+                Default 120s covers most builds / tests. Long-running
+                commands (dev servers, watch processes, REPLs) MUST use a
+                higher value OR be wrapped in `nohup ... &` to run detached.
+        """
 
         # Security validation
         if error := self._validate_command(command):
@@ -266,7 +285,38 @@ class ExecuteCommandTool(BaseTool):
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            stdout, stderr = await read_process(proc, idle_timeout=timeout)
+            # Wrap with a wall-clock cap. read_process handles the idle
+            # timeout internally; asyncio.wait_for adds the second layer
+            # so that long-running but steadily-emitting processes (e.g.
+            # `npm run dev`, `python -m http.server`) are killed too.
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    read_process(proc, idle_timeout=timeout),
+                    timeout=max_wait_seconds,
+                )
+            except asyncio.TimeoutError:
+                # asyncio.wait_for raises TimeoutError when the wall-clock
+                # cap is exceeded (NOT a subprocess timeout — that's
+                # IdleTimeoutError). Kill the subprocess and return a
+                # clear message.
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except ProcessLookupError:
+                    pass
+                elapsed = int((time.time() - t0))
+                return ToolResult(
+                    success=False,
+                    content="",
+                    error=(
+                        f"Wall-clock timeout after {max_wait_seconds}s — process killed "
+                        f"(idle timeout {timeout}s never fired, meaning the process kept "
+                        f"emitting output but never exited). If this is intentional, "
+                        f"increase max_wait_seconds or run detached with `nohup ... &`."
+                    ),
+                    metadata={"duration_ms": elapsed * 1000, "lines": 0, "killed": True},
+                )
+
             elapsed_ms = int((time.time() - t0) * 1000)
             output_lines = len(stdout.splitlines()) if stdout else 0
 
@@ -290,12 +340,6 @@ class ExecuteCommandTool(BaseTool):
             if partial:
                 msg += f"\n[partial output before timeout]\n{partial[-500:]}"
             return ToolResult(success=False, content=e.stdout, error=msg)
-        except asyncio.TimeoutError:
-            return ToolResult(
-                success=False,
-                content="",
-                error=f"No output for {timeout}s (idle timeout, process killed)",
-            )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
 
@@ -315,6 +359,16 @@ class ExecuteCommandTool(BaseTool):
                             "type": "integer",
                             "description": "Idle timeout in seconds (kill if no output for this long)",
                             "default": 30,
+                        },
+                        "max_wait_seconds": {
+                            "type": "integer",
+                            "description": (
+                                "Hard wall-clock cap. Process is killed once total elapsed "
+                                "time exceeds this, regardless of output activity. Default "
+                                "120s covers most builds. Long-running processes (dev "
+                                "servers, watch processes) need a higher value or `nohup ... &`."
+                            ),
+                            "default": 120,
                         },
                     },
                     "required": ["command"],
