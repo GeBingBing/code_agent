@@ -274,7 +274,12 @@ class ExecuteCommandTool(BaseTool):
 
         # Security validation
         if error := self._validate_command(command):
-            return ToolResult(success=False, content="", error=f"Command blocked: {error}")
+            return ToolResult(
+                success=False,
+                content="",
+                error=f"Command blocked: {error}",
+                metadata={"blocked": True, "lines": 0, "duration_ms": 0},
+            )
 
         try:
             t0 = time.time()
