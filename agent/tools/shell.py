@@ -253,7 +253,7 @@ class ExecuteCommandTool(BaseTool):
         command: str,
         cwd: Optional[str] = None,
         timeout: int = 30,
-        max_wait_seconds: int = 120,
+        max_wait_seconds: int = 0,
         **kwargs,
     ) -> ToolResult:
         """Execute a shell command.
@@ -262,14 +262,29 @@ class ExecuteCommandTool(BaseTool):
             command: shell command to run.
             cwd: working directory.
             timeout: idle timeout in seconds (kill if NO output for this long).
-                Distinct from `max_wait_seconds` — a build that streams progress
-                every few seconds won't hit this even if total runtime is
-                several minutes.
-            max_wait_seconds: hard wall-clock cap. The process is killed once
-                total elapsed time exceeds this, regardless of output activity.
-                Default 120s covers most builds / tests. Long-running
-                commands (dev servers, watch processes, REPLs) MUST use a
-                higher value OR be wrapped in `nohup ... &` to run detached.
+                Default 30s. Catches hung/silent processes (deadlocks,
+                network stalls). Processes that produce output continuously
+                are unaffected — a build/test that streams progress for
+                10 minutes will run to completion as long as something
+                keeps coming out.
+            max_wait_seconds: OPT-IN wall-clock cap. Default 0 (disabled).
+                Pass a positive value to kill the process once total
+                elapsed time exceeds it, regardless of output activity.
+                Useful for bounding genuinely-bad cases (a hung CI run,
+                a runaway loop) when you know the legitimate upper bound.
+                Leave at 0 to trust that idle_timeout is sufficient.
+
+        Why opt-in: commands that produce output continuously are NOT
+        unresponsive — `pytest` reporting progress, `cargo build` ticking
+        test counts, a SQL query streaming rows — all legitimate uses
+        that should be allowed to run as long as needed. Killing them by
+        wall-clock was a regression for users with slow-but-honest
+        workloads.
+
+        For dev servers / watch processes (npm run dev, python -m
+        http.server) that emit brief startup output then go silent,
+        the idle timeout WILL fire. Run those externally or via
+        `nohup ... &`.
         """
 
         # Security validation
@@ -290,20 +305,21 @@ class ExecuteCommandTool(BaseTool):
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            # Wrap with a wall-clock cap. read_process handles the idle
-            # timeout internally; asyncio.wait_for adds the second layer
-            # so that long-running but steadily-emitting processes (e.g.
-            # `npm run dev`, `python -m http.server`) are killed too.
+            # read_process handles the idle timeout internally. The
+            # optional max_wait_seconds adds a wall-clock cap when the
+            # caller explicitly opts in (default 0 = disabled).
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    read_process(proc, idle_timeout=timeout),
-                    timeout=max_wait_seconds,
-                )
+                if max_wait_seconds > 0:
+                    stdout, stderr = await asyncio.wait_for(
+                        read_process(proc, idle_timeout=timeout),
+                        timeout=max_wait_seconds,
+                    )
+                else:
+                    stdout, stderr = await read_process(proc, idle_timeout=timeout)
             except asyncio.TimeoutError:
-                # asyncio.wait_for raises TimeoutError when the wall-clock
-                # cap is exceeded (NOT a subprocess timeout — that's
-                # IdleTimeoutError). Kill the subprocess and return a
-                # clear message.
+                # asyncio.wait_for raises TimeoutError when the
+                # wall-clock cap is exceeded (NOT a subprocess idle
+                # timeout — that's IdleTimeoutError). Kill and report.
                 try:
                     proc.kill()
                     await proc.wait()
@@ -368,12 +384,13 @@ class ExecuteCommandTool(BaseTool):
                         "max_wait_seconds": {
                             "type": "integer",
                             "description": (
-                                "Hard wall-clock cap. Process is killed once total elapsed "
-                                "time exceeds this, regardless of output activity. Default "
-                                "120s covers most builds. Long-running processes (dev "
-                                "servers, watch processes) need a higher value or `nohup ... &`."
+                                "OPT-IN wall-clock cap. Default 0 (disabled). Pass a positive "
+                                "value to kill the process after this many seconds regardless "
+                                "of output. Use only when you know the legitimate upper bound "
+                                "and want to bound genuinely-bad cases. Commands with continuous "
+                                "output (pytest, cargo build) are NOT killed unless this is set."
                             ),
-                            "default": 120,
+                            "default": 0,
                         },
                     },
                     "required": ["command"],
