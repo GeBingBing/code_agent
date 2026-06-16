@@ -354,6 +354,17 @@ class PermissionManager:
         if self.mode == PermissionMode.PLAN:
             if risk == RiskLevel.LOW:
                 return True, "Plan mode: read-only OK"
+            # exit_plan_mode is a meta-tool: its purpose is to EXIT plan
+            # mode by presenting the LLM's plan to the user. Block it
+            # here and the LLM can never get out of plan mode — it sees
+            # "Plan mode blocks exit_plan_mode: medium risk", tries the
+            # next write tool, gets blocked again, and loops forever
+            # (the user-reported 'plan mode stuck loop' from
+            # `30e8dac fix: auto-approve plan on user 'yes'`).
+            # Allow it through; downstream stages (BEFORE_TOOL_EXECUTION
+            # hook + stage 10 transition) handle the actual logic.
+            if tool_name == "exit_plan_mode":
+                return True, "Plan mode: exit_plan_mode is the way out"
             msg = f"Plan mode blocks {tool_name}: {risk.value} risk"
             self._record(tool_name, args, False, msg)
             return False, msg
