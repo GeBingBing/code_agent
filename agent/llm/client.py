@@ -9,6 +9,7 @@ absolutely no network sockets are opened (see
 for the regression guard).
 """
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -309,10 +310,15 @@ class LLMClient:
 
         if stream:
             params["stream"] = True
-            # Yield raw chunks with metadata so engine can filter thinking tags
-            return self.client.chat.completions.create(**params), True
+            # Yield raw chunks with metadata so engine can filter thinking tags.
+            # Run the SYNC OpenAI client in a thread executor so the event
+            # loop stays responsive and KeyboardInterrupt cancellation can
+            # propagate cleanly (otherwise the sync I/O blocks the loop and
+            # produces "Task exception was never retrieved" on Ctrl+C).
+            stream_obj = await asyncio.to_thread(self.client.chat.completions.create, **params)
+            return stream_obj, True
         else:
-            response = self.client.chat.completions.create(**params)
+            response = await asyncio.to_thread(self.client.chat.completions.create, **params)
             message = response.choices[0].message
             # Return the full message object if it contains tool calls,
             # so the engine can process them. Otherwise return content string.
