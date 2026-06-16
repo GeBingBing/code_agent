@@ -1279,13 +1279,14 @@ class SimpleCLI:
                 # very first user input. Use `_last_engine` + getattr so the
                 # guard is safe even when no task has run yet.
                 _engine = getattr(self, "_last_engine", None)
-                if (
+                _in_plan_mode = (
                     _engine is not None
                     and getattr(_engine.permissions, "mode", None)
                     and _engine.permissions.mode.value == "plan"
-                    and cli_has_pending_plan(self)
-                    and _looks_like_plan_approval(user_input)
-                ):
+                )
+                _has_pending = cli_has_pending_plan(self)
+
+                if _in_plan_mode and _has_pending and _looks_like_plan_approval(user_input):
                     result = _run_async(self._handle_command("/plan accept"))
                     print(f"{GREEN}✓ Auto-accepted plan (user said: {user_input!r}){RESET}")
                     print(result)
@@ -1295,6 +1296,21 @@ class SimpleCLI:
                         print(f"{DIM}Goodbye.{RESET}")
                         break
                     continue
+
+                # ── Plan-mode feedback routing ──
+                # When a plan is pending and the user types something that's
+                # neither approval ("yes/ok") nor a slash command, treat it
+                # as FEEDBACK on the pending plan — NOT a new task. Without
+                # this, the LLM receives the message as a new task and tries
+                # to act on it in plan mode (write_file blocked → loop).
+                # The LLM can refine via /plan edit, /plan comment, or a
+                # re-call of exit_plan_mode with updated content.
+                if _in_plan_mode and _has_pending and not user_input.startswith("/"):
+                    user_input = (
+                        "[Plan feedback — apply via /plan edit, /plan comment, "
+                        "or re-call exit_plan_mode with refined content]\n"
+                        f"{user_input}"
+                    )
 
                 # ── Slash command routing ──
                 if user_input.startswith("/"):
