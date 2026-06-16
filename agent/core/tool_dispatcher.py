@@ -410,9 +410,28 @@ class ToolDispatcher:
                 self._set_pre_plan_mode(self._permissions.mode)
                 self._permissions.mode = PermissionMode.PLAN
             elif func_name == "exit_plan_mode":
-                prev = self._get_pre_plan_mode()
-                if prev is not None:
-                    self._permissions.mode = prev
+                # NOTE: stage 10 deliberately does NOT auto-switch mode
+                # back to the previous mode here. Pre-090ec3d the
+                # plan-mode permission check blocked exit_plan_mode
+                # outright, so this code path was unreachable. After
+                # 090ec3d let the tool execute, but having stage 10
+                # silently flip mode to default caused the agent to
+                # start writing files immediately, bypassing the
+                # user-visible "approve before executing" gate.
+                #
+                # The correct flow is now:
+                #   1. exit_plan_mode saves the plan to disk
+                #   2. CLI renders the plan (Panel)
+                #   3. User types "yes" → cli.py auto-approve fires
+                #      `_run_async(self._handle_command("/plan accept"))`
+                #   4. /plan accept sets mode = default (handled by
+                #      agent/commands/builtin.py:_handle_plan)
+                #   5. LLM's next iteration now has write tools
+                #
+                # If we wanted to support auto-mode-flip for users who
+                # don't want the manual gate, the right place is an
+                # env-var / CLI flag, NOT a silent side-effect here.
+                pass
 
         # Stage 11: AFTER_TOOL_EXECUTION hook
         after_payload = {
