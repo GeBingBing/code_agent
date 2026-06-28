@@ -131,16 +131,21 @@ GUIDANCE:
   - "agent" — multi-step or unclear scope (build features, refactor across files)"""
 
     def _legacy_extract(self, task: str) -> str:
-        """Minimal offline fallback. Defaults to "agent" (safe choice).
+        """Offline keyword fallback (PR-14 rules restored). Reached only when
+        the LLM is unavailable (``use_llm=False``) or the LLM call fails —
+        never in the primary LLM path. Pure function: no I/O, no network.
 
-        Catches only OBVIOUS cases. Lost from the PR-14 heuristic:
-          - project-phrase list ("启动本项目", "run this project")
-          - install/fix/rename triggers ("install", "fix", "delete", "renam")
-          - length-≤5 rule
-          - run command triggers ("run pytest", "运行")
-        All of these are now handled by the LLM in the primary path.
-        The fallback is intentionally minimal — it's a safety net, not
-        a full classifier.
+        First-match-wins order:
+          1. empty → "agent"
+          2. greeting → "ask"
+          3. self-referential → "ask"
+          4. question phrase (how/why/是什么/怎么办) → "ask"
+          5. edit trigger (install/fix/rename/run-tests) → "edit"
+          6. else → "agent" (safe default; LLM resolves ambiguity normally)
+
+        The edit triggers are deliberately multi-word where ambiguous:
+        ``"run test"`` matches but bare ``"run"`` does NOT (a bare "run" is
+        too ambiguous to assume a single-step edit).
         """
         t = (task or "").strip().lower()
         if not t:
@@ -175,6 +180,15 @@ GUIDANCE:
             )
         ):
             return "ask"
+        # Question phrases — route to the no-tool direct-answer path
+        if any(p in t for p in ("how", "why", "是什么", "怎么办", "怎么")):
+            return "ask"
+        # Edit triggers — single-step actions get the fast edit path instead
+        # of falling into the 200-step ReAct "agent" loop.
+        if any(k in t for k in ("install", "fix", "rename", "renam")):
+            return "edit"
+        if any(k in t for k in ("run test", "run-test", "run_tests", "run the test", "运行测试")):
+            return "edit"
         # Default safe: agent (will run sub-agents, can do anything)
         return "agent"
 
@@ -241,8 +255,17 @@ class IntentRouter:
             return None
         return self._classifier.cache_stats()
 
-    async def route(self, task: str) -> str:
-        """Classify the task and dispatch to the matching handler."""
+    async def route(self, task: str, dispatch_task: Optional[str] = None) -> str:
+        """Classify the task and dispatch to the matching handler.
+
+        Args:
+            task: The RAW user task — this is what the classifier sees, so it
+                is NOT biased by file-context prefixes.
+            dispatch_task: Optional alternate payload handed to the handler.
+                Used by the CLI to pass the ``[Files: ...]``-prefixed task to
+                the handler while classifying the raw task. Defaults to
+                ``task`` when omitted (single-task CLI path).
+        """
         if not self._classifier:
             intent = "agent"
         else:
@@ -255,4 +278,4 @@ class IntentRouter:
         if handler is None:
             return f"No handler for intent '{intent}'"
 
-        return await handler(task)
+        return await handler(dispatch_task if dispatch_task is not None else task)

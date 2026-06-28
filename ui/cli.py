@@ -14,6 +14,7 @@ import time
 # Silence pattern for noisy asyncio debug warnings
 _NOISE_PATTERNS = ("Executing ", "took ", "Task was destroyed")
 from pathlib import Path  # noqa: E402 — kept here for clarity near related setup
+from typing import Optional  # noqa: E402
 
 # Suppress stderr in non-TTY mode to hide asyncio noise
 if not sys.stdin.isatty():
@@ -205,6 +206,132 @@ def _render_markdown_token(text: str) -> str:
     text = re.sub(r"\*\*(.+?)\*\*", f"{BOLD}{YELLOW}\\1{RESET}", text)
     text = re.sub(r"`([^`]+)`", f"{GREEN}\\1{RESET}", text)
     return text
+
+
+# ── Phase B: CLI UX helpers (prompt_toolkit-based) ───────────────
+# Each helper is a pure module-level function so it can be unit-tested
+# without a live prompt_toolkit session. See tests/test_cli_ux.py.
+
+
+def parse_at_mentions(text: str, cwd: Optional[str] = None) -> list:
+    """Extract ``@path`` mentions from ``text`` and resolve them to absolute
+    paths. Only mentions whose path exists on disk are kept (so a bare ``@``
+    or an email-style ``@ user`` is ignored). Returns a de-duplicated list,
+    order-preserving.
+    """
+    import os
+    import re
+    from pathlib import Path as _Path
+
+    if not text:
+        return []
+    base = _Path(cwd) if cwd else _Path(os.getcwd())
+    tokens = re.findall(r"@([\w./\-]+)", text)
+    out: list = []
+    seen = set()
+    for tok in tokens:
+        resolved = (base / tok).resolve()
+        if resolved.exists() and str(resolved) not in seen:
+            seen.add(str(resolved))
+            out.append(str(resolved))
+    return out
+
+
+def build_slash_completer(reg):
+    """Build a ``WordCompleter`` from a ``CommandRegistry``.
+
+    Words are ``/{name}`` plus ``/{alias}`` for every registered command, so
+    dynamically-registered commands appear in completions without rebuilding.
+    ``meta_dict`` carries each command's description for the completion menu.
+    """
+    from prompt_toolkit.completion import WordCompleter
+
+    words: list = []
+    meta: dict = {}
+    for cmd in reg.list_all():
+        primary = f"/{cmd.name}"
+        words.append(primary)
+        meta[primary] = cmd.description or ""
+        for alias in getattr(cmd, "aliases", []) or []:
+            a = f"/{alias}"
+            words.append(a)
+            meta[a] = cmd.description or ""
+
+    return WordCompleter(
+        words=lambda: list(words),
+        meta_dict=meta,
+        ignore_case=True,
+        sentence=True,
+    )
+
+
+def is_line_continuation(text: str) -> bool:
+    """True if ``text`` ends with a trailing backslash (line continuation)."""
+    import re
+
+    return bool(re.search(r"\\\s*$", text or ""))
+
+
+def join_continued_lines(text: str) -> str:
+    """Join lines split by trailing-backslash continuations.
+
+    The backslash is stripped; the newline stays so the LLM still sees the
+    original line breaks, just without the ``\\``.
+    """
+    import re
+
+    if not text:
+        return text
+    # Eat the backslash, surrounding whitespace, and its newline -> single
+    # newline, so "foo \\<newline>bar" becomes "foo<newline>bar".
+    return re.sub(r"\s*\\\s*\n", "\n", text)
+
+
+def normalize_pasted_text(text: str) -> str:
+    """Normalize pasted text: collapse runs of 3+ newlines to 2, and trim
+    whitespace-only lines to empty. Idempotent on clean text."""
+    import re
+
+    if not text:
+        return text
+    # Drop whitespace-only lines (≥1 space/tab) together with their trailing
+    # newline. Pure empty lines are kept so paragraph breaks survive.
+    text = re.sub(r"(?m)^[ \t]+\n", "", text)
+    # Collapse runs of 3+ newlines to 2.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text
+
+
+def should_submit(buffer_text: str) -> bool:
+    """Decide if Enter should submit (no pending continuation) vs. insert a
+    newline. True when the buffer does NOT end with a trailing backslash."""
+    return not is_line_continuation(buffer_text)
+
+
+def history_file_path():
+    """Return the on-disk history path (``~/.coding-agent/history``).
+
+    The parent dir is created if missing, mirroring the ``~/.coding-agent/``
+    convention used by logs / audit / memory.
+    """
+    p = Path.home() / ".coding-agent" / "history"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def format_token_badge(usage, estimated: bool = False, result_len: int = 0) -> str:
+    """Format a per-message token badge from a usage dict.
+
+    Real usage -> ``\u2b07 {in:,} in / {out:,} out``. Estimated ->
+    ``\u2b07 ~{n} tokens (\u4f30\u8ba1)`` (n defaults to
+    ``max(1, result_len // 4)``). Empty/None -> ``""``.
+    """
+    if usage and usage.get("input") is not None and usage.get("output") is not None:
+        return f"⬇ {usage['input']:,} in / {usage['output']:,} out"
+    if estimated:
+        est = max(1, (result_len or 0) // 4)
+        return f"⬇ ~{est:,} tokens (估计)"
+    return ""
 
 
 def _render_todo_panel(todos: list) -> str:
@@ -1101,8 +1228,12 @@ class SimpleCLI:
 
         try:
             from prompt_toolkit import PromptSession
-            from prompt_toolkit.completion import WordCompleter
-            from prompt_toolkit.history import InMemoryHistory
+            from prompt_toolkit.completion import (
+                Completer,
+                Completion,
+                PathCompleter,
+            )
+            from prompt_toolkit.history import FileHistory
             from prompt_toolkit.key_binding import KeyBindings
             from prompt_toolkit.styles import Style
         except ImportError:
@@ -1130,25 +1261,36 @@ class SimpleCLI:
                 else:
                     buf.delete()
 
-            # Slash command completer
-            slash_commands = [
-                "/help",
-                "/clear",
-                "/plan",
-                "/commit",
-                "/model",
-                "/mode",
-                "/memory",
-                "/status",
-                "/context",
-                "/review",
-                "/undo",
-                "/quit",
-            ]
-            completer = WordCompleter(slash_commands, ignore_case=True, sentence=True)
+            # Slash command completer — built dynamically from the registry
+            # (B2) so newly-registered commands appear without code changes.
+            from agent.commands.base import registry as _cmd_registry
 
-            # History
-            history = InMemoryHistory()
+            slash_completer = build_slash_completer(_cmd_registry)
+
+            # @-file path completer (B1): when the cursor follows an '@',
+            # offer files/dirs under cwd. Merged with the slash completer.
+            _path_completer = PathCompleter(expanduser=True, get_paths=lambda: [os.getcwd()])
+
+            class _AtOrSlashCompleter(Completer):
+                def get_completions(self, document, complete_event):
+                    word_before = document.get_word_before_cursor(WORD=True)
+                    if word_before.startswith("@"):
+                        # Strip the '@' for PathCompleter, re-prepend on results.
+                        prefix = word_before[1:]
+                        for comp in _path_completer.get_completions(document, complete_event):
+                            yield Completion(
+                                text="@" + comp.text,
+                                start_position=comp.start_position - 1,
+                                display=comp.display,
+                                display_meta=comp.display_meta,
+                            )
+                    else:
+                        yield from slash_completer.get_completions(document, complete_event)
+
+            completer = _AtOrSlashCompleter()
+
+            # On-disk history (B4): persists across sessions (Up-arrow recall).
+            history = FileHistory(str(history_file_path()))
 
             # Style: minimal — just dim prompt. Add a toolbar class for
             # the bottom_toolbar status line; skip the bg color when
@@ -1164,7 +1306,7 @@ class SimpleCLI:
                 completer=completer,
                 style=style,
                 message=[("class:prompt", "> ")],
-                multiline=False,
+                multiline=True,
                 bottom_toolbar=self._build_toolbar,
             )
 
@@ -1190,6 +1332,33 @@ class SimpleCLI:
         self.file_context.extend(paths)
         if len(self.file_context) > 10:
             self.file_context = self.file_context[-10:]
+
+    async def _dispatch_user_input(self, user_input: str) -> Optional[str]:
+        """Route a user input line to the right intent handler.
+
+        The classifier sees the RAW ``user_input``; the handler receives the
+        ``[Files: ...]``-prefixed task (``dispatch_task``) so file context
+        never biases intent classification. Records the assistant reply in
+        history + file context. Returns None to signal "loop without echo"
+        (used by the run loop).
+        """
+        # B1: pull @-mentioned files into file_context BEFORE injecting the
+        # [Files: ...] prefix, so the agent sees their paths.
+        mentioned = parse_at_mentions(user_input, cwd=os.getcwd())
+        if mentioned:
+            self.file_context.extend(mentioned)
+            if len(self.file_context) > 10:
+                self.file_context = self.file_context[-10:]
+        task_with_context = self._inject_file_context(user_input)
+        if self._router:
+            result = await self._router.route(user_input, dispatch_task=task_with_context)
+        else:
+            result = await self._run_task(task_with_context)
+        if result is None:
+            return None
+        self.history.append({"role": "assistant", "content": result})
+        self._update_file_context(result)
+        return result
 
     async def _handle_command(self, user_input: str) -> str:
         """Handle a slash command. Returns output string."""
@@ -1280,7 +1449,6 @@ class SimpleCLI:
         except Exception as e:
             print(f"{DIM}Warning: intent router unavailable ({e}){RESET}")
             print()
-        route = self._router.route if self._router else None
 
         while True:
             try:
@@ -1357,15 +1525,10 @@ class SimpleCLI:
                 self._echo_user_input(user_input)
 
                 # ── Intent-based routing (LLM classifier → handler) ──
-                task_with_context = self._inject_file_context(user_input)
-                result = _run_async(
-                    route(task_with_context) if route else self._run_task(task_with_context)
-                )
+                result = _run_async(self._dispatch_user_input(user_input))
                 if result is None:
                     continue
 
-                self.history.append({"role": "assistant", "content": result})
-                self._update_file_context(result)
                 print()
 
             except KeyboardInterrupt:
@@ -1685,7 +1848,13 @@ class SimpleCLI:
             # (not just Exception) to handle pydantic/compat errors cleanly.
             if isinstance(e, (KeyboardInterrupt, SystemExit)):
                 raise
-            pass
+            # LLM unavailable → install a legacy-only classifier so the
+            # restored keyword fallback (intent.py) still routes inputs.
+            # Without this, _classifier stays None and EVERY input defaults
+            # to the heavy 'agent' handler (IntentRouter.route).
+            router.set_classifier(
+                IntentClassifier(llm_client=None, use_llm=False, fallback_to_legacy=True)
+            )
 
         # Register handlers (these are bound methods, can be extended by users)
         router.register("ask", self._run_ask)
@@ -1704,13 +1873,15 @@ class SimpleCLI:
         return await self._direct_answer(task, engine, time.time())
 
     async def _run_edit(self, task: str) -> str:
-        """Edit handler — direct execute, no plan phase. Short step limit."""
+        """Edit handler — direct execute, no plan phase. Capped at max_steps=25."""
         from agent.core.engine import AgentConfig, AgentEngine
 
         from .spinner import StageLabel
 
         start_time = time.time()
-        config = AgentConfig(verbose=False, mode="auto", confirm_handler=_confirm_handler)
+        config = AgentConfig(
+            verbose=False, mode="auto", max_steps=25, confirm_handler=_confirm_handler
+        )
         engine = AgentEngine(config)
         self._last_engine = engine
 
@@ -1823,9 +1994,12 @@ class SimpleCLI:
 
         mode = config.get("mode")
 
-        # Skip for simple conversational questions
-        if _is_simple_question(task):
-            return await self._direct_answer(task, engine, start_time)
+        # NOTE: We intentionally do NOT call _is_simple_question here. An
+        # 'agent'-classified task has already been routed by the LLM
+        # classifier (or legacy fallback) as needing tools; a regex must not
+        # silently strip its tools and downgrade to _direct_answer. The
+        # direct-answer path is reached only via the 'ask' intent (_run_ask).
+        # (Phase A1 fix.)
 
         # Inject conversation history for multi-turn awareness
         if len(self.history) >= 2:

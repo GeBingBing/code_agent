@@ -53,14 +53,32 @@ class TestLegacyHeuristic:
         assert c._legacy_extract("who are you") == "ask"
         assert c._legacy_extract("what can you do") == "ask"
 
-    def test_legacy_install_is_agent_now(self):
-        """PR-15: install commands are NO LONGER caught by legacy.
-        LLM (Tier 2) now handles these. Legacy defaults to 'agent'."""
+    def test_legacy_edit_triggers(self):
+        """PR-14 keyword rules RESTORED: single-step edit actions route to
+        'edit' even when the LLM is unavailable (offline fallback). Without
+        this, a simple ``pip install`` would fall into the 200-step ReAct
+        'agent' path. Install/fix/rename/run-tests are the fast path."""
         c = IntentClassifier(llm_client=None)
-        # install/find/rename no longer hard-coded in legacy
-        assert c._legacy_extract("install hermes") == "agent"
-        assert c._legacy_extract("fix the bug") == "agent"
-        assert c._legacy_extract("rename getCwd to getcwd") == "agent"
+        assert c._legacy_extract("install hermes") == "edit"
+        assert c._legacy_extract("fix the bug in foo.py") == "edit"
+        assert c._legacy_extract("rename getCwd to getcwd") == "edit"
+        assert c._legacy_extract("run the tests") == "edit"
+        assert c._legacy_extract("运行测试") == "edit"
+
+    def test_legacy_question_phrases_are_ask(self):
+        """Offline questions (how/why/是什么/怎么办) route to 'ask' so they
+        reach the no-tool direct-answer path instead of spinning up tools."""
+        c = IntentClassifier(llm_client=None)
+        assert c._legacy_extract("how does async work") == "ask"
+        assert c._legacy_extract("why is it slow") == "ask"
+        assert c._legacy_extract("是什么意思") == "ask"
+        assert c._legacy_extract("怎么办") == "ask"
+        assert c._legacy_extract("怎么用") == "ask"
+
+    def test_legacy_refactor_is_agent(self):
+        """Refactor is multi-step — must stay 'agent' even offline."""
+        c = IntentClassifier(llm_client=None)
+        assert c._legacy_extract("refactor module Y") == "agent"
 
     def test_legacy_empty_returns_agent(self):
         c = IntentClassifier(llm_client=None)
@@ -68,14 +86,11 @@ class TestLegacyHeuristic:
         assert c._legacy_extract(None) == "agent"  # type: ignore
 
     def test_legacy_ambiguous_returns_agent(self):
-        """PR-15: legacy no longer returns None — it always returns a
-        string. Ambiguous cases default to 'agent' (safe choice).
-        None-returning behavior was PR-14; LLM is now expected to
-        resolve ambiguity in the primary path."""
+        """Genuinely multi-step/ambiguous requests with no edit trigger and
+        no question phrase still default to 'agent' (safe choice)."""
         c = IntentClassifier(llm_client=None)
         assert c._legacy_extract("build a todo app with React") == "agent"
         assert c._legacy_extract("create a REST API for the blog") == "agent"
-        assert c._legacy_extract("how does async work") == "agent"
 
 
 # ── TestIntentRouter ─────────────────────────────────────────
@@ -133,6 +148,28 @@ class TestIntentRouter:
 
         await router.route("install hermes")
         assert "edit" in results
+
+    @pytest.mark.asyncio
+    async def test_route_classifies_raw_dispatches_context(self):
+        """The classifier must see the RAW task, but the handler receives the
+        file-context-prefixed ``dispatch_task``. This prevents ``[Files: ...]``
+        prefixes from biasing intent classification toward edit/agent."""
+        router = IntentRouter()
+        mock_llm = MagicMock()
+        mock_llm.chat = AsyncMock(return_value=('{"intent": "edit"}', False))
+        router.set_classifier(IntentClassifier(llm_client=mock_llm))
+
+        dispatched = {}
+
+        async def edit_h(task):
+            dispatched["task"] = task
+
+        router.register("edit", edit_h)
+
+        await router.route("raw task", dispatch_task="[Files: foo.py] raw task")
+
+        assert "raw task" in mock_llm.chat.call_args.args[0][-1].content
+        assert dispatched["task"] == "[Files: foo.py] raw task"
 
 
 # ── TestIntentDataClass ─────────────────────────────────────
