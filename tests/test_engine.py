@@ -222,9 +222,23 @@ class TestDetectStartCommand:
         (tmp_path / "out" / "index.html").write_text("x")
         hint = AgentEngine._detect_start_command(tmp_path)
         assert "serve out" in hint
-        assert "3000" in hint
+        # No hardcoded port by default (serve picks its own).
+        assert "-l" not in hint
         assert "npm run start" not in hint
         assert "npm run dev" not in hint
+
+    def test_nextjs_export_port_from_env(self, tmp_path, monkeypatch):
+        """Port is configurable via CODING_AGENT_SERVE_PORT (not hardcoded)."""
+        import json
+
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "package.json").write_text(json.dumps({"name": "p", "scripts": {}}))
+        (tmp_path / "next.config.js").write_text("module.exports = { output: 'export' }")
+        (tmp_path / "out").mkdir()
+        monkeypatch.setenv("CODING_AGENT_SERVE_PORT", "8080")
+        hint = AgentEngine._detect_start_command(tmp_path)
+        assert "-l 8080" in hint
 
     def test_nextjs_export_without_out_dir(self, tmp_path):
         """Export project with no out/ yet → hint builds first then serves."""
@@ -252,6 +266,29 @@ class TestDetectStartCommand:
         (tmp_path / "next.config.js").write_text("module.exports = { reactStrictMode: true }")
         hint = AgentEngine._detect_start_command(tmp_path)
         assert "npm run start" in hint
+
+    def test_detect_nextjs_export_double_quotes(self, tmp_path):
+        """output:\"export\" (double quotes) is also detected — not quote-hardcoded."""
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "next.config.js").write_text('module.exports = { output: "export" }')
+        (tmp_path / "out").mkdir()
+        export_dir, needs_build = AgentEngine._detect_nextjs_export(tmp_path)
+        assert export_dir == "out"
+        assert needs_build is False
+
+    def test_detect_nextjs_export_mjs_config(self, tmp_path):
+        """next.config.mjs is recognized, not just .js."""
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "next.config.mjs").write_text("export default { output: 'export' }")
+        export_dir, _ = AgentEngine._detect_nextjs_export(tmp_path)
+        assert export_dir == "out"
+
+    def test_detect_nextjs_export_none_when_no_config(self, tmp_path):
+        from agent.core.engine import AgentEngine
+
+        assert AgentEngine._detect_nextjs_export(tmp_path) == (None, False)
 
     def test_python_with_main_py(self, tmp_path):
         from agent.core.engine import AgentEngine

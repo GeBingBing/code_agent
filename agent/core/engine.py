@@ -850,19 +850,18 @@ class AgentEngine:
                 try:
                     pkg = json.loads(pkg_json.read_text(encoding="utf-8", errors="replace"))
                     scripts = pkg.get("scripts", {})
-                    # Next.js with output: 'export' — next dev/start are NOT
-                    # usable (the build emits static files to out/). Serve the
-                    # exported out/ dir instead. Prefer a locally installed
-                    # server, else npx. Rebuild first if out/ is missing.
-                    next_cfg = workspace / "next.config.js"
-                    if next_cfg.exists() and any(
-                        s in next_cfg.read_text(encoding="utf-8", errors="replace")
-                        for s in ("output: 'export'", 'output: "export"', "output:'export'")
-                    ):
-                        has_out = (workspace / "out").exists()
-                        if has_out:
-                            return "npx serve out -l 3000  # Next.js static export; next dev/start unusable"
-                        return "npm run build && npx serve out -l 3000  # build the export, then serve out/"
+                    # Next.js static-export project: next dev/start are NOT
+                    # usable when output:'export' is set (the build emits a
+                    # static site). Detect it by parsing next.config.{js,mjs,
+                    # ts} for the output field, then serve the exported dir.
+                    export_dir, needs_build = AgentEngine._detect_nextjs_export(workspace)
+                    if export_dir is not None:
+                        port = os.environ.get("CODING_AGENT_SERVE_PORT", "")
+                        port_flag = f" -l {port}" if port else ""
+                        serve_cmd = f"npx serve{port_flag} {export_dir}"
+                        if needs_build:
+                            return f"npm run build && {serve_cmd}  # Next.js export: build then serve {export_dir}/"
+                        return f"{serve_cmd}  # Next.js export: serve {export_dir}/ (next dev/start unusable)"
                     # Prefer "start", fall back to "dev"
                     for key in ("start", "dev"):
                         if key in scripts:
@@ -915,6 +914,42 @@ class AgentEngine:
         except Exception:
             pass
         return ""
+
+    @staticmethod
+    def _detect_nextjs_export(workspace: "Path"):
+        """Detect a Next.js static-export project.
+
+        Returns ``(export_dir, needs_build)`` where ``export_dir`` is the
+        relative directory holding the static build (Next.js defaults to
+        ``out``), or ``(None, False)`` if this isn't a Next.js export project.
+
+        - ``output: 'export'`` is parsed from any ``next.config.{js,mjs,ts,
+          cjs}`` with a regex (no hardcoded quote style).
+        - ``needs_build`` is True when the export dir doesn't exist yet (the
+          agent should build before serving).
+        """
+        import re
+
+        # Locate a next.config.* file (any supported extension).
+        cfg = None
+        for name in ("next.config.js", "next.config.mjs", "next.config.ts", "next.config.cjs"):
+            cand = workspace / name
+            if cand.exists():
+                cfg = cand
+                break
+        if cfg is None:
+            return (None, False)
+
+        text = cfg.read_text(encoding="utf-8", errors="replace")
+        # Match `output: 'export'` / `output: "export"` / `output:export`,
+        # allowing surrounding whitespace. No hardcoded quote variant.
+        if not re.search(r"output\s*:\s*['\"]?export['\"]?", text):
+            return (None, False)
+
+        # Next.js export emits to `out/` by default; `distDir` changes the
+        # build dir, not the export dir, so `out/` is the canonical target.
+        export_dir = "out"
+        return (export_dir, not (workspace / export_dir).exists())
 
     @staticmethod
     def _format_confirm_message(tool_name: str, args: dict) -> str:
