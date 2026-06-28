@@ -9,10 +9,36 @@ os.environ["PYTHONASYNCIODEBUG"] = "0"
 os.environ["AIODEBUG"] = "0"
 
 import asyncio
+import logging
 import time
 
-# Silence pattern for noisy asyncio debug warnings
+# Strings that identify asyncio debug noise ("Executing <Task ...> took X
+# seconds", "Task was destroyed", etc.). prompt_toolkit runs a background
+# _poll_output_size task under multiline=True that spams these when the
+# asyncio debug logger is active. We filter them out of the asyncio logger
+# rather than relying on PYTHONASYNCIODEBUG (which must be set before the
+# asyncio module is imported and is unreliable here).
 _NOISE_PATTERNS = ("Executing ", "took ", "Task was destroyed")
+
+
+class _AsyncioNoiseFilter(logging.Filter):
+    """Drop asyncio debug log records that match _NOISE_PATTERNS."""
+
+    def filter(self, record):
+        msg = record.getMessage()
+        return not any(pat in msg for pat in _NOISE_PATTERNS)
+
+
+# The asyncio debug logger spams "Executing <Task ...> took X seconds" for
+# prompt_toolkit's background _poll_output_size task (multiline mode). Two
+# defenses: (1) raise the asyncio logger above DEBUG so debug records never
+# reach handlers, (2) a filter as a backstop in case something lowers the
+# level later. Loop debug mode itself stays on (prompt_toolkit may rely on it).
+_asyncio_logger = logging.getLogger("asyncio")
+_asyncio_logger.addFilter(_AsyncioNoiseFilter())
+if _asyncio_logger.level == logging.NOTSET:
+    _asyncio_logger.setLevel(logging.WARNING)
+
 from pathlib import Path  # noqa: E402 — kept here for clarity near related setup
 from typing import Optional  # noqa: E402
 
