@@ -1287,6 +1287,23 @@ class SimpleCLI:
                 else:
                     buf.delete()
 
+            # Enter submits when there is no pending line-continuation
+            # (no trailing backslash); otherwise it inserts a newline.
+            # Required because multiline=True makes Enter a newline by default.
+            @bindings.add("enter")
+            def _(event):
+                buf = event.app.current_buffer
+                if should_submit(buf.text):
+                    event.app.exit(result=buf.text)
+                else:
+                    buf.insert_text("\n")
+
+            # Esc-Enter (or Meta-Enter) always inserts a newline — the
+            # explicit multi-line gesture.
+            @bindings.add("escape", "enter")
+            def _(event):
+                event.app.current_buffer.insert_text("\n")
+
             # Slash command completer — built dynamically from the registry
             # (B2) so newly-registered commands appear without code changes.
             from agent.commands.base import registry as _cmd_registry
@@ -1343,6 +1360,11 @@ class SimpleCLI:
         except Exception:
             return input(f"{DIM}> {RESET}").strip()
 
+        # B3: normalize pastes (collapse blank runs) and join backslash
+        # continuations before returning.
+        if text:
+            text = normalize_pasted_text(text)
+            text = join_continued_lines(text)
         return text.strip() if text else text
 
     def _inject_file_context(self, task: str) -> str:
