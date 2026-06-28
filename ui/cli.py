@@ -241,9 +241,10 @@ def _render_markdown_token(text: str) -> str:
 
 def parse_at_mentions(text: str, cwd: Optional[str] = None) -> list:
     """Extract ``@path`` mentions from ``text`` and resolve them to absolute
-    paths. Only mentions whose path exists on disk are kept (so a bare ``@``
-    or an email-style ``@ user`` is ignored). Returns a de-duplicated list,
-    order-preserving.
+    paths. Only mentions resolving to an existing FILE are kept — so a bare
+    ``@``, an email-style ``@ user``, a directory mention (``@sub``,
+    ``@../``, ``@./``), or a nonexistent path is ignored. Returns a
+    de-duplicated list, order-preserving.
     """
     import os
     import re
@@ -257,7 +258,7 @@ def parse_at_mentions(text: str, cwd: Optional[str] = None) -> list:
     seen = set()
     for tok in tokens:
         resolved = (base / tok).resolve()
-        if resolved.exists() and str(resolved) not in seen:
+        if resolved.is_file() and str(resolved) not in seen:
             seen.add(str(resolved))
             out.append(str(resolved))
     return out
@@ -1259,6 +1260,7 @@ class SimpleCLI:
                 Completion,
                 PathCompleter,
             )
+            from prompt_toolkit.document import Document
             from prompt_toolkit.history import FileHistory
             from prompt_toolkit.key_binding import KeyBindings
             from prompt_toolkit.styles import Style
@@ -1318,9 +1320,15 @@ class SimpleCLI:
                 def get_completions(self, document, complete_event):
                     word_before = document.get_word_before_cursor(WORD=True)
                     if word_before.startswith("@"):
-                        # Strip the '@' for PathCompleter, re-prepend on results.
-                        prefix = word_before[1:]
-                        for comp in _path_completer.get_completions(document, complete_event):
+                        # PathCompleter filters by the word before the cursor
+                        # and is confused by a leading '@' or surrounding prose.
+                        # Hand it a document containing ONLY the path token
+                        # (the '@'-mention stripped of its '@'), so it filters
+                        # on the real path prefix; then re-prepend '@' to each
+                        # completion's text and fix up start_position.
+                        path_token = word_before[1:]
+                        stripped_doc = Document(path_token, cursor_position=len(path_token))
+                        for comp in _path_completer.get_completions(stripped_doc, complete_event):
                             yield Completion(
                                 text="@" + comp.text,
                                 start_position=comp.start_position - 1,
@@ -1854,7 +1862,6 @@ class SimpleCLI:
         # Footer — Claude Code style with real vs estimated label
         if _usage_info:
             inp = _usage_info.get("input", 0)
-            out = _usage_info.get("output", 0)
             window = 128000
             pct = inp / window * 100 if window > 0 else 0
             remaining = max(0, 100 - pct)
@@ -1869,10 +1876,11 @@ class SimpleCLI:
             else:
                 line = f"{pct:.0f}% context used"
                 color = DIM
-            print(f"\n{color}{line} · ⬇ {inp:,} in / {out:,} out · {elapsed:.1f}s{RESET}")
+            print(f"\n{color}{line} · {format_token_badge(_usage_info)} · {elapsed:.1f}s{RESET}")
         else:
-            est = max(1, len(result) // 4)
-            print(f"\n{DIM}⬇ ~{est} tokens (估计) · {elapsed:.1f}s{RESET}")
+            print(
+                f"\n{DIM}{format_token_badge(None, estimated=True, result_len=len(result))} · {elapsed:.1f}s{RESET}"
+            )
         return result
 
     def _setup_router(self, model: str, provider: str):

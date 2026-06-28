@@ -45,6 +45,19 @@ class TestParseAtMentions:
         got = parse_at_mentions("@foo.py @foo.py", cwd=str(tmp_path))
         assert got == [str(tmp_path / "foo.py")]
 
+    def test_rejects_directory_mentions(self, tmp_path):
+        """@../ and @./ resolve to directories (cwd parent / cwd itself) and
+        must NOT be injected into file_context — only existing files qualify."""
+        (tmp_path / "foo.py").write_text("x")
+        (tmp_path / "sub").mkdir()
+        got = parse_at_mentions("@../ @./ @sub @foo.py", cwd=str(tmp_path))
+        assert got == [str(tmp_path / "foo.py")]
+
+    def test_rejects_dir_mention(self, tmp_path):
+        """A @mention that resolves to an existing directory is dropped."""
+        (tmp_path / "sub").mkdir()
+        assert parse_at_mentions("@sub", cwd=str(tmp_path)) == []
+
 
 # ── B2: slash completer from registry ──────────────────────────
 

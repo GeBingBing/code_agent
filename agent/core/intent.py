@@ -180,15 +180,16 @@ GUIDANCE:
             )
         ):
             return "ask"
-        # Question phrases — route to the no-tool direct-answer path
-        if any(p in t for p in ("how", "why", "是什么", "怎么办", "怎么")):
-            return "ask"
-        # Edit triggers — single-step actions get the fast edit path instead
-        # of falling into the 200-step ReAct "agent" loop.
-        if any(k in t for k in ("install", "fix", "rename", "renam")):
+        # Edit triggers — checked BEFORE question phrases so an action that
+        # is phrased as a question ("how do I run the tests?", "怎么安装x")
+        # keeps its tools instead of being downgraded to no-tool ask.
+        if any(k in t for k in ("install", "安装", "fix", "修复", "rename", "重命名", "renam")):
             return "edit"
         if any(k in t for k in ("run test", "run-test", "run_tests", "run the test", "运行测试")):
             return "edit"
+        # Question phrases (no edit verb present) → no-tool direct-answer path
+        if any(p in t for p in ("how", "why", "是什么", "怎么办", "怎么")):
+            return "ask"
         # Default safe: agent (will run sub-agents, can do anything)
         return "agent"
 

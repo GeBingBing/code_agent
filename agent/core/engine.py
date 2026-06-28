@@ -941,9 +941,17 @@ class AgentEngine:
             return (None, False)
 
         text = cfg.read_text(encoding="utf-8", errors="replace")
-        # Match `output: 'export'` / `output: "export"` / `output:export`,
-        # allowing surrounding whitespace. No hardcoded quote variant.
-        if not re.search(r"output\s*:\s*['\"]?export['\"]?", text):
+        # Strip JS comments so a commented-out `// output: 'export'` or a
+        # block comment doesn't trigger a false positive.
+        text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+        text = re.sub(r"//.*", "", text)
+        # Match `output: 'export'` / `output: "export"` (quoted) OR
+        # `output: export` followed by a value terminator (`,`, `}`, ws, EOL).
+        # The terminator anchor rejects `exported` and `export-config`.
+        if not re.search(
+            r"output\s*:\s*(?:['\"]export['\"]|export(?=[\s,}]|$))",
+            text,
+        ):
             return (None, False)
 
         # Next.js export emits to `out/` by default; `distDir` changes the

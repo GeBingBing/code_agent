@@ -80,6 +80,19 @@ class TestLegacyHeuristic:
         c = IntentClassifier(llm_client=None)
         assert c._legacy_extract("refactor module Y") == "agent"
 
+    def test_legacy_question_with_edit_verb_keeps_tools(self):
+        """A question that also names an edit action keeps tools (edit), not
+        downgraded to no-tool ask. Edit triggers are checked BEFORE question
+        phrases so 'how do I run the tests?' / '怎么安装requests' route to
+        edit. (Regression guard for the A1/F1 fix.)"""
+        c = IntentClassifier(llm_client=None)
+        assert c._legacy_extract("how do I run the tests?") == "edit"
+        assert c._legacy_extract("怎么安装requests") == "edit"
+        assert c._legacy_extract("why does install fail?") == "edit"
+        # Pure questions with no edit verb still go to ask
+        assert c._legacy_extract("how does async work") == "ask"
+        assert c._legacy_extract("怎么办") == "ask"
+
     def test_legacy_empty_returns_agent(self):
         c = IntentClassifier(llm_client=None)
         assert c._legacy_extract("") == "agent"

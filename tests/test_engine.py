@@ -290,6 +290,29 @@ class TestDetectStartCommand:
 
         assert AgentEngine._detect_nextjs_export(tmp_path) == (None, False)
 
+    def test_detect_nextjs_export_rejects_exported_suffix(self, tmp_path):
+        """`output: 'exported'` must NOT match — anchored to the exact value."""
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "next.config.js").write_text("module.exports = { output: 'exported' }")
+        assert AgentEngine._detect_nextjs_export(tmp_path) == (None, False)
+
+    def test_detect_nextjs_export_rejects_commented_line(self, tmp_path):
+        """A commented-out `// output: export` must NOT match."""
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "next.config.js").write_text(
+            "// output: 'export'\nmodule.exports = { reactStrictMode: true }"
+        )
+        assert AgentEngine._detect_nextjs_export(tmp_path) == (None, False)
+
+    def test_detect_nextjs_export_rejects_export_config(self, tmp_path):
+        """`output: 'export-config'` must NOT match."""
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "next.config.js").write_text("module.exports = { output: 'export-config' }")
+        assert AgentEngine._detect_nextjs_export(tmp_path) == (None, False)
+
     def test_python_with_main_py(self, tmp_path):
         from agent.core.engine import AgentEngine
 
