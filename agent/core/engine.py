@@ -850,6 +850,19 @@ class AgentEngine:
                 try:
                     pkg = json.loads(pkg_json.read_text(encoding="utf-8", errors="replace"))
                     scripts = pkg.get("scripts", {})
+                    # Next.js with output: 'export' — next dev/start are NOT
+                    # usable (the build emits static files to out/). Serve the
+                    # exported out/ dir instead. Prefer a locally installed
+                    # server, else npx. Rebuild first if out/ is missing.
+                    next_cfg = workspace / "next.config.js"
+                    if next_cfg.exists() and any(
+                        s in next_cfg.read_text(encoding="utf-8", errors="replace")
+                        for s in ("output: 'export'", 'output: "export"', "output:'export'")
+                    ):
+                        has_out = (workspace / "out").exists()
+                        if has_out:
+                            return "npx serve out -l 3000  # Next.js static export; next dev/start unusable"
+                        return "npm run build && npx serve out -l 3000  # build the export, then serve out/"
                     # Prefer "start", fall back to "dev"
                     for key in ("start", "dev"):
                         if key in scripts:

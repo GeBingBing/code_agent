@@ -117,7 +117,15 @@ STARTING A PROJECT (highest priority):
      package.json, pyproject.toml, or Makefile in cwd to find the start
      command. Do NOT ask the user for the project path.
   4. Run the start command using `cwd` parameter or `cd && cmd` in ONE call.
-  5. If you truly cannot find a start command, then ask. But try first.
+  5. If the start command is a LONG-RUNNING server (npm run dev, next start,
+     npx serve, python -m http.server, uvicorn, rails s, etc. — anything that
+     stays in the foreground serving requests), you MUST background it so the
+     tool call returns instead of hanging the loop:
+        nohup <cmd> > /tmp/<name>.log 2>&1 &
+     Then sleep ~2s and verify with a quick check, e.g.
+        curl -sS -o /dev/null -w "%{http_code}" http://localhost:<port>
+     Report the local URL to the user. Do NOT run servers in the foreground.
+  6. If you truly cannot find a start command, then ask. But try first.
 
 PLAN MODE:
 - For complex tasks that need codebase exploration (multi-file changes,

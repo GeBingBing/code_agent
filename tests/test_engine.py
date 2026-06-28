@@ -208,6 +208,51 @@ class TestDetectStartCommand:
         # dev is the only script — used as fallback
         assert "dev" in hint
 
+    def test_nextjs_export_with_out_dir(self, tmp_path):
+        """Next.js output:'export' must serve out/ — next dev/start unusable."""
+        import json
+
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "p", "scripts": {"start": "next start", "dev": "next dev"}})
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = { output: 'export' }")
+        (tmp_path / "out").mkdir()
+        (tmp_path / "out" / "index.html").write_text("x")
+        hint = AgentEngine._detect_start_command(tmp_path)
+        assert "serve out" in hint
+        assert "3000" in hint
+        assert "npm run start" not in hint
+        assert "npm run dev" not in hint
+
+    def test_nextjs_export_without_out_dir(self, tmp_path):
+        """Export project with no out/ yet → hint builds first then serves."""
+        import json
+
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "p", "scripts": {"start": "next start"}})
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = { output: 'export' }")
+        hint = AgentEngine._detect_start_command(tmp_path)
+        assert "npm run build" in hint
+        assert "serve out" in hint
+
+    def test_nextjs_non_export_uses_start(self, tmp_path):
+        """Plain Next.js (no export) still uses npm run start."""
+        import json
+
+        from agent.core.engine import AgentEngine
+
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "p", "scripts": {"start": "next start"}})
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = { reactStrictMode: true }")
+        hint = AgentEngine._detect_start_command(tmp_path)
+        assert "npm run start" in hint
+
     def test_python_with_main_py(self, tmp_path):
         from agent.core.engine import AgentEngine
 
