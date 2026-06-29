@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from .background import background_registry
 from .base import BaseTool, IdleTimeoutError, ToolResult, read_process, registry
 
 # Whitelist of safe commands
@@ -102,6 +103,9 @@ SAFE_COMMANDS = {
     "poetry",
     "mamba",
     "pipx",
+    # Detach helpers — allow `nohup ... &` as a fallback way to background
+    # long-running servers. (The preferred path is execute_command(background=True).)
+    "nohup",
 }
 
 # Blocked command patterns (more robust than simple string matching)
@@ -254,6 +258,8 @@ class ExecuteCommandTool(BaseTool):
         cwd: Optional[str] = None,
         timeout: int = 30,
         max_wait_seconds: int = 0,
+        background: bool = False,
+        log_path: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         """Execute a shell command.
@@ -283,8 +289,18 @@ class ExecuteCommandTool(BaseTool):
 
         For dev servers / watch processes (npm run dev, python -m
         http.server) that emit brief startup output then go silent,
-        the idle timeout WILL fire. Run those externally or via
-        `nohup ... &`.
+        the idle timeout WILL fire. Pass `background=True` instead —
+        the process is detached (start_new_session, survives parent
+        exit — no `nohup` needed), output goes to a log file, and the
+        call returns immediately with a task_id. Manage it via the
+        `background_task` tool (list / logs / status / stop).
+
+        Args:
+            background: if True, spawn detached and return immediately
+                with {task_id, pid, log_path} in metadata instead of
+                blocking. Use for long-running servers.
+            log_path: where to redirect output when background=True.
+                Defaults to /tmp/coding-agent-bg-<ts>.log.
         """
 
         # Security validation
@@ -294,6 +310,59 @@ class ExecuteCommandTool(BaseTool):
                 content="",
                 error=f"Command blocked: {error}",
                 metadata={"blocked": True, "lines": 0, "duration_ms": 0},
+            )
+
+        # ── Background path: detach and return immediately ──
+        # For long-running servers. start_new_session=True (setsid) detaches
+        # the child from this process group so it survives after the agent
+        # moves on — this replaces the `nohup ... &` workaround.
+        if background:
+            import time as _time
+
+            if not log_path:
+                log_path = f"/tmp/coding-agent-bg-{int(_time.time())}.log"
+            try:
+                log_fd = open(log_path, "wb", buffering=0)
+            except Exception as exc:
+                return ToolResult(
+                    success=False,
+                    content="",
+                    error=f"Cannot open background log {log_path}: {exc}",
+                )
+            try:
+                proc = await asyncio.create_subprocess_shell(
+                    command,
+                    cwd=cwd,
+                    stdout=log_fd,
+                    stderr=asyncio.subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            except Exception as exc:
+                log_fd.close()
+                return ToolResult(success=False, content="", error=str(exc))
+            task_id = background_registry.register(
+                proc, log_path=log_path, command=command, cwd=cwd
+            )
+            content = (
+                f"Background task started\n"
+                f"task_id: {task_id}\n"
+                f"pid: {proc.pid}\n"
+                f"log: {log_path}\n"
+                f"command: {command}\n"
+                f"Verify with: curl, then background_task(action='logs', "
+                f"task_id='{task_id}') to read the log if it fails."
+            )
+            return ToolResult(
+                success=True,
+                content=content,
+                metadata={
+                    "background": True,
+                    "task_id": task_id,
+                    "pid": proc.pid,
+                    "log_path": log_path,
+                    "duration_ms": 0,
+                    "lines": 0,
+                },
             )
 
         try:
@@ -391,6 +460,27 @@ class ExecuteCommandTool(BaseTool):
                                 "output (pytest, cargo build) are NOT killed unless this is set."
                             ),
                             "default": 0,
+                        },
+                        "background": {
+                            "type": "boolean",
+                            "description": (
+                                "If true, spawn the command detached and return immediately "
+                                "with a task_id/pid/log_path instead of blocking. Use this for "
+                                "long-running servers (npm run dev, next dev, npx serve, "
+                                "uvicorn, vite) that would otherwise be killed by the idle "
+                                "timeout. Do NOT add `&` or `nohup` or output redirection to "
+                                "the command when using this — the tool handles detachment and "
+                                "logging. Manage the task afterwards with the background_task "
+                                "tool (list/logs/status/stop)."
+                            ),
+                            "default": False,
+                        },
+                        "log_path": {
+                            "type": "string",
+                            "description": (
+                                "Where to redirect output when background=true. Defaults to "
+                                "/tmp/coding-agent-bg-<ts>.log."
+                            ),
                         },
                     },
                     "required": ["command"],

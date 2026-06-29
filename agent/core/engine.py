@@ -796,6 +796,7 @@ class AgentEngine:
         # this is (Python/Node/Go/etc.) and find the start command.
         project_hint = ""
         start_command_hint = ""
+        env_preflight = ""
         try:
             markers = {
                 "package.json": "node",
@@ -820,6 +821,16 @@ class AgentEngine:
             # This saves the LLM from having to figure it out — common
             # commands for "启动本项目" are pre-computed here.
             start_command_hint = self._detect_start_command(WORKSPACE)
+
+            # ── Environment preflight: runtime version vs framework needs ──
+            # Surface the installed runtime version (and warn on known
+            # framework minimums) so the LLM can fix the environment BEFORE
+            # trying to start the project — e.g. Next.js 14 needs Node >=18.17
+            # but the shell's default `node` may be v16. Cached per engine.
+            env_preflight = getattr(self, "_env_preflight_cache", None)
+            if env_preflight is None:
+                env_preflight = self._detect_env_preflight(WORKSPACE)
+                self._env_preflight_cache = env_preflight
         except Exception:
             pass
 
@@ -831,7 +842,72 @@ class AgentEngine:
             "project_dir": self.current_project_dir or "",
             "project_hint": project_hint,
             "start_command_hint": start_command_hint,
+            "env_preflight": env_preflight,
         }
+
+    @staticmethod
+    def _detect_env_preflight(workspace: "Path") -> str:
+        """Detect installed runtime versions and flag known-short falls.
+
+        Returns a short human-readable string for the <env_preflight> reminder,
+        or "" if nothing detected. Runs `node -v` / `python --version` with a
+        short timeout so it never blocks the turn.
+        """
+        import subprocess
+
+        lines = []
+
+        def _run(cmd: list[str]) -> str:
+            try:
+                return subprocess.check_output(
+                    cmd, cwd=workspace, stderr=subprocess.DEVNULL, text=True, timeout=3
+                ).strip()
+            except Exception:
+                return ""
+
+        # ── Node ──
+        if (workspace / "package.json").exists():
+            node_ver = _run(["node", "-v"])  # e.g. "v20.19.4"
+            if node_ver:
+                lines.append(f"node: {node_ver}")
+                # Parse major and compare against known framework minimums.
+                try:
+                    major = int(node_ver.lstrip("v").split(".")[0])
+                except (ValueError, IndexError):
+                    major = None
+                pkg = {}
+                try:
+                    import json as _json
+
+                    pkg = _json.loads(
+                        (workspace / "package.json").read_text(encoding="utf-8", errors="replace")
+                    )
+                except Exception:
+                    pass
+                deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+                # Framework -> minimum Node major. Next.js 14 requires >=18.17.
+                frameworks = {
+                    "next": (18, "Next.js 14 requires Node >=18.17"),
+                    "vite": (18, "Vite requires Node >=18"),
+                    "nuxt": (18, "Nuxt 3 requires Node >=18"),
+                    "@remix-run/dev": (18, "Remix requires Node >=18"),
+                }
+                for dep, (min_major, note) in frameworks.items():
+                    if dep in deps and major is not None and major < min_major:
+                        lines.append(
+                            f"  ⚠ {note} but installed node is {node_ver} "
+                            f"(major {major} < {min_major}). Switch with "
+                            f"`nvm use {min_major}` / `fnm use {min_major}` "
+                            f"before starting the project."
+                        )
+
+        # ── Python ──
+        if (workspace / "pyproject.toml").exists() or (workspace / "requirements.txt").exists():
+            py_ver = _run(["python", "--version"]) or _run(["python3", "--version"])
+            if py_ver:
+                lines.append(py_ver)
+
+        return "\n".join(lines)
 
     @staticmethod
     def _detect_start_command(workspace: "Path") -> str:

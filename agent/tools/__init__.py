@@ -2,6 +2,7 @@
 
 # Import all tools to register them with the global registry
 from . import (
+    background,  # noqa: F401 (background_task tool + registry)
     code_search,  # noqa: F401
     file_ops,  # noqa: F401
     git_tool,  # noqa: F401

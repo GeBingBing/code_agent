@@ -116,16 +116,44 @@ STARTING A PROJECT (highest priority):
   3. If no `<start_command_hint>`, read CODING_AGENT.md, README.md,
      package.json, pyproject.toml, or Makefile in cwd to find the start
      command. Do NOT ask the user for the project path.
-  4. Run the start command using `cwd` parameter or `cd && cmd` in ONE call.
-  5. If the start command is a LONG-RUNNING server (npm run dev, next start,
-     npx serve, python -m http.server, uvicorn, rails s, etc. — anything that
-     stays in the foreground serving requests), you MUST background it so the
-     tool call returns instead of hanging the loop:
-        nohup <cmd> > /tmp/<name>.log 2>&1 &
-     Then sleep ~2s and verify with a quick check, e.g.
+  4. VERIFY THE ENVIRONMENT FIRST. Check `<env_preflight>` in the
+     system-reminder — it shows the installed runtime version and warns on
+     known framework minimums (e.g. Next.js 14 needs Node >=18.17). If the
+     runtime is too old, FIX IT BEFORE starting: switch the version
+     (`nvm use 20` / `fnm use 20` — run it in the SAME execute_command call
+     that starts the server, e.g. `source ~/.nvm/nvm.sh && nvm use 20 &&
+     npm run dev`) or report the mismatch. Starting on the wrong runtime just
+     produces a confusing error — verify first.
+  5. Run the start command using `cwd` parameter or `cd && cmd` in ONE call.
+     If the start command chains a build step (`npm run build && npx serve`),
+     run the BUILD as a normal foreground command first (it streams output
+     and exits), then background only the SERVER part.
+  6. LONG-RUNNING SERVERS (npm run dev, next dev, npx serve, python -m
+     http.server, uvicorn, rails s, vite — anything that stays in the
+     foreground serving requests): you MUST pass `background: true` to
+     execute_command. Do NOT add `&`, `nohup`, or output redirection to the
+     command — the tool detaches the process and writes a log for you. The
+     call returns immediately with a `task_id`, `pid`, and `log` path — note
+     them. Never run servers in the foreground (they are killed by the idle
+     timeout).
+  7. VERIFY, THEN DIAGNOSE. After backgrounding, sleep ~2-4s, then check:
         curl -sS -o /dev/null -w "%{http_code}" http://localhost:<port>
-     Report the local URL to the user. Do NOT run servers in the foreground.
-  6. If you truly cannot find a start command, then ask. But try first.
+     - HTTP 200 → success. Report the URL + task_id. Tell the user to stop
+       it with background_task(action="stop", task_id="...").
+     - Any non-200, connection refused, or timeout → DO NOT blindly retry.
+       Read the server log first:
+          background_task(action="logs", task_id="<the id from step 6>")
+       then fix the ROOT CAUSE the log reveals and iterate:
+          * connection refused → server crashed on boot; the log shows why
+            (wrong Node version, missing build, port in use, code error).
+          * HTTP 404 → wrong entry/route; check for a root `app/` shadowing
+            `src/app/`, missing `index.html`/`page.tsx`, or stale build.
+          * HTTP 500 → runtime error in the app; read the stack trace in the
+            log and fix the code (e.g. a Server Component passing an event
+            handler).
+       After each fix, re-verify with curl. Restart the server if code
+       changed (background_task stop, then a fresh background start).
+  8. If you truly cannot find a start command, then ask. But try first.
 
 PLAN MODE:
 - For complex tasks that need codebase exploration (multi-file changes,
@@ -346,6 +374,7 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
         project_dir: str = "",
         project_hint: str = "",
         start_command_hint: str = "",
+        env_preflight: str = "",
     ) -> str:
         """Build per-turn transient context for user message injection.
 
@@ -364,6 +393,8 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
             parts.append(f"<project_hint>{project_hint}</project_hint>")
         if start_command_hint:
             parts.append(f"<start_command_hint>{start_command_hint}</start_command_hint>")
+        if env_preflight:
+            parts.append(f"<env_preflight>\n{env_preflight}\n</env_preflight>")
         if mode:
             parts.append(f"<mode>{mode}</mode>")
         if plan_progress:
