@@ -44,6 +44,8 @@ SAFE_COMMANDS = {
     "which",
     "file",
     "stat",
+    "sleep",  # harmless wait — used in the start-server diagnostic loop
+    # (sleep N && curl ...) before verifying a backgrounded server
     "diff",
     "patch",
     "make",
