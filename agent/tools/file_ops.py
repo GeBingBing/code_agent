@@ -99,16 +99,16 @@ class ReadFileTool(BaseTool):
     description = "Read the contents of a file"
 
     def render_call(self, args: dict) -> str:
-        path = args.get("path", "?")
-        limit = args.get("limit", 0)
-        if limit:
-            return f"Read · {path} (L{args.get('offset',1)}-{args.get('offset',1)+limit-1})"
-        return f"Read · {path}"
+        return args.get("path", "?")
 
     def render_result(self, result: "ToolResult") -> str:
         if result.success and result.metadata:
             lines = result.metadata.get("lines", 0)
-            return f"Read · {lines} lines"
+            total = result.metadata.get("total_lines", 0)
+            offset = result.metadata.get("offset", 1)
+            if offset > 1 or (lines > 0 and lines < total):
+                return f"L{offset}-{offset + lines - 1} (total {total})"
+            return f"{lines} lines"
         return super().render_result(result)
 
     async def execute(self, path: str, offset: int = 1, limit: int = 0, **kwargs) -> ToolResult:
@@ -135,7 +135,11 @@ class ReadFileTool(BaseTool):
             return ToolResult(
                 success=True,
                 content=f"{header}\n" + "\n".join(numbered),
-                metadata={"lines": len(selected), "total_lines": total},
+                metadata={
+                    "lines": len(selected),
+                    "total_lines": total,
+                    "offset": start + 1,
+                },
             )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
@@ -240,7 +244,7 @@ class ListFilesTool(BaseTool):
         if result.success and result.metadata:
             dirs = result.metadata.get("dirs", 0)
             files = result.metadata.get("files", 0)
-            return f"{dirs + files} items ({files} files, {dirs} dirs)"
+            return f"{files} files, {dirs} dirs"
         return super().render_result(result)
 
     async def execute(self, path: str = ".", **kwargs) -> ToolResult:

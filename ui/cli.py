@@ -2221,11 +2221,12 @@ class SimpleCLI:
                         _close_live()
                     elif self._spin.is_running:
                         await self._spin.stop_async()
+                    # Green ● before the first token (Claude Code style).
+                    if not buffer:
+                        print(f"{GREEN}●{RESET} ", end="", flush=True)
                     token = event.get("content", "")
                     print(_render_markdown_token(token), end="", flush=True)
                     buffer.append(token)
-                    # Real-time token count into spinner stats (not used now since
-                    # spinner is stopped, but kept for future per-token display).
 
                 elif etype == "tool_call":
                     _close_live()
@@ -2314,26 +2315,8 @@ class SimpleCLI:
                                 (tool.user_facing_name or tool_name) if tool else tool_name
                             )
                             _rich_print_tool_result(display_name, summary, success=True)
-                    # Reopen Live for the next thinking/content burst
-                    if _live_ctx is None and RICH_AVAILABLE and sys.stdout.isatty():
-                        try:
-                            from rich.live import Live
-                            from rich.spinner import Spinner as _RichSpinner
-
-                            _live_render = _RichSpinner(
-                                "dots", text=StageLabel.THINKING, style="dim"
-                            )
-                            _live_ctx = Live(
-                                _live_render,
-                                console=_RICH,
-                                refresh_per_second=12,
-                                transient=True,
-                            )
-                            _live_ctx.__enter__()
-                        except Exception:
-                            _live_ctx = None
-                    else:
-                        self._spin.start(StageLabel.THINKING)
+                    # SpinnerController handles THINKING between tools (compact).
+                    self._spin.start(StageLabel.THINKING)
 
                 elif etype == "final":
                     _close_live()
