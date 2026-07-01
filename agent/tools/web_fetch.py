@@ -87,6 +87,9 @@ class WebFetchTool(BaseTool):
     name = "web_fetch"
     description = "Fetch content from a URL (documentation, API reference, etc.)"
 
+    def render_call(self, args: dict) -> str:
+        return args.get("url", "")[:76]
+
     def render_result(self, result: "ToolResult") -> str:
         if result.success and result.content:
             return result.content.split("\n")[0].rstrip()[:80]

@@ -26,6 +26,9 @@ class WebSearchTool(BaseTool):
     name = "web_search"
     description = "Search the web for information (news, docs, code examples, etc.)"
 
+    def render_call(self, args: dict) -> str:
+        return args.get("query", "")[:60]
+
     def render_result(self, result: "ToolResult") -> str:
         if result.success and result.content:
             return result.content.split("\n")[0].rstrip()[:80]

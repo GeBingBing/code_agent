@@ -14,9 +14,12 @@ class GrepTool(BaseTool):
     name = "grep"
     description = "Search for text patterns across all files in the project (full-text search)"
 
+    def render_call(self, args: dict) -> str:
+        return args.get("pattern", "")[:60] or args.get("query", "")[:60]
+
     def render_result(self, result: "ToolResult") -> str:
         if result.success and result.content:
-            return result.content.split("\n")[0]  # "Found N match(es) for 'X' in Y"
+            return result.content.split("\n")[0]
         return super().render_result(result)
 
     SKIP_DIRS = {
