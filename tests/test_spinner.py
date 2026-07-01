@@ -27,15 +27,15 @@ from ui.spinner import (
 
 class TestStageLabel:
     def test_thinking_is_plain_text(self):
-        assert StageLabel.THINKING == "[思考中]"
+        assert StageLabel.THINKING == ""
 
     def test_tool_supports_format(self):
         rendered = StageLabel.TOOL.format(tool="read_file")
-        assert rendered == "[工具: read_file]"
+        assert rendered == ""
 
     def test_subagent_supports_format(self):
         rendered = StageLabel.SUBAGENT.format(name="explorer")
-        assert rendered == "[子 Agent: explorer]"
+        assert rendered == ""
 
     def test_no_emoji_in_any_label(self):
         """Plain text only — no emoji for terminal safety."""
@@ -97,7 +97,7 @@ class TestStateMachine:
         first_task = spin._task
         spin.update_label(StageLabel.TOOL.format(tool="read_file"))
         assert spin._task is first_task
-        assert spin._label == "[工具: read_file]"
+        assert spin._label == ""
         spin._running = False
 
     def test_update_label_starts_if_idle(self):
@@ -131,7 +131,7 @@ class TestStateMachine:
 
 
 class TestRender:
-    def test_render_includes_glyph_label_and_stats(self):
+    def test_render_includes_glyph_and_label(self):
         spin = SpinnerController(
             file=io.StringIO(),
             tick_ms=80,
@@ -142,19 +142,15 @@ class TestRender:
         spin._last_token_time = 100.0
         spin._frame_idx = 0
         spin._label = StageLabel.THINKING
-        spin._tokens_in = 1234
-        spin._tokens_out = 567
 
         spin._render()
         out = spin._file.getvalue()
 
-        # Must clear line, contain glyph, label, token stats, elapsed
+        # Minimal Claude Code style: clear line, glyph, optional label.
         assert CLEAR_LINE in out
         assert SPINNERS[0] in out
-        assert StageLabel.THINKING in out
-        assert "1234" in out and "567" in out
-        # Elapsed = 0 since clock is frozen
-        assert "0s" in out
+        # No token stats (removed).
+        assert "1234" not in out
 
     def test_render_stall_shows_red_and_stalled_label(self):
         spin = SpinnerController(
@@ -192,36 +188,6 @@ class TestRender:
         # Should NOT be red, should NOT show STALLED label
         assert RED not in out
         assert StageLabel.STALLED not in out
-        assert StageLabel.THINKING in out
-
-    def test_render_shows_context_window_pct(self):
-        spin = SpinnerController(
-            file=io.StringIO(),
-            clock=lambda: 100.0,
-        )
-        spin._start_time = 100.0
-        spin._last_token_time = 100.0
-        spin._ctx_used = 50000
-        spin._ctx_window = 100000  # 50% used
-
-        spin._render()
-        out = spin._file.getvalue()
-        assert "50% ctx" in out
-
-    def test_render_context_low_remaining(self):
-        spin = SpinnerController(
-            file=io.StringIO(),
-            clock=lambda: 100.0,
-        )
-        spin._start_time = 100.0
-        spin._last_token_time = 100.0
-        spin._ctx_used = 80000
-        spin._ctx_window = 100000  # 20% remaining
-
-        spin._render()
-        out = spin._file.getvalue()
-        # <25% remaining shows "ctx 20%" without "ctx" word
-        assert "20%" in out
 
     def test_render_respects_no_color_env(self, monkeypatch):
         monkeypatch.setenv("NO_COLOR", "1")
@@ -301,9 +267,9 @@ class TestAsyncLifecycle:
         await asyncio.sleep(0.05)  # a few more ticks
         await spin.stop_async()
         out = buf.getvalue()
-        # Stats should appear in the rendered output
-        assert "42" in out
-        assert "7" in out
+        # Glyph output must still be present. Stats (42/7) are no longer
+        # printed inline (Claude Code style); the toolbar owns them.
+        assert SPINNERS[0] in out
 
 
 # ── Integration with CLI patterns ─────────────────────────────
@@ -327,7 +293,6 @@ class TestCliPatterns:
         await spin.stop_async()
 
         out = buf.getvalue()
-        assert "思考中" not in out or "read_file" in out  # label changed
-        assert "read_file" in out
-        assert "100" in out
-        assert "10" in out
+        # Labels are now empty (Claude Code style) — only the glyph persists.
+        # Stats (100/10) are no longer printed inline (toolbar owns them).
+        assert SPINNERS[0] in out

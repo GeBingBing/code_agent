@@ -52,12 +52,12 @@ class StageLabel:
         spin.update_label(StageLabel.TOOL.format(tool="read_file"))
     """
 
-    THINKING = "[思考中]"
-    PLANNING = "[规划中]"
-    TOOL = "[工具: {tool}]"
-    SUBAGENT = "[子 Agent: {name}]"
-    COMPACTING = "[压缩上下文]"
-    STALLED = "[等待中]"
+    THINKING = ""
+    PLANNING = ""
+    TOOL = ""
+    SUBAGENT = ""
+    COMPACTING = ""
+    STALLED = "…"
 
 
 class SpinnerController:
@@ -231,34 +231,28 @@ class SpinnerController:
             pass
 
     def _render(self) -> None:
-        """Build the single-line status and write it. Synchronous."""
+        """Build the single-line status and write it. Synchronous.
+
+        Minimal Claude Code style: just the glyph + an optional label (empty
+        by default for THINKING/TOOL, ``…`` when stalled). No token counts or
+        context percentages — the toolbar already surfaces those.
+        """
         try:
             now = self._clock()
             elapsed = now - self._start_time
             since_token = now - self._last_token_time
 
             glyph = SPINNERS[self._frame_idx]
-            parts = [f"{elapsed:.0f}s"]
-            if self._tokens_in or self._tokens_out:
-                parts.append(f"⬇ {self._tokens_in} / {self._tokens_out}")
-            if self._ctx_used and self._ctx_window:
-                pct = self._ctx_used / self._ctx_window * 100
-                remaining = max(0, 100 - pct)
-                if remaining < 25:
-                    parts.append(f"ctx {remaining:.0f}%")
-                elif remaining < 40:
-                    parts.append(f"ctx {remaining:.0f}%")
-                else:
-                    parts.append(f"{pct:.0f}% ctx")
 
-            # Stall color: red if no token for >threshold AND no tokens yet
             has_tokens = bool(self._tokens_in or self._tokens_out)
             stalled = since_token > self._stall_threshold_s and not has_tokens
             label_to_show = StageLabel.STALLED if stalled else self._label
             color = RED if stalled else DIM
-            stats = f"  ·  {' · '.join(parts)}" if parts else ""
 
-            line = f"\r{CLEAR_LINE}{color}{glyph} {label_to_show}{stats}{RESET}"
+            # Minimal: only surface elapsed when the model is stalled.
+            hint = f" {elapsed:.0f}s" if stalled else ""
+
+            line = f"\r{CLEAR_LINE}{color}{glyph} {label_to_show}{hint}{RESET}"
             self._file.write(line)
             self._file.flush()
         except (ValueError, OSError):
