@@ -192,6 +192,10 @@ class WriteFileTool(BaseTool):
             },
         }
 
+    def render_call(self, args: dict) -> str:
+        # Show just the path, not "write_file: path=...".
+        return args.get("path", "?")
+
     async def execute(self, path: str, content: str, **kwargs) -> ToolResult:
         try:
             if error := _validate_write_path(path):
@@ -228,6 +232,17 @@ class ListFilesTool(BaseTool):
             },
         }
 
+    def render_call(self, args: dict) -> str:
+        # Show just the directory path, not "list_files: path=...".
+        return args.get("path", ".") or "."
+
+    def render_result(self, result: "ToolResult") -> str:
+        if result.success and result.metadata:
+            dirs = result.metadata.get("dirs", 0)
+            files = result.metadata.get("files", 0)
+            return f"{dirs + files} items ({files} files, {dirs} dirs)"
+        return super().render_result(result)
+
     async def execute(self, path: str = ".", **kwargs) -> ToolResult:
         try:
             dir_path = _resolve_path(path)
@@ -236,12 +251,21 @@ class ListFilesTool(BaseTool):
 
             items = await asyncio.to_thread(lambda: sorted(dir_path.iterdir()))
             result_lines = []
+            n_dirs = 0
+            n_files = 0
             for item in items:
-                item_type = "dir" if item.is_dir() else "file"
+                if item.is_dir():
+                    item_type = "dir"
+                    n_dirs += 1
+                else:
+                    item_type = "file"
+                    n_files += 1
                 result_lines.append(f"[{item_type}] {item.name}")
 
             return ToolResult(
-                success=True, content="\n".join(result_lines) if result_lines else "(empty)"
+                success=True,
+                content="\n".join(result_lines) if result_lines else "(empty)",
+                metadata={"dirs": n_dirs, "files": n_files},
             )
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e))
@@ -252,6 +276,9 @@ class ApplyDiffTool(BaseTool):
 
     name = "apply_diff"
     description = "Search and replace a block of text in a file (preserves surrounding lines)"
+
+    def render_call(self, args: dict) -> str:
+        return args.get("path", "?")
 
     async def execute(self, path: str, search: str, replace: str, **kwargs) -> ToolResult:
         try:
@@ -305,6 +332,9 @@ class InsertAfterLineTool(BaseTool):
     user_facing_name = "Insert"
     name = "insert_after_line"
     description = "Insert content after a specific line number"
+
+    def render_call(self, args: dict) -> str:
+        return args.get("path", "?")
 
     async def execute(self, path: str, line: int, content: str, **kwargs) -> ToolResult:
         try:
@@ -366,6 +396,9 @@ class ReplaceLinesTool(BaseTool):
     user_facing_name = "Replace"
     name = "replace_lines"
     description = "Replace a range of lines with new content"
+
+    def render_call(self, args: dict) -> str:
+        return args.get("path", "?")
 
     async def execute(self, path: str, start: int, end: int, content: str, **kwargs) -> ToolResult:
         try:
