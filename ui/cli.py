@@ -540,22 +540,38 @@ def _rich_print_confirm(
 
 
 def _rich_print_tool_result(name: str, summary: str, success: bool = True):
-    """Print a tool result line — Claude Code style.
+    """Print a tool result line (or block) — Claude Code style.
 
-    Success: ``  ⎿ <summary>`` (no checkmark, no repeated tool name — the call
-    line above already named the tool; success is the default, so we just show
-    the indented result). Failure: ``  ⎿ ✗ <summary>`` in red.
+    Single-line success: ``  ⎿ <summary>``
+    Multi-line success:  ``  ⎿ <first line>`` plus ``    <rest lines>``
+                         indented underneath.  This is how diffs are shown:
+                         each changed line gets its own indented line.
+    Failure:             ``  ⎿ ✗ <summary>`` in red.
     """
-    if RICH_AVAILABLE:
-        if success:
-            _RICH.print(f"  [dim]⎿[/dim] {summary}")
+    if "\n" in summary:
+        lines = summary.split("\n")
+        first, *rest = lines
+        if RICH_AVAILABLE:
+            prefix = "  [red]⎿ ✗[/red] " if not success else "  [dim]⎿[/dim] "
+            _RICH.print(f"{prefix}{first}")
+            for line in rest:
+                _RICH.print(f"    {line}")
         else:
-            _RICH.print(f"  [red]⎿ ✗[/red] {summary}")
+            prefix = f"  {RED}⎿ ✗{RESET} " if not success else f"  {DIM}⎿{RESET} "
+            print(f"{prefix}{first}")
+            for line in rest:
+                print(f"    {line}")
     else:
-        if success:
-            print(f"  {DIM}⎿{RESET} {summary}")
+        if RICH_AVAILABLE:
+            if success:
+                _RICH.print(f"  [dim]⎿[/dim] {summary}")
+            else:
+                _RICH.print(f"  [red]⎿ ✗[/red] {summary}")
         else:
-            print(f"  {RED}⎿ ✗{RESET} {summary}")
+            if success:
+                print(f"  {DIM}⎿{RESET} {summary}")
+            else:
+                print(f"  {RED}⎿ ✗{RESET} {summary}")
 
 
 def _render_full_markdown(text: str) -> str:

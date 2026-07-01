@@ -200,6 +200,11 @@ class WriteFileTool(BaseTool):
         # Show just the path, not "write_file: path=...".
         return args.get("path", "?")
 
+    def render_result(self, result: "ToolResult") -> str:
+        if result.success and result.content:
+            return result.content  # "Written to <path>"
+        return super().render_result(result)
+
     async def execute(self, path: str, content: str, **kwargs) -> ToolResult:
         try:
             if error := _validate_write_path(path):
@@ -284,6 +289,29 @@ class ApplyDiffTool(BaseTool):
     def render_call(self, args: dict) -> str:
         return args.get("path", "?")
 
+    def render_result(self, result: "ToolResult") -> str:
+        """Show the changed lines inline — Claude Code style.
+
+        Parses the unified diff that _make_diff produced and strips the noise
+        (@@ hunk headers, unchanged context) so the result shows just the
+        added/removed lines, indented underneath the path.
+        """
+        if not result.success or not result.content:
+            return super().render_result(result)
+        lines = result.content.split("\n")
+        # First line: "Applied diff to <path>:"
+        header = lines[0].replace("Applied diff to ", "").rstrip(":")
+        # Collect only the actual +/- lines (skip @@ markers and context).
+        changed = []
+        for line in lines[1:]:
+            if line.startswith(("---", "+++")):
+                continue
+            if line.startswith(("-", "+")) and not line.startswith("@@ "):
+                changed.append(line)
+        if not changed:
+            return header
+        return header + "\n" + "\n".join(changed[:12])
+
     async def execute(self, path: str, search: str, replace: str, **kwargs) -> ToolResult:
         try:
             if error := _validate_write_path(path):
@@ -339,6 +367,11 @@ class InsertAfterLineTool(BaseTool):
 
     def render_call(self, args: dict) -> str:
         return args.get("path", "?")
+
+    def render_result(self, result: "ToolResult") -> str:
+        if result.success and result.content:
+            return result.content
+        return super().render_result(result)
 
     async def execute(self, path: str, line: int, content: str, **kwargs) -> ToolResult:
         try:
@@ -403,6 +436,11 @@ class ReplaceLinesTool(BaseTool):
 
     def render_call(self, args: dict) -> str:
         return args.get("path", "?")
+
+    def render_result(self, result: "ToolResult") -> str:
+        if result.success and result.content:
+            return result.content
+        return super().render_result(result)
 
     async def execute(self, path: str, start: int, end: int, content: str, **kwargs) -> ToolResult:
         try:
