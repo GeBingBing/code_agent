@@ -2075,11 +2075,13 @@ class SimpleCLI:
                         await self._spin.stop_async()
                     ok = event.get("success")
                     if not ok and event.get("error"):
-                        print(f"  {RED}✗{RESET} {event.get('error')[:120]}")
+                        _rich_print_tool_result(
+                            event.get("tool_name", ""), event.get("error", "")[:120], success=False
+                        )
                     elif ok and event.get("content"):
                         brief = event.get("content", "").split("\n")[0][:80]
                         if brief:
-                            print(f"  {DIM}{brief}{RESET}")
+                            _rich_print_tool_result(event.get("tool_name", ""), brief, success=True)
                         _last_tool_content = event.get("content", "")
                     self._spin.start(StageLabel.THINKING)
                 elif etype == "final":
@@ -2250,12 +2252,9 @@ class SimpleCLI:
                     ok = event.get("success")
                     tool_name = event.get("tool_name", "")
                     if not ok and event.get("error"):
-                        if RICH_AVAILABLE:
-                            _rich_print_tool_result(
-                                tool_name, event.get("error", "")[:120], success=False
-                            )
-                        else:
-                            print(f"  {RED}✗{RESET} {event.get('error')[:120]}")
+                        _rich_print_tool_result(
+                            tool_name, event.get("error", "")[:120], success=False
+                        )
                     elif ok and tool_name == "exit_plan_mode" and event.get("content"):
                         plan_content = event.get("content", "")
                         # M1 P0: capture the structured metadata so
