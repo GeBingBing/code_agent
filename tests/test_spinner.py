@@ -255,7 +255,7 @@ class TestRender:
 class TestAsyncLifecycle:
     @pytest.mark.asyncio
     async def test_start_runs_the_spin_task(self):
-        spin = SpinnerController(tick_ms=5)  # fast tick for test
+        spin = SpinnerController(file=io.StringIO(), tick_ms=5)
         spin.start()
         assert spin._task is not None
         assert not spin._task.done()

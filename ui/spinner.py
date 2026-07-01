@@ -101,6 +101,14 @@ class SpinnerController:
             to `time.monotonic`. Tests can inject a fake clock.
         """
         self._file = file or sys.stdout
+        # Auto-detect TTY only for the default output stream (sys.stdout).
+        # When a test injects a StringIO, we assume it's a "TTY" so tests
+        # can still assert on spinner output. Production non-TTY (pipe /
+        # redirect / file) gets the default sys.stdout and is auto-silenced.
+        if file is None:
+            self._tty = getattr(self._file, "isatty", lambda: False)()
+        else:
+            self._tty = True
         self._tick_s = tick_ms / 1000.0
         self._stall_threshold_s = stall_threshold_s
         self._clock = clock or time.monotonic
@@ -128,6 +136,11 @@ class SpinnerController:
 
         If the spinner is already running, this updates the label
         rather than restarting (preserves stats).
+
+        When stdout is not a TTY (piped, redirected, or a file), the
+        spinner auto-silences: ``_running`` flips True so callers can
+        assert on ``is_running``, but no glyphs are printed and no
+        async task is spawned.
         """
         if self._running:
             self._label = label
@@ -142,16 +155,15 @@ class SpinnerController:
         self._start_time = self._clock()
         self._last_token_time = self._start_time
         self._running = True
-        # create_task requires a running loop. In async callers (CLI),
-        # the loop is always present. In sync tests, we silently skip
-        # task creation — the state still flips to running so callers
-        # can assert on `is_running`; the render() and stop_async()
-        # paths are tested separately with a running loop.
+        if not self._tty:
+            # Non-TTY — animate nothing. Callers see is_running=True
+            # and stop_async() is still callable (no-op task).
+            self._task = None
+            return
         try:
             asyncio.get_running_loop()
             self._task = asyncio.create_task(self._spin())
         except RuntimeError:
-            # No running event loop — animation disabled but state set
             self._task = None
 
     def update_label(self, label: str) -> None:
@@ -196,7 +208,8 @@ class SpinnerController:
             except (asyncio.CancelledError, Exception):
                 pass
         self._task = None
-        # Final clear so no glyph is left on the line
+        if not self._tty:
+            return  # Nothing to clear — no glyphs were printed.
         try:
             self._file.write(f"\r{CLEAR_LINE}")
             self._file.flush()
