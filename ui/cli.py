@@ -926,6 +926,67 @@ def _strip_tool_prefix(text: str, name: str) -> str:
     return text
 
 
+def _relpath(p: str) -> str:
+    """Show a path relative to the most relevant root (Claude Code style).
+
+    Tries the configured workspace root and the process cwd — whichever makes
+    the path shortest. So ``/Users/.../portfolio/src/app/layout.tsx`` →
+    ``src/app/layout.tsx`` when the agent operates inside ``portfolio``. Falls
+    back to the original if nothing matches. Bare names (``.``/``src``) stay.
+    """
+    if not p or not p.startswith("/"):
+        return p
+
+    candidates = []
+    try:
+        from agent.core.workspace import WORKSPACE_ROOT
+
+        candidates.append(str(WORKSPACE_ROOT))
+    except Exception:
+        pass
+    try:
+        from pathlib import Path as _Path
+
+        candidates.append(str(_Path.cwd()))
+    except Exception:
+        pass
+
+    best = p
+    for root in candidates:
+        if not root:
+            continue
+        if p == root:
+            return "."
+        root_with_sep = root if root.endswith("/") else root + "/"
+        if p.startswith(root_with_sep):
+            rel = p[len(root_with_sep) :]
+            if len(rel) < len(best):
+                best = rel
+        else:
+            try:
+                from pathlib import Path as _Path
+
+                rel = str(_Path(p).relative_to(root))
+                if len(rel) < len(best):
+                    best = rel
+            except ValueError:
+                pass
+    return best
+
+
+def _relpath_in_text(text: str) -> str:
+    """Relativize any absolute path embedded in a result-summary string.
+
+    ``"Written to /Users/.../src/x.tsx"`` → ``"Written to src/x.tsx"``. A no-op
+    for text without an absolute path (commands, queries, counts).
+    """
+    if not text or "/" not in text:
+        return text
+    import re as _re
+
+    return _re.sub(r"(?<![\w.])/(?:[^\s:]+/)*[^\s:/]+", lambda m: _relpath(m.group(0)), text)
+
+
 def _tool_icon(name: str, args: dict) -> tuple:
     """Return (icon, label) for a tool call — Claude Code style.
 
@@ -947,6 +1008,10 @@ def _tool_icon(name: str, args: dict) -> tuple:
         badge = tool.user_facing_name or name
         display = tool.render_call(args)
         display = _strip_tool_prefix(display, badge)
+        # Show paths relative to the workspace root (Claude Code style).
+        # _relpath_in_text relativizes any absolute path embedded in the label
+        # and is a no-op for labels without one (commands, queries, patterns).
+        display = _relpath_in_text(display)
         default_display = (
             f"{name}: {next(iter(args))}={str(args.get(next(iter(args)), ''))[:40]}"
             if args
@@ -959,10 +1024,10 @@ def _tool_icon(name: str, args: dict) -> tuple:
 
     # ── Built-in icons (backward compatible) ──────────────────
     icons = {
-        "read_file": (f"{CYAN}@", f"{path}"),
-        "write_file": (f"{GREEN}+", f"{BOLD}{path}{RESET}"),
-        "apply_diff": (f"{YELLOW}~", f"{path}"),
-        "edit_file": (f"{YELLOW}~", f"{path}"),
+        "read_file": (f"{CYAN}@", f"{_relpath(path)}"),
+        "write_file": (f"{GREEN}+", f"{BOLD}{_relpath(path)}{RESET}"),
+        "apply_diff": (f"{YELLOW}~", f"{_relpath(path)}"),
+        "edit_file": (f"{YELLOW}~", f"{_relpath(path)}"),
         "execute_command": (f"{MAGENTA}>", f"{cmd}"),
         "run_tests": (f"{CYAN}◷", f"{DIM}Running tests{RESET}"),
         "web_search": (f"{CYAN}🔍", f"{DIM}{query}{RESET}"),
@@ -977,7 +1042,7 @@ def _tool_icon(name: str, args: dict) -> tuple:
         "safe_rename": (f"{YELLOW}↻", f"{args.get('symbol', '')} → {args.get('new_name', '')}"),
         "sub_agent": (f"{CYAN}◆", f"{DIM}{args.get('task', '')[:50]}{RESET}"),
         "sandbox_execute": (f"{MAGENTA}▣", f"{cmd}"),
-        "delete_file": (f"{RED}×", f"{path}"),
+        "delete_file": (f"{RED}×", f"{_relpath(path)}"),
     }
 
     if name in icons:
@@ -2234,8 +2299,10 @@ class SimpleCLI:
                                 summary = _strip_tool_prefix(
                                     summary, tool.user_facing_name or tool_name
                                 )
+                                summary = _relpath_in_text(summary)
                         else:
                             summary = event.get("content", "").split("\n")[0][:80]
+                            summary = _relpath_in_text(summary)
                         if summary:
                             display_name = (
                                 (tool.user_facing_name or tool_name) if tool else tool_name
