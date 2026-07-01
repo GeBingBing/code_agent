@@ -327,22 +327,26 @@ class TestRichHelpers:
         assert "1/3" in out
 
     def test_rich_print_tool_result_success(self, capsys):
-        """Tool result success badge."""
+        """Tool result badge — Claude Code style (⎿ summary, no ✓, no tool name)."""
         from ui.cli import _rich_print_tool_result
 
         _rich_print_tool_result("Read", "hello.py · 120 lines", success=True)
         out = capsys.readouterr().out
-        assert "Read" in out
+        assert "⎿" in out
         assert "hello.py" in out
+        assert "Read" not in out
+        assert "✓" not in out
 
     def test_rich_print_tool_result_failure(self, capsys):
-        """Tool result failure badge shows ✗."""
+        """Tool result failure badge — ⎿ ✗, no tool name."""
         from ui.cli import _rich_print_tool_result
 
         _rich_print_tool_result("Bash", "Permission denied", success=False)
         out = capsys.readouterr().out
-        assert "Bash" in out
+        assert "⎿" in out
+        assert "✗" in out
         assert "Permission denied" in out
+        assert "Bash" not in out
 
     def test_rich_print_confirm_no_diff(self, capsys):
         """Confirm dialog without diff doesn't include option 4."""

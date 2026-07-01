@@ -186,7 +186,7 @@ class TestListFilesRendering:
             error = ""
             metadata = {"dirs": 1, "files": 1}
 
-        assert tool.render_result(_R()) == "2 items (1 files, 1 dirs)"
+        assert tool.render_result(_R()) == "1 files, 1 dirs"
 
     def test_write_call_label_is_bare_path(self, monkeypatch):
         cli = _reload_cli(monkeypatch, "")
