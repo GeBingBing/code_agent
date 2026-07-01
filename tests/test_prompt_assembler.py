@@ -82,6 +82,25 @@ class TestPromptAssembler:
             PromptAssembler, "build_execute_prompt"
         ), "build_execute_prompt should be removed (dead code)"
 
+    def test_response_style_section_present(self):
+        """INSTRUCTIONS must carry a RESPONSE STYLE block aligning with Claude Code.
+
+        Codifies: stop-when-done (don't ask 'want me to rebuild?'), no run
+        statistics in prose, diff for changes, file:line references, measured tone.
+        """
+        prompt = PromptAssembler.build_system_prompt()
+        assert "RESPONSE STYLE" in prompt
+        assert "Stop when done" in prompt
+        # Don't end by asking to rebuild/preview/run.
+        assert "Want me to rebuild" in prompt
+        # No run statistics in prose.
+        assert "Do NOT print run statistics" in prompt
+        # Diff + file:line for changes.
+        assert "```diff" in prompt
+        assert "path/to/file:line" in prompt
+        # Measured tone — no exclamation marks for routine success.
+        assert "exclamation" in prompt.lower()
+
 
 class TestPlanPrompt:
     """Test the plan-mode prompt."""

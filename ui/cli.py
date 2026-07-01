@@ -49,6 +49,11 @@ if not sys.stdin.isatty():
 # Detect $NO_COLOR
 _NO_COLOR = os.environ.get("NO_COLOR", "") != ""
 
+# Per-turn token/elapsed footer (── ⬇ ... · Xs). Off by default to match
+# Claude Code's clean output — token info still shows in the input toolbar
+# and in the /quit session total. Set AGENT_SHOW_TOKEN_TAIL=1 to re-enable.
+_SHOW_TOKEN_TAIL = os.environ.get("AGENT_SHOW_TOKEN_TAIL", "") == "1"
+
 
 # ── Silence threading-shutdown tracebacks ──────────────────────
 # When a confirm prompt is running in a ThreadPoolExecutor and the user
@@ -903,6 +908,24 @@ def _run_async(coro):
         loop.close()
 
 
+def _strip_tool_prefix(text: str, name: str) -> str:
+    """Remove a redundant leading tool-name label from render_call/render_result.
+
+    Tools render their own call/result as ``"Read · src/x"`` / ``"Read · 42 lines"``,
+    but the CLI already prints the tool badge next to it — so without stripping we
+    get ``Read · Read · src/x``. This strips a leading ``<name> · `` (or with - / •)
+    so each line shows the tool name exactly once, Claude Code style.
+    """
+    if not text or not name:
+        return text
+    import re as _re
+
+    m = _re.match(rf"^{_re.escape(name)}\s*[·•\-]\s*", text)
+    if m:
+        return text[m.end() :]
+    return text
+
+
 def _tool_icon(name: str, args: dict) -> tuple:
     """Return (icon, label) for a tool call — Claude Code style.
 
@@ -923,6 +946,7 @@ def _tool_icon(name: str, args: dict) -> tuple:
     if tool:
         badge = tool.user_facing_name or name
         display = tool.render_call(args)
+        display = _strip_tool_prefix(display, badge)
         default_display = (
             f"{name}: {next(iter(args))}={str(args.get(next(iter(args)), ''))[:40]}"
             if args
@@ -1859,7 +1883,10 @@ class SimpleCLI:
             self._session_tokens_out += est
         if _turn_estimated:
             self._session_tokens_estimated_turns += 1
-        # Footer — Claude Code style with real vs estimated label
+        # Footer — only surface actionable context warnings (Claude Code style).
+        # The routine per-turn token/elapsed badge is suppressed by default; set
+        # AGENT_SHOW_TOKEN_TAIL=1 to restore it. Token info still lives in the
+        # input toolbar and the /quit session total.
         if _usage_info:
             inp = _usage_info.get("input", 0)
             window = 128000
@@ -1870,14 +1897,21 @@ class SimpleCLI:
                     f"Context low ({remaining:.0f}% remaining) · Run /compact to compact & continue"
                 )
                 color = RED
+                print(
+                    f"\n{color}{line} · {format_token_badge(_usage_info)} · {elapsed:.1f}s{RESET}"
+                )
             elif remaining < 40:
                 line = f"{remaining:.0f}% until auto-compact"
                 color = YELLOW
-            else:
-                line = f"{pct:.0f}% context used"
-                color = DIM
-            print(f"\n{color}{line} · {format_token_badge(_usage_info)} · {elapsed:.1f}s{RESET}")
-        else:
+                print(
+                    f"\n{color}{line} · {format_token_badge(_usage_info)} · {elapsed:.1f}s{RESET}"
+                )
+            elif _SHOW_TOKEN_TAIL:
+                print(
+                    f"\n{DIM}{pct:.0f}% context used · "
+                    f"{format_token_badge(_usage_info)} · {elapsed:.1f}s{RESET}"
+                )
+        elif _SHOW_TOKEN_TAIL:
             print(
                 f"\n{DIM}{format_token_badge(None, estimated=True, result_len=len(result))} · {elapsed:.1f}s{RESET}"
             )
@@ -2016,12 +2050,13 @@ class SimpleCLI:
         elapsed = time.time() - start_time
         if not result and _last_tool_content:
             print(f"{DIM}{_last_tool_content.split(chr(10))[0][:100]}{RESET}")
-        token_str = (
-            f"⬇ {self._session_tokens_in:,} in / {self._session_tokens_out:,} out"
-            if not _session_turn_estimated
-            else f"⬇ ~{self._session_tokens_out:,} out (估计)"
-        )
-        print(f"{DIM}── {token_str} · {elapsed:.1f}s{RESET}")
+        if _SHOW_TOKEN_TAIL:
+            token_str = (
+                f"⬇ {self._session_tokens_in:,} in / {self._session_tokens_out:,} out"
+                if not _session_turn_estimated
+                else f"⬇ ~{self._session_tokens_out:,} out (估计)"
+            )
+            print(f"{DIM}── {token_str} · {elapsed:.1f}s{RESET}")
         return result
 
     async def _run_agent(self, task: str) -> str:
@@ -2195,6 +2230,10 @@ class SimpleCLI:
                                 metadata = event.get("metadata")
 
                             summary = tool.render_result(_FakeResult())
+                            if tool:
+                                summary = _strip_tool_prefix(
+                                    summary, tool.user_facing_name or tool_name
+                                )
                         else:
                             summary = event.get("content", "").split("\n")[0][:80]
                         if summary:
@@ -2283,10 +2322,14 @@ class SimpleCLI:
             result_text = "".join(buffer).strip()
             if _turn_estimated:
                 self._session_tokens_estimated_turns += 1
-                tok_str = f"⬇ ~{self._session_tokens_out:,} out (估计)"
-            else:
-                tok_str = f"⬇ {self._session_tokens_in:,} in / {self._session_tokens_out:,} out"
-            print(f"{DIM}── {tok_str} · {elapsed:.1f}s{RESET}")
+            if _SHOW_TOKEN_TAIL:
+                if _turn_estimated:
+                    tok_str = f"⬇ ~{self._session_tokens_out:,} out (估计)"
+                else:
+                    tok_str = (
+                        f"⬇ {self._session_tokens_in:,} in / " f"{self._session_tokens_out:,} out"
+                    )
+                print(f"{DIM}── {tok_str} · {elapsed:.1f}s{RESET}")
             return "".join(buffer)
 
         except asyncio.CancelledError:
