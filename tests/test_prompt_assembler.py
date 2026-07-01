@@ -102,7 +102,10 @@ class TestPromptAssembler:
         assert "exclamation" in prompt.lower()
         # Narrate before acting — a tool call must be preceded by a one-line
         # intent statement, so output reads as thought, not a bare tool log.
-        assert "Narrate before you act" in prompt
+        assert "Narrate EVERY tool call" in prompt
+        assert "MANDATORY" in prompt
+        # A GOOD/BAD few-shot contrast is present to anchor the rule.
+        assert "GOOD" in prompt and "FORBIDDEN" in prompt
 
 
 class TestPlanPrompt:
