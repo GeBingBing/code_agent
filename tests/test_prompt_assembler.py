@@ -92,7 +92,7 @@ class TestPromptAssembler:
         assert "RESPONSE STYLE" in prompt
         assert "Stop when done" in prompt
         # Don't end by asking to rebuild/preview/run.
-        assert "Want me to rebuild" in prompt
+        assert "rebuild / preview / run" in prompt
         # No run statistics in prose.
         assert "Do NOT print run statistics" in prompt
         # Diff + file:line for changes.
