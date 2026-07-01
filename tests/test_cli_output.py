@@ -83,8 +83,45 @@ class TestToolIconNoDuplicate:
         icon, label = cli._tool_icon("read_file", {"path": "src/Hero.tsx"})
         assert "Read" in icon
         assert label == "src/Hero.tsx"
-        combined = f"{icon} · {label}"
+        combined = f"{icon}  {label}"
         assert "Read · Read" not in combined
+
+
+class TestCompactCallStyle:
+    """Tool call/result lines use the compact Claude Code style:
+
+    call:   ``  Read  src/x.tsx``   (two-space sep, no ``·``)
+    result: ``  ⎿ 32 lines``        (indented ⎿, no ✓, no repeated tool name)
+    """
+
+    def test_call_line_uses_two_spaces_not_dot_separator(self, monkeypatch):
+        import re
+
+        cli = _reload_cli(monkeypatch, "")
+        icon, label = cli._tool_icon("read_file", {"path": "src/x.tsx"})
+        line = f"{icon}  {label}"
+        # Strip ANSI escapes so the assertion sees the visible text.
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
+        # The middle separator is two spaces, never a '·'.
+        assert "·" not in plain
+        assert "Read  src/x.tsx" in plain
+
+    def test_result_line_is_indented_hook_no_checkmark(self, monkeypatch, capsys):
+        cli = _reload_cli(monkeypatch, "")
+        cli._rich_print_tool_result("Read", "32 lines", success=True)
+        out = capsys.readouterr().out
+        assert "⎿" in out
+        assert "32 lines" in out
+        # No checkmark, no repeated tool name on the result line.
+        assert "✓" not in out
+        assert "Read" not in out
+
+    def test_result_line_failure_shows_cross(self, monkeypatch, capsys):
+        cli = _reload_cli(monkeypatch, "")
+        cli._rich_print_tool_result("Bash", "permission denied", success=False)
+        out = capsys.readouterr().out
+        assert "⎿" in out
+        assert "✗" in out
 
 
 class TestRelativePaths:

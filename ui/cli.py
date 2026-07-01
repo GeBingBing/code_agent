@@ -540,15 +540,22 @@ def _rich_print_confirm(
 
 
 def _rich_print_tool_result(name: str, summary: str, success: bool = True):
-    """Print a tool result badge — Claude Code style with rich."""
+    """Print a tool result line — Claude Code style.
+
+    Success: ``  ⎿ <summary>`` (no checkmark, no repeated tool name — the call
+    line above already named the tool; success is the default, so we just show
+    the indented result). Failure: ``  ⎿ ✗ <summary>`` in red.
+    """
     if RICH_AVAILABLE:
-        icon = "✓" if success else "✗"
-        color = "green" if success else "red"
-        _RICH.print(f"  [{color}]{icon}[/{color}] [dim]{name}[/dim]  {summary}")
+        if success:
+            _RICH.print(f"  [dim]⎿[/dim] {summary}")
+        else:
+            _RICH.print(f"  [red]⎿ ✗[/red] {summary}")
     else:
-        icon = "✓" if success else "✗"
-        color = GREEN if success else RED
-        print(f"  {color}{icon}{RESET}  {DIM}{name}{RESET}  {summary}")
+        if success:
+            print(f"  {DIM}⎿{RESET} {summary}")
+        else:
+            print(f"  {RED}⎿ ✗{RESET} {summary}")
 
 
 def _render_full_markdown(text: str) -> str:
@@ -2061,7 +2068,7 @@ class SimpleCLI:
                     if self._spin.is_running:
                         await self._spin.stop_async()
                     icon, label = _tool_icon(event.get("tool_name", ""), event.get("tool_args", {}))
-                    print(f"{icon} · {label}")
+                    print(f"{icon}  {label}")
                     self._spin.start(StageLabel.TOOL.format(tool=event.get("tool_name", "?")))
                 elif etype == "tool_result":
                     if self._spin.is_running:
@@ -2229,7 +2236,7 @@ class SimpleCLI:
                         buffer.clear()
 
                     icon, label = _tool_icon(name, args)
-                    print(f"{icon} · {label}")
+                    print(f"{icon}  {label}")
                     # Sub-agent gets its own label so user sees WHICH one
                     if name == "spawn_sub_agent":
                         sub_label = args.get("label") or "subagent"
