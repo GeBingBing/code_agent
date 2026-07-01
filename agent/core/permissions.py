@@ -73,6 +73,35 @@ def assess_risk(tool_name: str, args: dict) -> RiskLevel:
         command = args.get("command", "")
         cmd_lower = command.lower()
 
+        # Read-only inspection commands (find/ls/grep/cat/wc/tree/file/stat/
+        # head/tail/diff/which/type/du/df) are harmless and must never be
+        # CRITICAL, even when chained with -o/;. Claude Code doesn't block
+        # these. They run before any destructive-pattern check so a
+        # `find ... -o -name` can't trip the chain-metachar guard. LOW so the
+        # call is visible but auto-runs.
+        first_word = command.strip().split(None, 1)[0] if command.strip() else ""
+        if first_word in {
+            "find",
+            "ls",
+            "grep",
+            "egrep",
+            "fgrep",
+            "rg",
+            "cat",
+            "wc",
+            "tree",
+            "file",
+            "stat",
+            "head",
+            "tail",
+            "diff",
+            "which",
+            "type",
+            "du",
+            "df",
+        }:
+            return RiskLevel.LOW
+
         # Check for system path patterns (rm on .pyenv, etc.)
         for pattern in _SYSTEM_PATH_PATTERNS_FOR_PERMISSIONS:
             if re.search(pattern, cmd_lower):
