@@ -100,6 +100,9 @@ class TestPromptAssembler:
         assert "path/to/file:line" in prompt
         # Measured tone — no exclamation marks for routine success.
         assert "exclamation" in prompt.lower()
+        # Narrate before acting — a tool call must be preceded by a one-line
+        # intent statement, so output reads as thought, not a bare tool log.
+        assert "Narrate before you act" in prompt
 
 
 class TestPlanPrompt:
