@@ -1,22 +1,28 @@
 """Tests for Claude Code-aligned CLI output rendering.
 
-Covers two alignment changes:
-  1. The per-turn ``── ⬇ ... · Xs`` token/elapsed footer is OFF by default
-     (``AGENT_SHOW_TOKEN_TAIL`` unset) so prose stays clean, like Claude Code.
-  2. Tool call/result lines show the tool name exactly once — no
-     ``Read · Read · src/x`` duplication.
+Covers:
+  1. The per-turn ``── ⬇ ... · Xs`` token/elapsed footer is OFF by default.
+  2. Tool call/result lines show the tool name exactly once (no Read · Read).
+  3. Paths are shown relative to the workspace root.
+  4. list_files shows just the path on the call line and a file count on the
+     result line — not ``list_files: path=...`` / ``.DS_Store``.
 """
 
 import importlib
 
 
-def _reload_cli(monkeypatch, env_value):
-    """Reload ui.cli with a given AGENT_SHOW_TOKEN_TAIL env value.
+def _reload_cli(monkeypatch, env_value=""):
+    """Reload ui.cli (and agent.core.workspace) to pick up env-var-driven state.
 
-    The module reads the env var at import time into _SHOW_TOKEN_TAIL, so we
-    must reload to pick up a changed value.
+    ``ui.cli`` reads ``AGENT_SHOW_TOKEN_TAIL`` at import time; ``_relpath`` reads
+    ``WORKSPACE_ROOT`` (which itself reads ``CODING_AGENT_WORKSPACE`` at import).
+    Both must be reloaded after setting the env var.
     """
-    monkeypatch.setenv("AGENT_SHOW_TOKEN_TAIL", env_value)
+    if env_value:
+        monkeypatch.setenv("AGENT_SHOW_TOKEN_TAIL", env_value)
+    import agent.core.workspace as workspace
+
+    importlib.reload(workspace)
     import ui.cli as cli
 
     importlib.reload(cli)
@@ -37,11 +43,7 @@ class TestTokenTailDefault:
 
 
 class TestStripToolPrefix:
-    """``_strip_tool_prefix`` removes the redundant leading tool-name label.
-
-    Tools render their own call/result as ``"Read · src/x"`` but the CLI already
-    prints the badge beside it — so we strip to avoid ``Read · Read · src/x``.
-    """
+    """``_strip_tool_prefix`` removes the redundant leading tool-name label."""
 
     def test_strips_read_prefix(self, monkeypatch):
         cli = _reload_cli(monkeypatch, "")
@@ -57,12 +59,10 @@ class TestStripToolPrefix:
 
     def test_strips_bash_result_with_multiple_segments(self, monkeypatch):
         cli = _reload_cli(monkeypatch, "")
-        # "Bash · 0.3s · 12 lines" → "0.3s · 12 lines" (only the name stripped)
         assert cli._strip_tool_prefix("Bash · 0.3s · 12 lines", "Bash") == "0.3s · 12 lines"
 
     def test_no_strip_when_no_prefix(self, monkeypatch):
         cli = _reload_cli(monkeypatch, "")
-        # A raw command (shell render_call) is not prefixed — must stay intact.
         assert cli._strip_tool_prefix("npx serve out", "Bash") == "npx serve out"
 
     def test_no_strip_unrelated_name(self, monkeypatch):
@@ -81,9 +81,79 @@ class TestToolIconNoDuplicate:
     def test_read_call_label_has_no_read_prefix(self, monkeypatch):
         cli = _reload_cli(monkeypatch, "")
         icon, label = cli._tool_icon("read_file", {"path": "src/Hero.tsx"})
-        # Badge shows the tool name; the label is the bare path.
         assert "Read" in icon
         assert label == "src/Hero.tsx"
-        # No doubled "Read · Read" anywhere in the combined line.
         combined = f"{icon} · {label}"
         assert "Read · Read" not in combined
+
+
+class TestRelativePaths:
+    """Paths are shown relative to the workspace root (Claude Code style)."""
+
+    def test_relpath_strips_workspace_prefix(self, monkeypatch):
+        monkeypatch.setenv("CODING_AGENT_WORKSPACE", "/Users/u/proj")
+        cli = _reload_cli(monkeypatch, "")
+        assert cli._relpath("/Users/u/proj/src/app/layout.tsx") == "src/app/layout.tsx"
+
+    def test_relpath_workspace_itself_becomes_dot(self, monkeypatch):
+        monkeypatch.setenv("CODING_AGENT_WORKSPACE", "/Users/u/proj")
+        cli = _reload_cli(monkeypatch, "")
+        assert cli._relpath("/Users/u/proj") == "."
+
+    def test_relpath_keeps_relative_paths(self, monkeypatch):
+        cli = _reload_cli(monkeypatch, "")
+        assert cli._relpath("src/x.ts") == "src/x.ts"
+        assert cli._relpath(".") == "."
+        assert cli._relpath("") == ""
+
+    def test_relpath_keeps_unrelated_absolute(self, monkeypatch):
+        monkeypatch.setenv("CODING_AGENT_WORKSPACE", "/Users/u/proj")
+        cli = _reload_cli(monkeypatch, "")
+        assert cli._relpath("/etc/passwd") == "/etc/passwd"
+
+    def test_relpath_in_text_relativizes_embedded_path(self, monkeypatch):
+        monkeypatch.setenv("CODING_AGENT_WORKSPACE", "/Users/u/proj")
+        cli = _reload_cli(monkeypatch, "")
+        assert cli._relpath_in_text("Written to /Users/u/proj/src/x.tsx") == "Written to src/x.tsx"
+
+    def test_relpath_in_text_noop_without_path(self, monkeypatch):
+        cli = _reload_cli(monkeypatch, "")
+        assert cli._relpath_in_text("Read · 42 lines") == "Read · 42 lines"
+        assert cli._relpath_in_text("npm run build") == "npm run build"
+
+    def test_tool_icon_relativizes_absolute_path(self, monkeypatch):
+        monkeypatch.setenv("CODING_AGENT_WORKSPACE", "/Users/u/proj")
+        cli = _reload_cli(monkeypatch, "")
+        _, label = cli._tool_icon("read_file", {"path": "/Users/u/proj/src/app/layout.tsx"})
+        assert label == "src/app/layout.tsx"
+
+
+class TestListFilesRendering:
+    """list_files shows just the path on the call line and a file count on the
+    result line — not ``list_files: path=...`` / ``.DS_Store``."""
+
+    def test_list_call_label_is_bare_path(self, monkeypatch):
+        cli = _reload_cli(monkeypatch, "")
+        icon, label = cli._tool_icon("list_files", {"path": "src"})
+        assert "List" in icon
+        assert label == "src"
+
+    def test_list_result_shows_item_count(self):
+        from agent.tools.file_ops import ListFilesTool
+
+        tool = ListFilesTool()
+
+        class _R:
+            success = True
+            content = "[dir] a\n[file] b"
+            error = ""
+            metadata = {"dirs": 1, "files": 1}
+
+        assert tool.render_result(_R()) == "2 items (1 files, 1 dirs)"
+
+    def test_write_call_label_is_bare_path(self, monkeypatch):
+        cli = _reload_cli(monkeypatch, "")
+        icon, label = cli._tool_icon("write_file", {"path": "src/x.tsx"})
+        assert label == "src/x.tsx"
+        assert "write_file" not in label
+        assert "path=" not in label
