@@ -55,6 +55,11 @@ class CodeSearchTool(BaseTool):
     name = "code_search"
     description = "Search the codebase for symbols, files, or content matching a query. Use semantic=true for related symbols and references."
 
+    def render_result(self, result: "ToolResult") -> str:
+        if result.success and result.content:
+            return result.content.split("\n")[0].rstrip()[:80]
+        return super().render_result(result)
+
     def __init__(self, root_dir: str = "."):
         self.root_dir = root_dir
         self._retriever = None
