@@ -17,7 +17,7 @@ class TestRiskAssessment:
         assert assess_risk("write_file", {"path": "test.py"}) == RiskLevel.MEDIUM
 
     def test_execute_command_is_high(self):
-        assert assess_risk("execute_command", {"command": "ls"}) == RiskLevel.HIGH
+        assert assess_risk("execute_command", {"command": "npm run build"}) == RiskLevel.HIGH
 
     def test_rm_rf_is_critical(self):
         assert assess_risk("execute_command", {"command": "rm -rf /"}) == RiskLevel.CRITICAL
@@ -26,6 +26,19 @@ class TestRiskAssessment:
         assert (
             assess_risk("execute_command", {"command": "sudo apt install x"}) == RiskLevel.CRITICAL
         )
+
+    def test_readonly_inspection_commands_are_low(self):
+        """find/grep/ls/cat/etc. are read-only and must not be CRITICAL, even
+        when chained with -o or pipes — Claude Code doesn't block these."""
+        for cmd in (
+            "find /proj/src -type f -name '*.tsx' -o -name '*.ts'",
+            "grep -r foo /proj",
+            "ls -la /proj",
+            "cat /proj/x.ts",
+            "wc -l /proj/x.ts",
+            "tree /proj",
+        ):
+            assert assess_risk("execute_command", {"command": cmd}) == RiskLevel.LOW, cmd
 
 
 class TestPlanMode:
@@ -44,7 +57,9 @@ class TestPlanMode:
 
     def test_blocks_execute(self):
         pm = PermissionManager("plan")
-        allowed, _ = pm.check("execute_command", {"command": "ls"})
+        # Non-read-only execution (HIGH risk) is blocked in plan mode.
+        # (ls/find/grep are now LOW — read-only inspection, allowed in plan.)
+        allowed, _ = pm.check("execute_command", {"command": "npm run build"})
         assert allowed is False
 
 
