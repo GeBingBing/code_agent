@@ -390,20 +390,17 @@ class ToolDispatcher:
             tool_call_id=tc_id,
         )
 
-        # Stage 9: auto-remember side-effects
+        # Stage 9: side-effects (project-dir inference only — no mechanical
+        # last_X_file/last_command recording; those low-value facts pollute
+        # the L3 LRU and crowd out genuinely useful memories. Claude Code
+        # doesn't record them either.)
         if result.success:
             if func_name == "write_file":
                 path = args.get("path", "")
-                self._memory.remember("last_written_file", path)
                 if "/" in path and not self._get_current_project_dir():
                     first_seg = path.split("/")[0]
                     if first_seg and first_seg not in (".", "..") and ".." not in first_seg:
                         self._set_current_project_dir(first_seg)
-            elif func_name == "read_file":
-                self._memory.remember("last_read_file", args.get("path", ""))
-            elif func_name == "execute_command":
-                cmd = args.get("command", "")[:80]
-                self._memory.remember("last_command", f"Ran: {cmd}")
 
             # Stage 10: plan mode transitions
             if func_name == "enter_plan_mode":
