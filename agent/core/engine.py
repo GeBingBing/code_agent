@@ -843,6 +843,7 @@ class AgentEngine:
             "project_hint": project_hint,
             "start_command_hint": start_command_hint,
             "env_preflight": env_preflight,
+            "long_term_memory": self.memory.get_long_term_context(),
         }
 
     @staticmethod

@@ -89,7 +89,7 @@ class PlanWorkflow:
         try:
             system = PromptAssembler.build_plan_prompt(
                 project_context=self._context_builder.project_context,
-                long_term_memory=self._memory.get_long_term_context(),
+                # long_term_memory now arrives via <system-reminder>.
             )
             self._memory.clear_working_memory()
             self._memory.add("system", system)

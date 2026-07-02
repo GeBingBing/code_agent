@@ -353,14 +353,16 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
                 f"</agent_requestable_workspace_rules>"
             )
 
-        # PR-14: user_profile section is injected BEFORE <memory> so the
-        # agent sees the user's identity before its own long-term facts.
-        # This makes the identity harder to overlook.
+        # PR-14: user_profile section is injected before the (now reminder-bound)
+        # long-term memory so the agent sees the user's identity first.
         if user_profile:
             parts.append(f"\n{user_profile}")
 
-        if long_term_memory:
-            parts.append(f"\n<memory>\n{long_term_memory}\n</memory>")
+        # NOTE: long-term memory is NO LONGER in the system prompt — it moved
+        # to the per-turn <system-reminder> (build_system_reminder) so that
+        # adding/evicting a memory fact doesn't bust the cache-stable system
+        # prompt. The long_term_memory parameter is accepted for backward
+        # compatibility but ignored here.
 
         if skill_prompt:
             parts.append(f"\n<available_skills>\n{skill_prompt}\n</available_skills>")
@@ -398,8 +400,7 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
                 f"</agent_requestable_workspace_rules>"
             )
 
-        if long_term_memory:
-            parts.append(f"\n<memory>\n{long_term_memory}\n</memory>")
+        # long_term_memory moved to <system-reminder> (see build_system_reminder).
 
         return "\n".join(parts)
 
@@ -416,12 +417,15 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
         project_hint: str = "",
         start_command_hint: str = "",
         env_preflight: str = "",
+        long_term_memory: str = "",
     ) -> str:
         """Build per-turn transient context for user message injection.
 
         This is injected at the END of the user message (not the system prompt)
         so it doesn't invalidate any prompt cache prefix.
 
+        Long-term memory lives here (not in the system prompt) so that adding
+        or evicting a memory fact doesn't bust the cache-stable system prompt.
         Returns empty string if no transient state to report.
         """
         parts = []
@@ -442,6 +446,8 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
             parts.append(f"<plan_progress>{plan_progress}</plan_progress>")
         if git_status:
             parts.append(f"<git_status>\n{git_status}\n</git_status>")
+        if long_term_memory:
+            parts.append(f"<memory>\n{long_term_memory}\n</memory>")
 
         if not parts:
             return ""

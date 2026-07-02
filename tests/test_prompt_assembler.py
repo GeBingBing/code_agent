@@ -29,10 +29,14 @@ class TestPromptAssembler:
             assert tool.name in prompt, f"Tool '{tool.name}' missing from generated tool list"
 
     def test_includes_long_term_memory(self):
+        # Long-term memory moved to <system-reminder> for cache stability.
+        # The system prompt no longer contains it; the reminder does.
         prompt = PromptAssembler.build_system_prompt(long_term_memory="User prefers pytest")
-        assert "<memory>" in prompt
-        assert "</memory>" in prompt
-        assert "User prefers pytest" in prompt
+        assert "<memory>" not in prompt  # not in the system prompt anymore
+        reminder = PromptAssembler.build_system_reminder(long_term_memory="User prefers pytest")
+        assert "<memory>" in reminder
+        assert "</memory>" in reminder
+        assert "User prefers pytest" in reminder
 
     def test_includes_skills(self):
         prompt = PromptAssembler.build_system_prompt(skill_prompt="Skill: setup-flake8")
@@ -127,9 +131,11 @@ class TestPlanPrompt:
         assert "Use ruff for linting" in prompt
 
     def test_plan_prompt_includes_memory(self):
+        # Memory moved to <system-reminder>; plan prompt no longer holds it.
         prompt = PromptAssembler.build_plan_prompt(long_term_memory="Prefer async/await")
-        assert "<memory>" in prompt
-        assert "Prefer async/await" in prompt
+        assert "<memory>" not in prompt
+        reminder = PromptAssembler.build_system_reminder(long_term_memory="Prefer async/await")
+        assert "Prefer async/await" in reminder
 
     def test_plan_prompt_omits_empty_sections(self):
         prompt = PromptAssembler.build_plan_prompt()

@@ -101,11 +101,12 @@ class ContextBuilder:
         """
         if self._config.custom_system_prompt:
             return self._config.custom_system_prompt
-        # PR-14: user_profile rendered as <user_profile> XML before <memory>
-        # so the agent sees identity before generic long-term facts.
+        # PR-14: user_profile rendered as <user_profile> XML so the agent
+        # sees identity before generic facts.
         user_profile_prompt = self._user_profile.to_prompt() if self._user_profile else ""
         return PromptAssembler.build_system_prompt(
-            long_term_memory=self._memory.get_long_term_context(),
+            # long_term_memory is now injected via the per-turn
+            # <system-reminder> (engine._get_env_context) for cache stability.
             skill_prompt=skill_prompt,
             project_context=self.project_context,
             plan_context=plan_context,
