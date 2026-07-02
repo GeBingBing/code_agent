@@ -240,16 +240,40 @@ class MemoryManager:
         return messages
 
     def get_long_term_context(self) -> str:
-        """Return long-term memory for injecting into system prompt."""
+        """Return long-term memory for injecting into the per-turn reminder.
+
+        Index strategy (Claude Code style): when the store has more than
+        ``_INDEX_THRESHOLD`` entries, only the keys are injected (an index the
+        agent can scan at a glance); full values stay in vector memory for
+        semantic_search. Below the threshold the full key: value lines are
+        injected — small enough to fit and most useful verbatim.
+        """
         if not self.long_term:
             return ""
-        return f"\n\n[Long-term memory]\n{self.long_term}"
+        lines = [l for l in self.long_term.strip().split("\n") if l]
+        if len(lines) <= self._INDEX_THRESHOLD:
+            return "\n".join(lines)
+        idx = []
+        for line in lines:
+            if line.startswith("- 📌 "):
+                idx.append(line)  # pinned: show full value (high-signal)
+            else:
+                key = line.lstrip("- ").split(":", 1)[0].strip()
+                if key:
+                    idx.append(f"- {key}")
+        return "\n".join(idx)
 
     # PR-14: pinned entries are exempt from the 50-entry LRU cap.
     # Used for identity facts (user.name etc.) so they survive flooding
     # from auto-recorded tool calls (last_written_file, etc.).
     # Configurable upper bound via env CODING_AGENT_MEMORY_PINNED_MAX.
     _PINNED_MAX = 200
+
+    # Above this many entries, get_long_term_context switches to index mode
+    # (keys only) to keep the reminder compact — full values stay in vector
+    # memory for semantic_search. Claude Code uses the same index-then-recall
+    # pattern with its MEMORY.md.
+    _INDEX_THRESHOLD = 15
 
     def remember(self, key: str, value: str, pinned: bool = False):
         """Store a fact into long-term memory with deduplication by key.

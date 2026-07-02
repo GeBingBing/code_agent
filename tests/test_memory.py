@@ -77,5 +77,6 @@ class TestLongTermMemory:
         assert mem.get_long_term_context() == ""
         mem.remember("test", "value")
         ctx = mem.get_long_term_context()
-        assert "Long-term memory" in ctx
+        # Below the index threshold: full key: value line.
         assert "test" in ctx
+        assert "value" in ctx
