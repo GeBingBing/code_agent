@@ -1811,6 +1811,26 @@ class AgentEngine:
                     content="",
                     error="Tool execution failed (sibling abort)",
                 )
+            # Circuit breaker: track consecutive failures per tool. On the 3rd
+            # failure of the same tool, inject a system reminder forcing the
+            # LLM to switch tools or reconsider — prevents death-looping the
+            # same failing call. (Claude Code has this; the counter existed
+            # but was never read — now it is.)
+            tname = p["func_name"]
+            if result.success:
+                self._consecutive_failures.pop(tname, None)
+            else:
+                self._consecutive_failures[tname] = (
+                    self._consecutive_failures.get(tname, 0) + 1
+                )
+                if self._consecutive_failures[tname] >= 3:
+                    self.memory.add(
+                        "system",
+                        f"Tool '{tname}' has failed {self._consecutive_failures[tname]} "
+                        f"times in a row. Stop retrying it — switch to a different "
+                        f"tool or rethink your approach.",
+                    )
+                    self._consecutive_failures.pop(tname, None)  # reset after nudging
             yield {
                 "type": "tool_result",
                 "success": result.success,
