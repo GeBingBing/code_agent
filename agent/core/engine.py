@@ -37,6 +37,7 @@ from ..observability import get_metrics, get_tracer
 from ..prompts.assembler import PromptAssembler
 from ..tools import (  # noqa: F401 - triggers tool registration
     audit,
+    ask_user,  # noqa: F401 (ask_user — structured questioning)
     code_search,
     diagnostics,
     file_ops,

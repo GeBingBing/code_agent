@@ -2,6 +2,7 @@
 
 # Import all tools to register them with the global registry
 from . import (
+    ask_user,  # noqa: F401 (ask_user — structured multi-choice questioning)
     background,  # noqa: F401 (background_task tool + registry)
     code_search,  # noqa: F401
     file_ops,  # noqa: F401
