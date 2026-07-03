@@ -9,6 +9,7 @@
 """
 
 import asyncio
+from pathlib import Path
 from typing import Optional
 
 from ..core.subagent_registry import get_registry
@@ -38,6 +39,7 @@ class SpawnSubAgentTool(BaseTool):
         model: Optional[str] = None,
         parent_run_id: Optional[str] = None,
         background: bool = False,
+        isolation: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         """Spawn a sub-agent to handle a subtask.
@@ -48,10 +50,15 @@ class SpawnSubAgentTool(BaseTool):
             model: Optional model override for the sub-agent
             parent_run_id: Parent agent's run_id for tree tracking
             background: If True, return task_id immediately and run in background
+            isolation: "worktree" to run in a temporary git worktree so the
+                sub-agent's file changes don't touch the parent's working tree.
+                The worktree is removed when the sub-agent finishes (unless the
+                task fails — then it's kept for inspection).
         """
         try:
             from ..core.engine import AgentConfig, AgentEngine
             from ..core.subagent_registry import get_registry
+            from ..core.workspace import current_workspace, reset_workspace_root, set_workspace_root
 
             reg = get_registry()
 
@@ -73,8 +80,42 @@ class SpawnSubAgentTool(BaseTool):
             config.verbose = False
             sub_agent = AgentEngine(config)
 
-            async def run_and_complete():
+            # ── Worktree isolation ──
+            worktree_path = None
+            worktree_branch = None
+            if isolation == "worktree":
+                import subprocess as _sp
+                import tempfile as _tf
+                import uuid as _uuid
+
                 try:
+                    base_ws = current_workspace()
+                    branch = f"subagent-{_uuid.uuid4().hex[:8]}"
+                    wt = Path(_tf.mkdtemp(prefix="ca-wt-"))
+                    # Remove the empty dir so git worktree add can create it.
+                    wt.rmdir()
+                    _sp.run(
+                        ["git", "worktree", "add", "-b", branch, str(wt), "HEAD"],
+                        cwd=str(base_ws),
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    worktree_path = wt
+                    worktree_branch = branch
+                except Exception as e:
+                    return ToolResult(
+                        success=False,
+                        content="",
+                        error=f"worktree isolation failed: {e}",
+                        metadata={"task_id": run_id},
+                    )
+
+            async def run_and_complete():
+                token = None
+                try:
+                    if worktree_path is not None:
+                        token = set_workspace_root(worktree_path)
                     result = await sub_agent.run(task)
                     reg.complete(run_id, result)
                     return result
@@ -84,6 +125,28 @@ class SpawnSubAgentTool(BaseTool):
                 except Exception as e:
                     reg.fail(run_id, str(e))
                     return f"Error: {e}"
+                finally:
+                    if token is not None:
+                        reset_workspace_root(token)
+                        # Clean up the worktree on success; keep it on failure
+                        # so the user can inspect what the sub-agent did.
+                        import subprocess as _sp
+
+                        try:
+                            _sp.run(
+                                ["git", "worktree", "remove", "--force", str(worktree_path)],
+                                cwd=str(current_workspace()),
+                                check=False,
+                                capture_output=True,
+                            )
+                            _sp.run(
+                                ["git", "branch", "-D", worktree_branch],
+                                cwd=str(current_workspace()),
+                                check=False,
+                                capture_output=True,
+                            )
+                        except Exception:
+                            pass
 
             async_task = asyncio.create_task(run_and_complete())
             reg.register_task(run_id, async_task)
@@ -151,6 +214,16 @@ class SpawnSubAgentTool(BaseTool):
                             "type": "boolean",
                             "description": "If true, return task_id immediately; sub-agent runs in background",
                             "default": False,
+                        },
+                        "isolation": {
+                            "type": "string",
+                            "enum": ["worktree"],
+                            "description": (
+                                "Isolation mode. 'worktree' runs the sub-agent in a "
+                                "temporary git worktree so its file changes don't touch "
+                                "the parent's working tree; the worktree is removed on "
+                                "completion. Use when sub-agents modify files in parallel."
+                            ),
                         },
                     },
                     "required": ["task"],

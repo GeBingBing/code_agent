@@ -15,11 +15,17 @@ _CODING_AGENT_ROOT = Path(__file__).parent.parent.parent.resolve()
 
 
 def _resolve_path(path: str) -> Path:
-    """Resolve path relative to WORKSPACE_ROOT if not absolute."""
+    """Resolve path relative to the effective workspace root if not absolute.
+
+    Uses ``current_workspace()`` so a sub-agent in a git worktree resolves
+    relative paths against the worktree, not the parent's workspace.
+    """
+    from ..core.workspace import current_workspace
+
     p = Path(path).expanduser()
     if p.is_absolute():
         return p
-    return WORKSPACE_ROOT / p
+    return current_workspace() / p
 
 
 def _is_within_workspace(path: str) -> bool:
