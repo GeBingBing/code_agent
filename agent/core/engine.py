@@ -39,6 +39,7 @@ from ..tools import (  # noqa: F401 - triggers tool registration
     audit,
     ask_user,  # noqa: F401 (ask_user — structured questioning)
     code_search,
+    cron,  # noqa: F401 (cron_create / cron_delete)
     diagnostics,
     file_ops,
     git_smart,

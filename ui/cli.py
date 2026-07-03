@@ -1010,6 +1010,78 @@ def _relpath_in_text(text: str) -> str:
     return _re.sub(r"(?<![\w.])/(?:[^\s:]+/)*[^\s:/]+", lambda m: _relpath(m.group(0)), text)
 
 
+def _pop_due_cron():
+    """Return a due scheduled task's prompt, or None.
+
+    Checks the cron store for any task whose cron expression matches the
+    current minute (local time). If multiple are due, returns the first.
+    One-shot tasks (recurring=False) are deleted after firing; recurring
+    tasks stay. Returns {'cron': ..., 'prompt': ...} or None.
+    """
+    try:
+        from agent.core.cron_store import get_cron_store
+    except Exception:
+        return None
+
+    import time as _time
+
+    now = _time.localtime()
+    store = get_cron_store()
+    for task in store.list():
+        if _cron_matches(task.cron, now):
+            if not task.recurring:
+                store.remove(task.id)
+            return {"cron": task.cron, "prompt": task.prompt}
+    return None
+
+
+def _cron_matches(cron: str, now) -> bool:
+    """Check a 5-field cron against a time.struct_time (local).
+
+    Fields: minute hour day-of-month month day-of-week (0=Sun..6=Sat).
+    Supports '*', ',' lists, '-' ranges, and '*/step'. Matches CronCreate
+    semantics closely enough for scheduling prompts.
+    """
+
+    fields = cron.split()
+    if len(fields) != 5:
+        return False
+    values = [now.tm_min, now.tm_hour, now.tm_mday, now.tm_mon, now.tm_wday]
+    # Cron's Sunday is 0; struct_time tm_wday is 0=Monday..6=Sunday. Remap.
+    values[4] = (values[4] + 1) % 7  # Monday=0 → Sunday=0 convention
+    bounds = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 6)]
+    for field, val, (lo, hi) in zip(fields, values, bounds, strict=True):
+        if not _cron_field_match(field, val, lo, hi):
+            return False
+    return True
+
+
+def _cron_field_match(field: str, val: int, lo: int, hi: int) -> bool:
+    """Match one cron field ('*', '5', '1,3', '1-5', '*/15') against a value."""
+    import re as _re
+
+    for part in field.split(","):
+        part = part.strip()
+        if part == "*":
+            return True  # any value matches (this part)
+        m = _re.match(r"^\*/(\d+)$", part)
+        if m:
+            step = int(m.group(1))
+            if step > 0 and val % step == 0:
+                return True
+            continue
+        m = _re.match(r"^(\d+)-(\d+)$", part)
+        if m:
+            if int(m.group(1)) <= val <= int(m.group(2)):
+                return True
+            continue
+        if part.isdigit():
+            if int(part) == val:
+                return True
+            continue
+    return False
+
+
 def _tool_icon(name: str, args: dict) -> tuple:
     """Return (icon, label) for a tool call — Claude Code style.
 
@@ -1620,7 +1692,16 @@ class SimpleCLI:
 
         while True:
             try:
-                user_input = self._read_line()
+                # ── Cron: check for due scheduled tasks before reading input.
+                # If a task is due, inject its prompt as the next turn instead
+                # of blocking on _read_line. (Jobs only fire while the REPL is
+                # idle — i.e. between turns — matching Claude Code's CronCreate.)
+                due = _pop_due_cron()
+                if due:
+                    print(f"{DIM}⏰ Scheduled task fired: {due['cron']}{RESET}")
+                    user_input = due["prompt"]
+                else:
+                    user_input = self._read_line()
                 if not user_input:
                     # Empty input (Ctrl+C or empty Enter) — just re-prompt
                     continue

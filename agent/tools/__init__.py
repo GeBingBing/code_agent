@@ -5,6 +5,7 @@ from . import (
     ask_user,  # noqa: F401 (ask_user — structured multi-choice questioning)
     background,  # noqa: F401 (background_task tool + registry)
     code_search,  # noqa: F401
+    cron,  # noqa: F401 (cron_create / cron_delete — scheduled prompts)
     file_ops,  # noqa: F401
     git_tool,  # noqa: F401
     grep,  # noqa: F401

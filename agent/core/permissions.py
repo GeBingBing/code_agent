@@ -60,7 +60,7 @@ _SYSTEM_PATH_PATTERNS_FOR_PERMISSIONS = [
 
 def assess_risk(tool_name: str, args: dict) -> RiskLevel:
     """Assess risk level of a tool call."""
-    if tool_name in ("read_file", "list_files", "ask_user"):
+    if tool_name in ("read_file", "list_files", "ask_user", "cron_create", "cron_delete"):
         return RiskLevel.LOW
 
     if tool_name == "write_file":
