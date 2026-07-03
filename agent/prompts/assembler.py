@@ -422,6 +422,7 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
         env_preflight: str = "",
         long_term_memory: str = "",
         last_was_tool: bool = False,
+        todos: str = "",
     ) -> str:
         """Build per-turn transient context for user message injection.
 
@@ -452,6 +453,8 @@ IMPORTANT: Preserve the full package name. "hermes agent" → package="hermes-ag
             parts.append(f"<git_status>\n{git_status}\n</git_status>")
         if long_term_memory:
             parts.append(f"<memory>\n{long_term_memory}\n</memory>")
+        if todos:
+            parts.append(f"<todos>\n{todos}\n</todos>")
         if last_was_tool:
             # ReAct observation reflection: nudge the LLM to acknowledge what
             # it learned from the last tool result before its next action.

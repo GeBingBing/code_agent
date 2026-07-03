@@ -90,6 +90,7 @@ from .progress_anchor import ProgressAnchor
 from .task_state_machine import InvalidStateTransition, TaskState, TaskStateMachine
 from .tdd_ralph import RalphSupervisor
 from .tdd_state_machine import TDDStateMachine
+from .todo_store import get_todo_store
 from .tool_dispatcher import ToolDispatcher
 
 _CODING_AGENT_ROOT = Path(__file__).parent.parent.resolve()
@@ -860,6 +861,7 @@ class AgentEngine:
             # ReAct reflection: was the last turn a tool call? If so the
             # reminder nudges the LLM to acknowledge what it learned.
             "last_was_tool": self._last_turn_was_tool(),
+            "todos": get_todo_store().to_prompt(),
         }
 
     @staticmethod
@@ -1820,9 +1822,7 @@ class AgentEngine:
             if result.success:
                 self._consecutive_failures.pop(tname, None)
             else:
-                self._consecutive_failures[tname] = (
-                    self._consecutive_failures.get(tname, 0) + 1
-                )
+                self._consecutive_failures[tname] = self._consecutive_failures.get(tname, 0) + 1
                 if self._consecutive_failures[tname] >= 3:
                     self.memory.add(
                         "system",

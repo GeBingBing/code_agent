@@ -76,36 +76,37 @@ class TodoWriteTool(BaseTool):
             if not isinstance(items, list):
                 return ToolResult(success=False, content="", error="todos must be a JSON array")
 
-            # Enforce at most ONE in_progress task (Claude Code convention):
-            # if the LLM marks several, keep only the first and demote the
-            # rest to pending so the focus is unambiguous.
-            seen_in_progress = False
-            for t in items:
-                if t.get("status") == "in_progress":
-                    if seen_in_progress:
-                        t["status"] = "pending"
-                    else:
-                        seen_in_progress = True
+            # Persist to the engine-shared TodoStore so the list is injected
+            # into every subsequent turn's <system-reminder> (Claude Code does
+            # this; without it the LLM loses track of task state between turns).
+            from ..core.todo_store import get_todo_store
+
+            store = get_todo_store()
+            items = store.replace_all(items)
 
             total = len(items)
-            done = sum(1 for t in items if t.get("status") == "completed")
-            in_progress = sum(1 for t in items if t.get("status") == "in_progress")
+            done = sum(1 for t in items if t.status == "completed")
+            in_progress = sum(1 for t in items if t.status == "in_progress")
             pending = total - done - in_progress
 
             # Format display
             lines = []
             for t in items:
-                tid = t.get("id", "?")
-                status = t.get("status", "pending")
-                content = t.get("content", "")[:80]
                 icons = {"completed": "✓", "in_progress": "●", "pending": "○"}
-                icon = icons.get(status, "?")
-                lines.append(f"  {icon} [{tid}] {content}")
+                icon = icons.get(t.status, "?")
+                lines.append(f"  {icon} [{t.id}] {t.content}")
 
             return ToolResult(
                 success=True,
                 content="\n".join(lines) if lines else "(empty)",
-                metadata={"total": total, "done": done, "pending": pending, "tasks": items},
+                metadata={
+                    "total": total,
+                    "done": done,
+                    "pending": pending,
+                    "tasks": [
+                        {"id": t.id, "content": t.content, "status": t.status} for t in items
+                    ],
+                },
             )
         except json.JSONDecodeError as e:
             return ToolResult(success=False, content="", error=f"Invalid JSON: {e}")
