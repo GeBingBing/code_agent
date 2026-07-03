@@ -76,6 +76,17 @@ class TodoWriteTool(BaseTool):
             if not isinstance(items, list):
                 return ToolResult(success=False, content="", error="todos must be a JSON array")
 
+            # Enforce at most ONE in_progress task (Claude Code convention):
+            # if the LLM marks several, keep only the first and demote the
+            # rest to pending so the focus is unambiguous.
+            seen_in_progress = False
+            for t in items:
+                if t.get("status") == "in_progress":
+                    if seen_in_progress:
+                        t["status"] = "pending"
+                    else:
+                        seen_in_progress = True
+
             total = len(items)
             done = sum(1 for t in items if t.get("status") == "completed")
             in_progress = sum(1 for t in items if t.get("status") == "in_progress")

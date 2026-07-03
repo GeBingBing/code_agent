@@ -1646,6 +1646,7 @@ class AgentEngine:
         full_content = ""
         accumulated_tool_calls: dict = {}
         _in_think = False
+        _think_chunks = 0  # guard: reset if a <think> never closes (漏 </think>)
         _usage = None
 
         if not hasattr(response, "__iter__"):
@@ -1677,14 +1678,25 @@ class AgentEngine:
             # ---- Content delta ----
             if hasattr(delta, "content") and delta.content:
                 raw = delta.content
-                if "<think>" in raw:
+                if "<think>" in raw or "<thinking>" in raw:
                     _in_think = True
-                    raw = raw.split("<think>")[0]
-                if _in_think and "</think>" in raw:
+                    _think_chunks = 0
+                    raw = raw.split("<think>")[0].split("<thinking>")[0]
+                if _in_think and ("</think>" in raw or "</thinking>" in raw):
                     _in_think = False
-                    raw = raw.split("</think>")[-1]
+                    _think_chunks = 0
+                    raw = raw.split("</think>")[-1].split("</thinking>")[-1]
                 elif _in_think:
-                    raw = ""
+                    # Guard: if the model opened <think> but never closed it
+                    # (buggy output), don't eat ALL subsequent content forever.
+                    # After 200 chunks (~a long think block), assume it forgot
+                    # to close and resume showing content.
+                    _think_chunks += 1
+                    if _think_chunks > 200:
+                        _in_think = False
+                        _think_chunks = 0
+                    else:
+                        raw = ""
                 if raw:
                     for pat in _tag_patterns:
                         raw = pat.sub("", raw)
