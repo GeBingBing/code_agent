@@ -1541,3 +1541,67 @@ registry.register(
     )
 )
 registry._commands["evaluate"]._handler = _handle_evaluate
+
+
+# ── /compact ─────────────────────────────────────────────────────────────────
+
+
+async def _handle_compact(args: str, ctx: dict) -> str:
+    """Manually compress working memory into an L2 summary.
+
+    Triggers the same semantic compression that fires automatically when the
+    context window fills, but on demand — useful before a long task or when
+    the user wants to reclaim context without losing the thread.
+    """
+    engine = ctx.get("engine")
+    if not engine:
+        return f"{_yellow('⚠ No active engine.')}"
+
+    mem = engine.memory
+    before_msgs = len(mem.working_memory)
+    before_tokens = mem._estimate_tokens()
+    before_summaries = len(mem.summaries)
+
+    # _compress() folds older messages into L2 summaries, keeping system +
+    # recent (tool-pair-aware) messages. It's a no-op when already under 70%
+    # of max_tokens — so force it by temporarily shrinking the budget to half
+    # the current usage. This guarantees older messages fold into a summary
+    # even when the context isn't near-full (the user asked, so comply).
+    original_max = mem.max_tokens
+    try:
+        current = mem._estimate_tokens()
+        # Target: keep ~40% of current tokens → forces the older ~60% out.
+        mem.max_tokens = max(1, int(current * 0.4))
+        mem._compress()
+    finally:
+        mem.max_tokens = original_max
+
+    after_msgs = len(mem.working_memory)
+    after_tokens = mem._estimate_tokens()
+    after_summaries = len(mem.summaries)
+
+    saved_msgs = before_msgs - after_msgs
+    saved_tokens = before_tokens - after_tokens
+
+    if saved_msgs <= 0 and saved_tokens <= 0:
+        return (
+            f"{_dim('Context is already compact — nothing to compress.')}\n"
+            f"  {_dim(f'{after_msgs} messages · ~{after_tokens:,} tokens · {after_summaries} summaries')}"
+        )
+
+    return (
+        f"{_green('✓ Context compacted.')}\n"
+        f"  {_dim(f'~{before_tokens:,} → ~{after_tokens:,} tokens (saved ~{saved_tokens:,})')}\n"
+        f"  {_dim(f'{before_msgs} → {after_msgs} messages · {after_summaries} summaries')}"
+    )
+
+
+registry.register(
+    SlashCommand(
+        name="compact",
+        description="Compress the conversation into a summary to reclaim context",
+        usage="/compact",
+        aliases=["compress"],
+    )
+)
+registry._commands["compact"]._handler = _handle_compact
