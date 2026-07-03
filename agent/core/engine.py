@@ -761,6 +761,17 @@ class AgentEngine:
         config_path = self.config.mcp_config_path or None
         self._mcp_manager = await register_mcp_tools_from_config(config_path)
 
+    def _last_turn_was_tool(self) -> bool:
+        """True if the last message in working memory is a tool result or an
+        assistant message carrying tool_calls — i.e. the previous turn ended
+        with a tool call, so a ReAct observation-reflection nudge is in order.
+        """
+        wm = self.memory.working_memory
+        if not wm:
+            return False
+        last = wm[-1]
+        return last.role == "tool" or bool(last.tool_calls)
+
     def _get_env_context(self) -> dict:
         """Gather transient environment state for system-reminder injection."""
         import subprocess
@@ -846,6 +857,9 @@ class AgentEngine:
             "start_command_hint": start_command_hint,
             "env_preflight": env_preflight,
             "long_term_memory": self.memory.get_long_term_context(),
+            # ReAct reflection: was the last turn a tool call? If so the
+            # reminder nudges the LLM to acknowledge what it learned.
+            "last_was_tool": self._last_turn_was_tool(),
         }
 
     @staticmethod
