@@ -36,8 +36,8 @@ from ..mcp.adapter import register_mcp_tools_from_config
 from ..observability import get_metrics, get_tracer
 from ..prompts.assembler import PromptAssembler
 from ..tools import (  # noqa: F401 - triggers tool registration
-    audit,
     ask_user,  # noqa: F401 (ask_user — structured questioning)
+    audit,
     code_search,
     cron,  # noqa: F401 (cron_create / cron_delete)
     diagnostics,
@@ -1068,7 +1068,12 @@ class AgentEngine:
         return ToolDispatcher.partition(tool_calls)
 
     async def _execute_tool(
-        self, func_name: str, args: dict, tc_id: str, func_args_raw: str
+        self,
+        func_name: str,
+        args: dict,
+        tc_id: str,
+        func_args_raw: str,
+        assistant_content: str = "",
     ) -> ToolResult:
         """PR-23: thin shim — delegates to ToolDispatcher.execute()."""
         return await self.tool_dispatcher.execute(
@@ -1076,6 +1081,7 @@ class AgentEngine:
             args,
             tc_id,
             func_args_raw,
+            assistant_content=assistant_content,
         )
 
     async def _ralph_check_hook(self, payload):  # back-compat shim (see below)
@@ -1712,12 +1718,16 @@ class AgentEngine:
         # the UI can show a "(估计)" tag when it didn't.
         self._last_usage_estimated = _usage is None
 
-    async def _dispatch_tool_calls(self, parsed: list, step: int):
+    async def _dispatch_tool_calls(self, parsed: list, step: int, assistant_content: str = ""):
         """PR-22: Async generator — partition, execute, yield tool events.
 
         Concurrent-safe tools run in parallel via ``asyncio.gather``;
         write tools serialize. Yields ``tool_call`` events first (in the
         LLM's original order), then ``tool_result`` events.
+
+        ``assistant_content`` is the LLM's narration for this turn — passed
+        through to the dispatcher so it's recorded in memory alongside the
+        tool_call (keeps the ReAct thought chain intact).
         """
         for p in parsed:
             yield {
@@ -1740,6 +1750,7 @@ class AgentEngine:
                         tc["args"],
                         tc["tc_id"],
                         tc["func_args_raw"],
+                        assistant_content=assistant_content,
                     ),
                 )
 
@@ -1762,6 +1773,7 @@ class AgentEngine:
                 tc["args"],
                 tc["tc_id"],
                 tc["func_args_raw"],
+                assistant_content=assistant_content,
             )
             results_by_id[tc["tc_id"]] = result
 
@@ -1880,7 +1892,9 @@ class AgentEngine:
                             "args": func_args if isinstance(func_args, dict) else {},
                         }
                     )
-                async for event in self._dispatch_tool_calls(parsed, step):
+                async for event in self._dispatch_tool_calls(
+                    parsed, step, assistant_content=full_content
+                ):
                     yield event
             elif full_content:
                 # Plain text response (no tool calls)
@@ -2022,7 +2036,9 @@ class AgentEngine:
                             "args": func_args if isinstance(func_args, dict) else {},
                         }
                     )
-                async for event in self._dispatch_tool_calls(parsed, step):
+                async for event in self._dispatch_tool_calls(
+                    parsed, step, assistant_content=full_content
+                ):
                     yield event
             elif full_content:
                 # Plain text response (no tool calls)

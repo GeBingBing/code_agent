@@ -208,12 +208,18 @@ class ToolDispatcher:
         args: dict,
         tc_id: str,
         func_args_raw: str,
+        assistant_content: str = "",
     ) -> ToolResult:
         """Run one tool call through the full 11-stage pipeline.
 
         Returns a ``ToolResult`` (success or surfaceable error). Internal
         stage failures are converted into tool errors so the LLM can adapt
         rather than the whole run crashing.
+
+        ``assistant_content`` is the prose the LLM emitted alongside this
+        tool call (the narration / intent). It's recorded into memory so the
+        next turn sees the full Thought→Action chain, not just the bare
+        tool_call — matching Claude Code's ReAct history.
         """
         # Stage 0: PlanToolFilter (M1 P0) — hard read-only gate.
         # Reject any tool outside PLAN_ONLY_TOOLS when in plan mode. Runs
@@ -382,8 +388,12 @@ class ToolDispatcher:
             error=result.error or "",
         )
 
-        # Stage 8: memory record
-        self._memory.add("assistant", "", tool_calls=tc_json)
+        # Stage 8: memory record — keep the assistant's narration (intent)
+        # alongside the tool_call so the next turn sees the full
+        # Thought→Action chain, not a bare tool_call with empty content.
+        # (Claude Code preserves this; the old code wrote "" here, severing
+        # the ReAct thought link.)
+        self._memory.add("assistant", assistant_content, tool_calls=tc_json)
         self._memory.add(
             "tool",
             result.content if result.success else f"Error: {result.error}",
