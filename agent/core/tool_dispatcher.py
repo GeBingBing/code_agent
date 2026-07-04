@@ -239,6 +239,31 @@ class ToolDispatcher:
                 metadata={"plan_blocked": True, "tool": func_name},
             )
 
+        # Stage 0.5: Plan-execution allowed_prompts gate.
+        # When executing an approved plan that declared allowed_prompts, the
+        # tool must be in that list (Claude Code enforces plan-scoped actions).
+        # mark_plan_step is always allowed (it's plan bookkeeping, not a repo
+        # action). Skipped when the plan has no allowed_prompts (open plan).
+        plan = self._get_current_plan()
+        if (
+            plan is not None
+            and getattr(plan, "status", "") == "executing"
+            and getattr(plan, "allowed_prompts", None)
+            and func_name != "mark_plan_step"
+        ):
+            allowed_tools = {ap.tool for ap in plan.allowed_prompts if hasattr(ap, "tool")}
+            if allowed_tools and func_name not in allowed_tools:
+                return ToolResult(
+                    success=False,
+                    content="",
+                    error=(
+                        f"Tool '{func_name}' is not in the approved plan's "
+                        f"allowed actions: {sorted(allowed_tools)}. Stick to "
+                        f"the plan or exit plan execution."
+                    ),
+                    metadata={"plan_blocked": True, "tool": func_name},
+                )
+
         # Stage 1: BEFORE_TOOL_EXECUTION hook (Ralph, dual-review, audit, OTel)
         tool_payload = {"tool": func_name, "args": args, "tc_id": tc_id}
         try:
