@@ -334,3 +334,93 @@ class ExitPlanModeTool(BaseTool):
 # Register
 registry.register(EnterPlanModeTool())
 registry.register(ExitPlanModeTool())
+
+
+class MarkPlanStepTool(BaseTool):
+    """Mark a plan step's status — makes plan execution actually tracked.
+
+    The LLM calls this as it works through an approved plan: mark a step
+    in_progress when starting it, done when finished. This flips the step's
+    status so plan_progress reflects reality (was always 0/N before because
+    nothing ever wrote step.status).
+    """
+
+    user_facing_name = "PlanStep"
+
+    is_concurrency_safe = True
+    is_read_only = True  # mutates in-memory plan state, not the repo
+    name = "mark_plan_step"
+    description = (
+        "Update a plan step's status as you execute an approved plan. "
+        "Mark a step 'in_progress' when you start it, 'done' when complete "
+        "(with an optional result summary). This keeps plan_progress accurate. "
+        "Only call this when executing an approved plan (after exit_plan_mode)."
+    )
+
+    @property
+    def schema(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "step_id": {
+                            "type": "integer",
+                            "description": "The id of the plan step to update.",
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": ["in_progress", "done", "skipped"],
+                            "description": "New status for the step.",
+                        },
+                        "result": {
+                            "type": "string",
+                            "description": "Optional one-line summary of what happened (for 'done').",
+                        },
+                    },
+                    "required": ["step_id", "status"],
+                },
+            },
+        }
+
+    def render_call(self, args: dict) -> str:
+        return f"step {args.get('step_id', '?')} → {args.get('status', '?')}"
+
+    def render_result(self, result: "ToolResult") -> str:
+        if result.success and result.content:
+            return result.content
+        return super().render_result(result)
+
+    async def execute(
+        self, step_id: int, status: str, result: str = "", plan=None, **kwargs
+    ) -> ToolResult:
+        if plan is None:
+            return ToolResult(
+                success=False,
+                content="",
+                error="No active plan — mark_plan_step only works during plan execution.",
+            )
+        if not hasattr(plan, "mark_step"):
+            return ToolResult(
+                success=False,
+                content="",
+                error="Active plan does not support step tracking.",
+            )
+        updated = plan.mark_step(step_id, status, result)
+        if not updated:
+            return ToolResult(
+                success=False,
+                content="",
+                error=f"No step with id {step_id} in the current plan.",
+            )
+        return ToolResult(
+            success=True,
+            content=f"Step {step_id} marked {status}. Progress: {plan.progress()}",
+            metadata={"step_id": step_id, "status": status, "progress": plan.progress()},
+        )
+
+
+registry.register(MarkPlanStepTool())

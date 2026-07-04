@@ -549,6 +549,7 @@ class AgentEngine:
             get_pre_plan_mode=lambda: getattr(self, "_pre_plan_mode", None),
             set_pre_plan_mode=lambda v: setattr(self, "_pre_plan_mode", v),
             get_confirm_handler=lambda: self.config.confirm_handler,
+            get_current_plan=lambda: getattr(self, "_current_plan", None),
             log_event=_log_event,
         )
 

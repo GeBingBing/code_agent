@@ -142,6 +142,7 @@ class ToolDispatcher:
         get_pre_plan_mode: Callable[[], Any],
         set_pre_plan_mode: Callable[[Any], None],
         get_confirm_handler: Callable[[], Any],
+        get_current_plan: Callable[[], Any],
         log_event: Callable[..., None],
     ):
         self._hooks = hooks
@@ -155,6 +156,7 @@ class ToolDispatcher:
         self._get_pre_plan_mode = get_pre_plan_mode
         self._set_pre_plan_mode = set_pre_plan_mode
         self._get_confirm_handler = get_confirm_handler
+        self._get_current_plan = get_current_plan
         self._log_event = log_event
 
     @staticmethod
@@ -284,6 +286,10 @@ class ToolDispatcher:
                 args["cwd"] = str(self._workspace)
         if func_name == "spawn_sub_agent" and "parent_run_id" not in args:
             args["parent_run_id"] = self._trace_id
+        # Inject the current plan object so mark_plan_step can flip step
+        # status without the tool needing a direct engine reference.
+        if func_name == "mark_plan_step":
+            args["plan"] = self._get_current_plan()
 
         # ── Assistant tool_calls record (must come BEFORE tool result) ──
         tc_json = json.dumps(

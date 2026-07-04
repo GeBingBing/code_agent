@@ -470,6 +470,22 @@ class ExecutionPlan:
                 return step
         return None
 
+    def mark_step(self, step_id: int, status: str, result: str = "") -> bool:
+        """Flip a step's status (pending → in_progress → done).
+
+        This is what makes plan execution actually tracked: the LLM calls
+        mark_plan_step as it completes each step, so progress() reflects
+        reality and the <plan_progress> reminder stays honest. Returns True
+        if the step was found and updated.
+        """
+        for step in self.steps:
+            if step.id == step_id:
+                step.status = status
+                if result:
+                    step.result = result
+                return True
+        return False
+
     def progress(self) -> str:
         done = sum(1 for s in self.steps if s.status == "done")
         return f"{done}/{len(self.steps)} done"

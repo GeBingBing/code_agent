@@ -201,7 +201,14 @@ class PlanWorkflow:
         plan_md = plan.to_markdown()
         current = plan.current_step().description if plan.current_step() else "all steps complete"
         plan_context = (
-            f"Executing plan: {plan.summary}\n" f"{plan_md}\n" f"---\n" f"Current step: {current}\n"
+            f"Executing plan: {plan.summary}\n"
+            f"{plan_md}\n"
+            f"---\n"
+            f"Current step: {current}\n"
+            f"---\n"
+            f"Track progress: call mark_plan_step(step_id, status) — mark a "
+            f"step 'in_progress' when you start it, 'done' with a one-line "
+            f"result when finished. This keeps plan_progress accurate.\n"
         )
 
         skill_prompt = self._skills.activate_skills_semantic(plan.task)
