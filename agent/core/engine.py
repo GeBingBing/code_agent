@@ -1990,8 +1990,6 @@ class AgentEngine:
             ),
         }
 
-
-
     async def run(self, task: str, plan_context: str = "") -> str:
         """Run the agent on a task with memory, skills, and permissions."""
         await self._ensure_mcp_initialized()

@@ -1789,3 +1789,115 @@ registry.register(
     )
 )
 registry._commands["export"]._handler = _handle_export
+
+
+# ── /rewind ──────────────────────────────────────────────────────────────────
+
+
+async def _handle_rewind(args: str, ctx: dict) -> str:
+    """List filesystem snapshots and restore one (time-travel rollback).
+
+    Usage:
+      /rewind              — list available snapshots
+      /rewind <name>       — restore the workspace from snapshot <name>
+      /rewind <name> <dir> — restore into <dir> (default: workspace)
+
+    Built on the Snapshot/Rollback tools' shared sandbox store. Matches
+    Claude Code's /rewind (checkpoint-based rollback).
+    """
+    engine = ctx.get("engine")
+    workspace = ctx.get("workspace", ".")
+
+    # The snapshot store lives on the shared sandbox used by SnapshotTool.
+    from agent.tools.sandbox import _shared_sandbox
+
+    snapshots = getattr(_shared_sandbox, "snapshots", {}) or {}
+
+    parts = (args or "").split()
+    if not parts:
+        # List mode
+        if not snapshots:
+            return _dim(
+                "No snapshots yet. The agent creates them via the "
+                "snapshot tool before risky ops."
+            )
+        lines = [f"{_bold('Available snapshots:')}", ""]
+        for name, path in snapshots.items():
+            lines.append(f"  {_cyan(name)}  {_dim(path)}")
+        lines.append("")
+        lines.append(_dim("Restore with: /rewind <name>"))
+        return "\n".join(lines)
+
+    name = parts[0]
+    target = parts[1] if len(parts) > 1 else workspace
+    if name not in snapshots:
+        return (
+            f"{_yellow('⚠ No snapshot named')} `{name}`. "
+            f"Available: {', '.join(snapshots.keys()) or 'none'}"
+        )
+    try:
+        _shared_sandbox.rollback(name, target)
+        return (
+            f"{_green('✓ Rewound')} `{target}` to snapshot {_cyan(name)}\n"
+            f"  {_dim(snapshots[name])}"
+        )
+    except Exception as e:
+        return f"{_yellow('⚠ Rewind failed:')} {e}"
+
+
+registry.register(
+    SlashCommand(
+        name="rewind",
+        description="List or restore filesystem snapshots (time-travel rollback)",
+        usage="/rewind [name] [target]",
+    )
+)
+registry._commands["rewind"]._handler = _handle_rewind
+
+
+# ── /usage ───────────────────────────────────────────────────────────────────
+
+
+async def _handle_usage(args: str, ctx: dict) -> str:
+    """Show token usage for the current session (Claude Code /usage).
+
+    Aggregates the per-turn token counters the CLI already tracks
+    (_session_tokens_in/out + estimated-turn count).
+    """
+    cli = ctx.get("cli")
+    if not cli:
+        return f"{_yellow('⚠ No active CLI session.')}"
+
+    in_t = getattr(cli, "_session_tokens_in", 0)
+    out_t = getattr(cli, "_session_tokens_out", 0)
+    est_turns = getattr(cli, "_session_tokens_estimated_turns", 0)
+
+    if in_t == 0 and out_t == 0:
+        return _dim("No token usage recorded yet for this session.")
+
+    total = in_t + out_t
+    est_note = ""
+    if est_turns > 0:
+        est_note = f"\n  {_dim(f'(其中 {est_turns} 轮为估计值)')}"
+
+    # Rough cost estimate (blended ~$0.50/M tokens — order-of-magnitude
+    # hint only, not a bill; actual rates vary by model/provider).
+    cost_hint = f"  ≈ ${total / 1_000_000 * 0.5:,.4f} (rough estimate)"
+
+    return (
+        f"{_bold('Session token usage:')}\n"
+        f"  {_cyan(f'input:  {in_t:,} tokens')}\n"
+        f"  {_cyan(f'output: {out_t:,} tokens')}\n"
+        f"  {_bold(f'total:  {total:,} tokens')}\n"
+        f"{cost_hint}{est_note}"
+    )
+
+
+registry.register(
+    SlashCommand(
+        name="usage",
+        description="Show token usage for the current session",
+        usage="/usage",
+    )
+)
+registry._commands["usage"]._handler = _handle_usage
