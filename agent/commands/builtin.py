@@ -1615,3 +1615,177 @@ registry.register(
     )
 )
 registry._commands["compact"]._handler = _handle_compact
+
+
+# ── /init ────────────────────────────────────────────────────────────────────
+
+
+def _detect_project_kind(workspace: Path) -> tuple:
+    """Return (kind, start_cmd, test_cmd, lint_cmd) from project markers."""
+    markers = [
+        (Path(workspace) / "package.json", "node", "npm run dev", "npm test", "npm run lint"),
+        (
+            Path(workspace) / "pyproject.toml",
+            "python",
+            "python -m pytest",
+            "pytest",
+            "ruff check .",
+        ),
+        (
+            Path(workspace) / "requirements.txt",
+            "python",
+            "python -m pytest",
+            "pytest",
+            "ruff check .",
+        ),
+        (Path(workspace) / "Cargo.toml", "rust", "cargo run", "cargo test", "cargo clippy"),
+        (Path(workspace) / "go.mod", "go", "go run .", "go test ./...", "go vet ./..."),
+        (Path(workspace) / "Makefile", "make", "make", "make test", "make lint"),
+    ]
+    for path, kind, start, test, lint in markers:
+        if path.exists():
+            return kind, start, test, lint
+    return "unknown", "", "", ""
+
+
+async def _handle_init(args: str, ctx: dict) -> str:
+    """Generate a CODING_AGENT.md project-instruction file in the workspace.
+
+    Scans project markers to suggest a tech-stack section, start/test/lint
+    commands, and a coding-conventions stub. Overwrites only if --force.
+    Matches Claude Code's /init (which generates CLAUDE.md).
+    """
+    workspace = Path(ctx.get("workspace", "."))
+    target = workspace / "CODING_AGENT.md"
+    force = args.strip().lower() in ("--force", "-f", "force")
+
+    if target.exists() and not force:
+        return (
+            f"{_yellow('⚠ CODING_AGENT.md already exists.')} "
+            f"Use {_dim('/init --force')} to overwrite."
+        )
+
+    kind, start, test, lint = _detect_project_kind(workspace)
+    stack_hint = {
+        "node": "Node.js / JavaScript / TypeScript",
+        "python": "Python 3.11+",
+        "rust": "Rust",
+        "go": "Go",
+        "make": "Make-based",
+    }.get(kind, "Unknown — fill in")
+
+    lines = [
+        "# Project Instructions (CODING_AGENT.md)",
+        "",
+        "Agent 启动时自动加载本文件。编辑此处指导 agent 如何在本项目工作。",
+        "",
+        "## 技术栈",
+        f"- {stack_hint}",
+        "",
+        "## 编码规范",
+        "- 遵循项目现有风格;新代码与周围代码一致",
+        "- 类型注解 / 错误处理按项目惯例",
+        "",
+        "## 常用命令",
+    ]
+    if start:
+        lines.append(f"- 启动: `{start}`")
+    if test:
+        lines.append(f"- 测试: `{test}`")
+    if lint:
+        lines.append(f"- Lint: `{lint}`")
+    lines += [
+        "",
+        "## 项目结构",
+        "- (补充:关键目录/模块说明)",
+        "",
+        "## 注意事项",
+        "- (补充:已知坑 / 禁止操作)",
+    ]
+
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return (
+        f"{_green('✓ Created')} {target}\n"
+        f"  {_dim(f'detected: {kind}')} — edit it to refine, then /status to verify load."
+    )
+
+
+registry.register(
+    SlashCommand(
+        name="init",
+        description="Generate a CODING_AGENT.md project-instruction file",
+        usage="/init [--force]",
+    )
+)
+registry._commands["init"]._handler = _handle_init
+
+
+# ── /export ──────────────────────────────────────────────────────────────────
+
+
+async def _handle_export(args: str, ctx: dict) -> str:
+    """Export the current conversation to a markdown or json file.
+
+    Usage: /export [markdown|json] [path]. Default: markdown to
+    ./conversation-<timestamp>.md. Matches Claude Code's /export.
+    """
+    import json as _json
+    import time as _time
+
+    engine = ctx.get("engine")
+    if not engine:
+        return f"{_yellow('⚠ No active engine.')}"
+
+    parts = (args or "").split()
+    fmt = parts[0].lower() if parts else "markdown"
+    if fmt not in ("markdown", "md", "json"):
+        fmt = "markdown"
+    out_path = Path(parts[1]) if len(parts) > 1 else None
+
+    messages = engine.memory.get_messages()
+    if not messages:
+        return f"{_dim('Nothing to export — conversation is empty.')}"
+
+    ts = _time.strftime("%Y%m%d-%H%M%S")
+    if fmt == "json":
+        content = _json.dumps(
+            [
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    "tool_calls": m.tool_calls,
+                    "tool_call_id": m.tool_call_id,
+                }
+                for m in messages
+            ],
+            ensure_ascii=False,
+            indent=2,
+        )
+        out_path = out_path or Path(f"conversation-{ts}.json")
+    else:
+        lines = [f"# Conversation export ({ts})", ""]
+        for m in messages:
+            role = m.role.capitalize()
+            if m.content:
+                lines.append(f"## {role}")
+                lines.append(m.content)
+                lines.append("")
+            if m.tool_calls:
+                lines.append(f"_(tool_calls: {m.tool_calls})_")
+                lines.append("")
+        content = "\n".join(lines)
+        out_path = out_path or Path(f"conversation-{ts}.md")
+
+    out_path.write_text(content, encoding="utf-8")
+    n = len(messages)
+    return f"{_green('✓ Exported')} {n} messages to {out_path}\n" f"  {_dim(f'format: {fmt}')}"
+
+
+registry.register(
+    SlashCommand(
+        name="export",
+        description="Export the conversation to a markdown or json file",
+        usage="/export [markdown|json] [path]",
+    )
+)
+registry._commands["export"]._handler = _handle_export
