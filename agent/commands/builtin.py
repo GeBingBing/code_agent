@@ -324,7 +324,7 @@ async def _handle_plan(args: str, ctx: dict) -> str:
     first_token_lc = first_token.lower()
 
     if first_token_lc == "accept":
-        # Accept pending plan (only meaningful after plan is generated)
+        # Accept pending plan and execute it (Claude Code: accept → run).
         os.environ["AGENT_MODE"] = "default"
         if engine:
             engine.permissions.mode = type(engine.permissions.mode)("default")
@@ -334,7 +334,17 @@ async def _handle_plan(args: str, ctx: dict) -> str:
             _emit_plan_event(
                 ctx, "plan_approve", plan_id=plan_obj.plan_id, revision=plan_obj.revision
             )
-        return f"{_green('✓')} Plan accepted. Execute with next task or switch mode: {_dim('/mode default')}"
+            # Execute the approved plan now (not just switch mode — actually run).
+            if engine and hasattr(engine, "run_plan_execute"):
+                try:
+                    result = await engine.run_plan_execute(plan_obj)
+                    return f"{_green('✓ Plan accepted and executed.')}\n\n{result}"
+                except Exception as e:
+                    return f"{_yellow('⚠ Plan execution failed:')} {e}"
+        return (
+            f"{_green('✓ Plan accepted.')} Mode switched to default — "
+            f"the agent will execute on the next task."
+        )
 
     if first_token_lc == "reject":
         cli = ctx.get("cli")

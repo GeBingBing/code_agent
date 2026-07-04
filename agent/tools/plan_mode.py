@@ -317,13 +317,35 @@ class ExitPlanModeTool(BaseTool):
                 # Don't let engine-state wiring break the tool return path
                 pass
 
+        # Static plan review (Claude Code runs a review pass on generated
+        # plans). Attach review notes to the parsed plan so they travel with
+        # it; surface a one-line summary in the tool result. Best-effort —
+        # a review failure must not block the plan.
+        review_summary = ""
+        try:
+            from agent.core.plan import ExecutionPlan
+            from agent.core.plan_review import review_plan
+
+            parsed = ExecutionPlan.from_llm_response(plan, task=first_line)
+            report = review_plan(parsed)
+            if report and getattr(report, "summary", ""):
+                parsed.review_notes = report.summary
+                review_summary = f"\n\n## Review\n{report.summary}\n"
+                # Stash the reviewed plan on the engine so /plan accept
+                # executes the reviewed version with step tracking.
+                if engine is not None and hasattr(engine, "_current_plan"):
+                    engine._current_plan = parsed
+        except Exception:
+            pass
+
         return ToolResult(
             success=True,
             content=(
                 f"Plan saved to {plan_file}\n\n"
                 f"**plan_id:** `{plan_id}`\n\n"
                 f"## Plan\n{plan}\n\n"
-                f"## Allowed Actions\n{allowed_prompts or 'All actions'}\n\n"
+                f"## Allowed Actions\n{allowed_prompts or 'All actions'}\n"
+                f"{review_summary}\n"
                 "Plan ready for execution. The user will review and the agent "
                 "will proceed to implement the approved plan."
             ),
